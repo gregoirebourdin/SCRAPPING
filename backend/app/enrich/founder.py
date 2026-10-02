@@ -140,6 +140,7 @@ def extract_founder(site: CrawledSite) -> FounderHit:
                         best = hit
 
     # 3) text patterns on about/home/team pages
+    agency_tokens = _agency_tokens(site)
     if best.confidence < 0.7:
         for p in sorted(site.pages, key=lambda x: 0 if x.kind == "about" else 1 if x.kind == "home" else 2):
             text = p.text[:40_000]
@@ -149,8 +150,10 @@ def extract_founder(site: CrawledSite) -> FounderHit:
                     if not name:
                         continue
                     ctx = text[max(0, m.start() - 80): m.end() + 120]
-                    if re.search(r"\b(client|testimonial|case study|review|helped)\b", ctx, re.I) and not re.search(r"\b(our|my) (founder|ceo|agency|company|team)\b", ctx, re.I):
+                    if re.search(r"\b(client|testimonial|case study|review|helped|read (the )?story|read more|success stor)\b", ctx, re.I) and not re.search(r"\b(our|my) (founder|ceo|agency|company|team)\b", ctx, re.I):
                         continue
+                    if _other_company(m.group(0) + ctx[m.end() - m.start():], agency_tokens):
+                        continue  # "Jay Baer, Founder at Convince & Convert" is a testimonial, not our founder
                     title = _title_from_context(m.group(0)) or _title_from_context(ctx) or "Founder"
                     hit = FounderHit(name=name, title=title, source="site_name", confidence=0.6 if p.kind in ("about", "home") else 0.5, evidence=clean_ws(ctx)[:200])
                     # pair with a LinkedIn link whose slug matches the name
@@ -192,6 +195,36 @@ def extract_founder(site: CrawledSite) -> FounderHit:
     if not best.linkedin and len({s for _, s, _ in linkedin_links}) == 1 and best.name and _name_matches_slug(best.name, linkedin_links[0][1]):
         best.linkedin, best.source, best.confidence = linkedin_links[0][0], "site_link", max(best.confidence, 0.85)
     return best
+
+
+def _agency_tokens(site: CrawledSite) -> set[str]:
+    toks = {t for t in re.findall(r"[a-z0-9]+", site.domain.split(".")[0].lower()) if len(t) > 3}
+    home = site.home
+    if home is not None:
+        for s in (home.parsed.og_site_name, (home.parsed.title or "").split("|")[0].split(" - ")[0]):
+            toks |= {t for t in re.findall(r"[a-z0-9]+", (s or "").lower()) if len(t) > 3}
+    core = site.domain.split(".")[0].replace("-", "").lower()
+    if len(core) > 3:
+        toks.add(core)
+    return toks
+
+
+_ORG_AFTER_TITLE = re.compile(r"\b(?:co-?founder|founder|ceo|owner|managing director|president|director)\b[^.\n|,]{0,12}\b(?:of|at|@)\s+([A-Z][\w'’&+. -]{2,40})")
+
+
+def _other_company(ctx: str, agency_tokens: set[str]) -> bool:
+    """True when the founder title names a company that is not this agency."""
+    m = _ORG_AFTER_TITLE.search(ctx)
+    if not m:
+        return False
+    org = m.group(1)
+    org_tokens = {t for t in re.findall(r"[a-z0-9]+", org.lower()) if len(t) > 3}
+    joined = re.sub(r"[^a-z0-9]", "", org.lower())
+    if not org_tokens:
+        return False
+    if org_tokens & agency_tokens:
+        return False
+    return not any(len(a) > 4 and (a in joined or joined in a) for a in agency_tokens)
 
 
 def _names_on_site(site: CrawledSite) -> list[str]:

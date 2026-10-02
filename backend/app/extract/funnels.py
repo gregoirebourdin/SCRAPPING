@@ -121,6 +121,11 @@ def funnel_candidates(site: CrawledSite) -> list[FunnelCandidate]:
             is_funnel_host = bool(EXTERNAL_FUNNEL_HOSTS.search(url))
             if ext and not is_funnel_host:
                 continue  # only follow external links to known funnel platforms
+            if is_funnel_host:
+                host = url.split("://", 1)[-1].split("/", 1)[0].lower()
+                bare_path = url.split("://", 1)[-1].split("/", 1)[1].strip("/") if "/" in url.split("://", 1)[-1] else ""
+                if host.replace("www.", "") == dom and not bare_path:
+                    continue  # "typeform.com", "calendly.com": the platform's own homepage, not a funnel
             if social_network(url) and "facebook.com/groups" not in url:
                 continue
             a = (anchor or "").strip()

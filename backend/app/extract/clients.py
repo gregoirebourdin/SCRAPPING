@@ -100,6 +100,22 @@ COMMON_WORDS = {
     "featured", "freelancer", "freelance", "contributor", "guest", "writer", "editor", "doctor", "holistic", "beginner", "beginners",
     "advanced", "intermediate", "student", "students", "graduate", "alumni", "customer", "customers", "user", "users", "visitor",
     "international", "federation", "association", "foundation", "council", "board", "committee", "department", "ministry", "office",
+    # generic nouns / adjectives / verbs that show up in programme and brand names
+    "accelerator", "children", "child", "kids", "kid", "transaction", "transactions", "cruise", "cruises", "clockwork", "inspired",
+    "entrepreneur", "entrepreneurs", "braid", "braids", "consistent", "emails", "share", "threat", "triple", "double", "raising",
+    "like", "you", "driving", "run", "running", "princess", "queen", "king", "prince", "master", "masters", "mastery", "magic",
+    "power", "powerful", "simple", "easy", "fast", "quick", "smart", "rich", "wealthy", "wealth", "happy", "healthy", "strong",
+    "bold", "brave", "wild", "pure", "true", "real", "modern", "creative", "epic", "legendary", "iconic", "infinite", "limitless",
+    "unstoppable", "fearless", "mindful", "conscious", "sacred", "divine", "soul", "spirit", "heart", "mind", "body", "life", "lives",
+    "living", "love", "lover", "lovers", "joy", "peace", "flow", "glow", "shine", "rise", "thrive", "thriving", "grow", "growth",
+    "impact", "influence", "authority", "legacy", "freedom", "abundance", "purpose", "vision", "mission", "journey", "path", "way",
+    "lab", "labs", "hub", "zone", "spot", "space", "place", "house", "home", "room", "studio", "shop", "store", "market", "box",
+    "kit", "pack", "bundle", "stack", "suite", "engine", "machine", "factory", "garage", "kitchen", "table", "desk", "book", "books",
+    "podcast", "show", "channel", "tv", "radio", "news", "daily", "weekly", "monthly", "report", "letter", "digest", "insider",
+    "pro", "plus", "premium", "gold", "silver", "platinum", "diamond", "black", "white", "blue", "green", "red", "pink", "purple",
+    "sie", "und", "der", "die", "das", "ist", "nicht", "mit", "les", "des", "une", "pour", "avec", "para", "con", "por",
+    "share", "zapier", "json", "html", "css", "api", "app", "apps", "software", "saas", "tech", "data", "cloud", "web", "net",
+    "nina", "copywriting", "copywriter", "picture", "photo", "image",
 }
 GENERIC_BRAND_WORDS = COMMON_WORDS - {"academy", "institute", "university", "school", "lab", "labs", "hub", "club", "collective", "society", "network", "studio", "group", "media", "digital", "coaching", "fitness", "wellness", "yoga", "nutrition", "marketing", "agency", "business", "online", "company", "mastermind", "membership", "community", "system", "systems", "method", "formula", "blueprint", "elite", "pro", "world", "global", "nation", "tribe", "circle"}
 
@@ -107,7 +123,8 @@ GENERIC_BRAND_WORDS = COMMON_WORDS - {"academy", "institute", "university", "sch
 def _clean_name(raw: str, kind: str = "person") -> str | None:
     n = clean_ws(raw).strip(" .,:;|-–—\"'“”‘’")
     n = re.sub(r"\s+", " ", n)
-    n = re.sub(r"^(by|with|from|and|for|the|our|client|meet|featuring)\s+", "", n, flags=re.I)
+    n = re.sub(r"^(by|with|from|and|for|the|our|client|meet|featuring|picture of|photo of|image of)\s+", "", n, flags=re.I)
+    n = re.sub(r"[’']s$", "", n)  # "Katherine Zenkina's"
     if not n or len(n) < 3 or len(n) > 48:
         return None
     toks = n.split()
@@ -120,11 +137,15 @@ def _clean_name(raw: str, kind: str = "person") -> str | None:
         return None
     if re.search(r"\d", n) and not BRAND_WORDS_RE.search(n):
         return None
-    if n.isupper() and len(n) > 4:
-        return None  # "TERMS & CONDITIONS", "FREE TRAINING"
+    if n.isupper() and len(n) >= 3:
+        return None  # "TERMS & CONDITIONS", "FREE TRAINING", "JSON"
     if kind == "person":
+        if len(toks) >= 2 and low_toks[0] in {"dr", "mr", "mrs", "ms", "prof", "coach"} and len(toks) == 2:
+            return None  # "Dr. Nina": a title + first name is not a full name
         if any(t in COMMON_WORDS for t in low_toks):
             return None
+        if any(t.endswith("s") and (t[:-1] in COMMON_WORDS or t[:-2] in COMMON_WORDS) for t in low_toks[1:]):
+            return None  # "Princess Cruises", "Driving Transactions": plural nouns are not surnames
         if any(len(t) < 2 or not re.fullmatch(r"[a-z'’.-]+", t) for t in low_toks):
             return None
         # "SibleyPadma" — two names glued by the DOM; allow only short prefixes (McX, DeX, LaX, O'X)
@@ -178,6 +199,8 @@ class ClientExtractor:
         self.agency_tokens |= {t for t in re.findall(r"[a-z0-9]+", site.domain.split(".")[0].lower()) if len(t) > 2}
         self.team: set[str] = set()
         self.hits: dict[str, ClientHit] = {}
+        self._base: dict[str, float] = {}
+        self._mentions: dict[str, int] = {}
 
     # --- helpers ---------------------------------------------------------------------------------------------
     def _is_team(self, name: str, ctx: str) -> bool:
@@ -196,11 +219,21 @@ class ClientExtractor:
                 return True
         return False
 
+    def _is_own_brand(self, cleaned: str) -> bool:
+        toks = {t for t in re.findall(r"[a-z0-9]+", cleaned.lower()) if len(t) > 2}
+        if not toks or not self.agency_tokens:
+            return False
+        overlap = toks & self.agency_tokens
+        if toks <= self.agency_tokens or len(overlap) >= 2:
+            return True
+        core = self.site.domain.split(".")[0].replace("-", "")
+        return any(len(t) >= 5 and t in core for t in overlap)
+
     def _add(self, name: str, *, kind: str, ctx: str, url: str, signal: str, base_conf: float) -> None:
         cleaned = _clean_name(name, kind)
         if not cleaned:
             return
-        if self.agency_tokens and {t for t in re.findall(r"[a-z0-9]+", cleaned.lower())} <= self.agency_tokens:
+        if self._is_own_brand(cleaned):
             return
         if self._is_team(cleaned, ctx):
             return
@@ -211,28 +244,41 @@ class ClientExtractor:
         hit = self.hits.get(cleaned.lower())
         if hit is None:
             hit = ClientHit(name=cleaned, kind=kind, evidence=ctx_clean[:400], evidence_url=url, confidence=base_conf)
-            hit.signals.add("_mentions:1")
             self.hits[cleaned.lower()] = hit
+            self._base[cleaned.lower()] = base_conf
+            self._mentions[cleaned.lower()] = 1
         else:
-            mentions = int(next((s.split(":")[1] for s in hit.signals if s.startswith("_mentions:")), "1")) + 1
-            hit.signals = {s for s in hit.signals if not s.startswith("_mentions:")} | {f"_mentions:{mentions}"}
-            # repeats add little: 3 mentions ≈ +0.08, never more than +0.12
-            hit.confidence = min(0.98, max(hit.confidence, base_conf) + min(0.12, 0.04 * (mentions - 1)))
+            self._base[cleaned.lower()] = max(self._base[cleaned.lower()], base_conf)
+            self._mentions[cleaned.lower()] += 1
             if len(ctx_clean) > len(hit.evidence) and signal in ("heading", "testimonial", "sentence"):
                 hit.evidence = ctx_clean[:400]
                 hit.evidence_url = url
         hit.signals.add(signal)
         if role and not hit.role_title:
             hit.role_title = role
-            hit.confidence = min(0.98, hit.confidence + 0.2)
-        if MONEY_RESULT_RE.search(ctx_clean) and "result" not in hit.signals:
+        if MONEY_RESULT_RE.search(ctx_clean):
             hit.signals.add("result")
-            hit.confidence = min(0.98, hit.confidence + 0.1)
-        if CLIENT_CONTEXT_RE.search(ctx_clean) and "client_context" not in hit.signals:
+        if CLIENT_CONTEXT_RE.search(ctx_clean):
             hit.signals.add("client_context")
-            hit.confidence = min(0.98, hit.confidence + 0.05)
         if not hit.niche:
             hit.niche = _niche(hit.role_title, ctx_clean)
+
+    def _score(self, hit: ClientHit) -> float:
+        """Confidence is computed once from independent components (never accumulated per mention)."""
+        key = hit.name.lower()
+        conf = self._base.get(key, 0.3)
+        conf += min(0.12, 0.04 * (self._mentions.get(key, 1) - 1))
+        if hit.role_title:
+            conf += 0.2
+        if "result" in hit.signals:
+            conf += 0.1
+        if "client_context" in hit.signals:
+            conf += 0.05
+        if "outbound_link" in hit.signals:
+            conf += 0.1
+        if re.search(r"\b(school|university|federation|association|institute|college|foundation|council)\b", hit.name, re.I):
+            conf -= 0.1  # credentials and affiliations read like clients but rarely are
+        return max(0.0, min(0.98, conf))
 
     # --- passes ----------------------------------------------------------------------------------------------
     def _collect_team(self) -> None:
@@ -387,13 +433,11 @@ class ClientExtractor:
                 if joined == dom_core or (len(joined) > 7 and joined in dom_core) or (len(last) > 4 and dom_core.startswith(last) and toks[0][:3] in dom_core):
                     hit.website = url.split("?", 1)[0]
                     hit.website_source = "outbound_link"
-                    hit.confidence = min(0.98, hit.confidence + 0.12)
                     hit.signals.add("outbound_link")
                     break
                 if anchor and hit.name.lower() == anchor.strip():
                     hit.website = url.split("?", 1)[0]
                     hit.website_source = "outbound_link"
-                    hit.confidence = min(0.98, hit.confidence + 0.08)
                     hit.signals.add("outbound_link")
                     break
 
@@ -420,7 +464,7 @@ class ClientExtractor:
         self._outbound_links()
         out: list[ClientHit] = []
         for hit in self.hits.values():
-            hit.signals = {s for s in hit.signals if not s.startswith("_mentions:")}
+            hit.confidence = self._score(hit)
             # A coach/infopreneur client needs role evidence OR strong structure + ICP context in the evidence
             icp_ctx = bool(COACH_CONTEXT_RE.search(hit.evidence)) or bool(re.search(r"\b(coach|course|program|students|launch|webinar|mastermind|membership)\b", hit.evidence, re.I))
             if hit.kind == "person" and not hit.role_title and not icp_ctx and "logo_wall" not in hit.signals:
