@@ -59,7 +59,7 @@ class Run(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
-    events: Mapped[list["Event"]] = relationship(back_populates="run", cascade="all, delete-orphan")
+    events: Mapped[list[Event]] = relationship(back_populates="run", cascade="all, delete-orphan")
 
 
 class Event(Base):
@@ -99,7 +99,7 @@ class Candidate(Base):
     discovered_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
-    agency: Mapped["Agency | None"] = relationship(back_populates="candidate", uselist=False)
+    agency: Mapped[Agency | None] = relationship(back_populates="candidate", uselist=False)
 
 
 class SerpCache(Base):
@@ -182,10 +182,10 @@ class Agency(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
     candidate: Mapped[Candidate | None] = relationship(back_populates="agency")
-    emails: Mapped[list["AgencyEmail"]] = relationship(
+    emails: Mapped[list[AgencyEmail]] = relationship(
         back_populates="agency", cascade="all, delete-orphan", order_by="AgencyEmail.rank"
     )
-    clients: Mapped[list["Client"]] = relationship(
+    clients: Mapped[list[Client]] = relationship(
         back_populates="agency", cascade="all, delete-orphan", order_by="Client.confidence.desc()"
     )
 
@@ -230,7 +230,7 @@ class Client(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     agency: Mapped[Agency] = relationship(back_populates="clients")
-    funnels: Mapped[list["Funnel"]] = relationship(
+    funnels: Mapped[list[Funnel]] = relationship(
         back_populates="client", cascade="all, delete-orphan", order_by="Funnel.confidence.desc()"
     )
 

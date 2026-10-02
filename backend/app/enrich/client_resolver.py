@@ -50,7 +50,7 @@ def _full_name_in(text: str, name: str) -> bool:
 
 def _domain_echoes(name: str, domain: str) -> bool:
     toks = _name_tokens(name)
-    core = domain.split(".")[0].replace("-", "")
+    core = domain.split(".", maxsplit=1)[0].replace("-", "")
     if not toks:
         return False
     joined = "".join(toks)

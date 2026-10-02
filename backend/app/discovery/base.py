@@ -26,7 +26,7 @@ class SerpResult:
         return {"engine": self.engine, "query": self.query, "country": self.country, "rank": self.rank, "url": self.url, "title": self.title, "snippet": self.snippet}
 
     @classmethod
-    def from_dict(cls, d: dict) -> "SerpResult":
+    def from_dict(cls, d: dict) -> SerpResult:
         return cls(**{k: d.get(k, "") for k in ("engine", "query", "country", "rank", "url", "title", "snippet")})
 
 
@@ -48,7 +48,7 @@ def query_terms(query: str) -> list[str]:
     return [t for t in re.findall(r"[a-z0-9][a-z0-9.\-]{1,}", q) if t not in _STOP and len(t) > 2]
 
 
-def serp_relevance(query: str, results: list["SerpResult"]) -> float:
+def serp_relevance(query: str, results: list[SerpResult]) -> float:
     """Share of results that mention at least two significant query terms.
 
     Engines under anti-bot pressure (Bing in particular) silently answer a *different*, truncated query

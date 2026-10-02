@@ -101,7 +101,7 @@ class Fetcher:
             await self._client.aclose()
             self._client = None
 
-    async def __aenter__(self) -> "Fetcher":
+    async def __aenter__(self) -> Fetcher:
         await self.start()
         return self
 

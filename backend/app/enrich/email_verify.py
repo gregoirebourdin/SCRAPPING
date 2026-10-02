@@ -15,7 +15,6 @@ import asyncio
 import logging
 import random
 import smtplib
-import socket
 import string
 from dataclasses import dataclass
 
@@ -89,7 +88,7 @@ class EmailVerifier:
             self.stats["smtp_checks"] += 1
             try:
                 return await asyncio.wait_for(asyncio.to_thread(self._smtp_rcpt, mx, email), timeout=settings.smtp_timeout + 4)
-            except (asyncio.TimeoutError, socket.timeout, TimeoutError, OSError):
+            except (TimeoutError, OSError):
                 self.stats["smtp_timeouts"] += 1
                 return None, "timeout"
             except smtplib.SMTPServerDisconnected:

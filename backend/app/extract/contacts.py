@@ -173,10 +173,19 @@ def extract_contacts(site: CrawledSite) -> Contacts:
                 seen[email] = EmailHit(email=email, source=source, page_url=p.url, same_domain=same, confidence=conf)
 
     def _rank(h: EmailHit) -> tuple:
+        """Same-domain first, then: a person's address > hello@ > info@/contact@/team@ > other roles > support/billing."""
         local = h.email.split("@", 1)[0]
-        role_idx = ROLE_PRIORITY.index(local) if local in ROLE_PRIORITY else 50
-        personal = 0 if role_idx == 50 and "." in local or local.isalpha() and role_idx == 50 else 1
-        return (0 if h.same_domain else 1, -round(h.confidence, 2), min(role_idx, 20), personal)
+        if local in LOW_VALUE_LOCAL:
+            bucket = 4
+        elif local in ("hello", "hi", "hey"):
+            bucket = 1
+        elif local in ("info", "contact", "team", "partnerships", "inquiries", "enquiries"):
+            bucket = 2
+        elif local in ROLE_PRIORITY:
+            bucket = 3
+        else:
+            bucket = 0  # looks like a person (jane@, jane.doe@)
+        return (0 if h.same_domain else 1, bucket, -round(h.confidence, 2))
 
     hits = sorted(seen.values(), key=_rank)
     for i, h in enumerate(hits):

@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from ..config import settings
 from ..util.ua import random_ua

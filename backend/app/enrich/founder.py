@@ -255,7 +255,7 @@ def _social_handles(site: CrawledSite) -> list[str]:
     return out
 
 
-HANDLE_NOISE = {"the", "official", "real", "iam", "im", "coach", "mr", "mrs", "ms", "dr", "its", "hey", "hi", "team", "agency", "marketing", "official", "page", "tv", "hq", "co", "inc"}
+HANDLE_NOISE = {"the", "official", "real", "iam", "im", "coach", "mr", "mrs", "ms", "dr", "its", "hey", "hi", "team", "agency", "marketing", "page", "tv", "hq", "co", "inc"}
 
 
 def _title_near_name(site: CrawledSite, name: str) -> str | None:

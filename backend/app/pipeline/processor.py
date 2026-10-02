@@ -107,12 +107,15 @@ async def persist_agency(session: AsyncSession, processed: ProcessedSite, *, can
     agency.status = sc.status
     agency.reject_reason = sc.reject_reason
     f = processed.founder
-    if f.name or f.linkedin:
+    serp_resolved = agency.founder_source == "serp" and agency.founder_linkedin
+    if f.name or f.linkedin or not serp_resolved:
+        # always reflect the latest extraction (a reprocess must be able to *remove* a wrong founder),
+        # except that a LinkedIn URL resolved through search engines is kept when the site itself says nothing
         agency.founder_name = f.name
         agency.founder_title = f.title
         agency.founder_linkedin = f.linkedin
-        agency.founder_source = f.source
-        agency.founder_confidence = f.confidence
+        agency.founder_source = f.source if (f.name or f.linkedin) else None
+        agency.founder_confidence = f.confidence if (f.name or f.linkedin) else None
     agency.enrich_stage = "none"
 
     # emails: replace, but keep verification results already obtained for the same address

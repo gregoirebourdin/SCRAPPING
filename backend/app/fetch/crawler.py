@@ -15,7 +15,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterable
+from collections.abc import Iterable
 
 from ..config import settings
 from ..util.text import ParsedPage, parse_html

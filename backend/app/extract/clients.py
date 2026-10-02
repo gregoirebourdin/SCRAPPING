@@ -81,7 +81,7 @@ COMMON_WORDS = {
     "business", "online", "company", "inc", "llc", "ltd", "group", "studio", "partners", "solutions", "system", "systems", "method",
     "ultimate", "complete", "total", "proven", "secret", "secrets", "formula", "blueprint", "mastery", "elite", "premium", "pro",
     "high", "ticket", "scale", "scaling", "grow", "growing", "launch", "launches", "launching", "strategy", "strategies", "session",
-    "sessions", "schedule", "calendar", "pricing", "plan", "plans", "package", "packages", "yes", "no", "thank", "thanks", "welcome",
+    "sessions", "schedule", "calendar", "plan", "plans", "package", "packages", "yes", "no", "thank", "thanks", "welcome",
     "hello", "hi", "hey", "dear", "sincerely", "regards", "cheers", "please", "note", "notes", "important", "disclaimer", "earnings",
     "income", "money", "cash", "profit", "profits", "roi", "roas", "cpa", "cpl", "ctr", "kpi", "usa", "uk", "us", "eu", "au", "ca",
     "january", "february", "march", "april", "june", "july", "august", "september", "october", "november", "december", "monday",
@@ -99,23 +99,22 @@ COMMON_WORDS = {
     "virtual", "assist", "assistant", "support", "help", "center", "centre", "general", "other", "misc", "various", "custom", "default",
     "featured", "freelancer", "freelance", "contributor", "guest", "writer", "editor", "doctor", "holistic", "beginner", "beginners",
     "advanced", "intermediate", "student", "students", "graduate", "alumni", "customer", "customers", "user", "users", "visitor",
-    "international", "federation", "association", "foundation", "council", "board", "committee", "department", "ministry", "office",
+    "federation", "association", "foundation", "council", "board", "committee", "department", "ministry", "office",
     # generic nouns / adjectives / verbs that show up in programme and brand names
     "accelerator", "children", "child", "kids", "kid", "transaction", "transactions", "cruise", "cruises", "clockwork", "inspired",
     "entrepreneur", "entrepreneurs", "braid", "braids", "consistent", "emails", "share", "threat", "triple", "double", "raising",
-    "like", "you", "driving", "run", "running", "princess", "queen", "king", "prince", "master", "masters", "mastery", "magic",
-    "power", "powerful", "simple", "easy", "fast", "quick", "smart", "rich", "wealthy", "wealth", "happy", "healthy", "strong",
+    "like", "you", "driving", "run", "running", "princess", "queen", "king", "prince", "master", "masters", "magic",
+    "power", "powerful", "simple", "easy", "fast", "smart", "rich", "wealthy", "wealth", "happy", "healthy", "strong",
     "bold", "brave", "wild", "pure", "true", "real", "modern", "creative", "epic", "legendary", "iconic", "infinite", "limitless",
     "unstoppable", "fearless", "mindful", "conscious", "sacred", "divine", "soul", "spirit", "heart", "mind", "body", "life", "lives",
-    "living", "love", "lover", "lovers", "joy", "peace", "flow", "glow", "shine", "rise", "thrive", "thriving", "grow", "growth",
-    "impact", "influence", "authority", "legacy", "freedom", "abundance", "purpose", "vision", "mission", "journey", "path", "way",
-    "lab", "labs", "hub", "zone", "spot", "space", "place", "house", "home", "room", "studio", "shop", "store", "market", "box",
-    "kit", "pack", "bundle", "stack", "suite", "engine", "machine", "factory", "garage", "kitchen", "table", "desk", "book", "books",
-    "podcast", "show", "channel", "tv", "radio", "news", "daily", "weekly", "monthly", "report", "letter", "digest", "insider",
-    "pro", "plus", "premium", "gold", "silver", "platinum", "diamond", "black", "white", "blue", "green", "red", "pink", "purple",
+    "living", "love", "lover", "lovers", "joy", "peace", "flow", "glow", "shine", "rise", "thrive", "thriving", "impact", "influence", "authority", "legacy", "freedom", "abundance", "purpose", "vision", "mission", "journey", "path", "way",
+    "zone", "spot", "space", "place", "house", "room", "shop", "store", "market", "box",
+    "kit", "pack", "bundle", "stack", "suite", "engine", "machine", "factory", "garage", "kitchen", "table", "desk", "books",
+    "channel", "tv", "radio", "news", "daily", "weekly", "monthly", "report", "letter", "digest", "insider",
+    "plus", "gold", "silver", "platinum", "diamond", "black", "white", "blue", "green", "red", "pink", "purple",
     "sie", "und", "der", "die", "das", "ist", "nicht", "mit", "les", "des", "une", "pour", "avec", "para", "con", "por",
-    "share", "zapier", "json", "html", "css", "api", "app", "apps", "software", "saas", "tech", "data", "cloud", "web", "net",
-    "nina", "copywriting", "copywriter", "picture", "photo", "image",
+    "zapier", "json", "html", "css", "api", "app", "apps", "software", "saas", "tech", "data", "cloud", "web", "net",
+    "nina", "copywriting", "copywriter",
 }
 GENERIC_BRAND_WORDS = COMMON_WORDS - {"academy", "institute", "university", "school", "lab", "labs", "hub", "club", "collective", "society", "network", "studio", "group", "media", "digital", "coaching", "fitness", "wellness", "yoga", "nutrition", "marketing", "agency", "business", "online", "company", "mastermind", "membership", "community", "system", "systems", "method", "formula", "blueprint", "elite", "pro", "world", "global", "nation", "tribe", "circle"}
 
@@ -215,7 +214,7 @@ class ClientExtractor:
             if org_tokens & self.agency_tokens:
                 return True
         for tok in self.agency_tokens:
-            if len(tok) > 4 and re.search(rf"\b(i'?m|i am|hi,? i'?m|hey,? i'?m)\b[^.\n]{{0,30}}\b{re.escape(name.split()[0].lower())}\b", low):
+            if len(tok) > 4 and re.search(rf"\b(i'?m|i am|hi,? i'?m|hey,? i'?m)\b[^.\n]{{0,30}}\b{re.escape(name.split(maxsplit=1)[0].lower())}\b", low):
                 return True
         return False
 

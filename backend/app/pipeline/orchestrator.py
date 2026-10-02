@@ -67,7 +67,7 @@ class RunConfig:
         return {k: v for k, v in self.__dict__.items()}
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "RunConfig":
+    def from_dict(cls, d: dict[str, Any]) -> RunConfig:
         known = {k: v for k, v in d.items() if k in cls.__dataclass_fields__ and v is not None}
         return cls(**known)
 
@@ -251,7 +251,7 @@ class Pipeline:
                         await self.event(f"all engines cooling down; waiting {int(delay)}s", level="warning", stage="discover")
                         try:
                             await asyncio.wait_for(self.cancel.wait(), timeout=delay)
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             pass
         self.stats.update(await self.counts())
         await self.flush_stats(force=True)
@@ -597,7 +597,7 @@ class RunManager:
             self.cancel.set()
             try:
                 await asyncio.wait_for(asyncio.shield(self.task), timeout=120)
-            except (asyncio.TimeoutError, Exception):
+            except (TimeoutError, Exception):
                 pass
 
 

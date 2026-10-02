@@ -78,7 +78,7 @@ class GoogleProvider(SearchProvider):
                     box = page.locator("textarea[name=q], input[name=q]").first
                     await box.click(timeout=5000)
                     await box.fill("")
-                    await box.type(query, delay=random.randint(25, 70))
+                    await box.press_sequentially(query, delay=random.randint(25, 70))
                     await page.keyboard.press("Enter")
                     await page.wait_for_load_state("domcontentloaded")
                     await page.wait_for_timeout(1200 + random.randint(0, 800))
