@@ -22,6 +22,7 @@ class RunCreate(BaseModel):
     stages: list[str] | None = Field(None, description="Subset of stages to run (default: all)")
     seed_domains: list[str] = Field(default_factory=list, description="Extra domains to inject as candidates")
     extra_queries: list[str] = Field(default_factory=list)
+    geo_modifiers: list[str] = Field(default_factory=list, description="Cities/countries appended to the hottest queries for more volume")
     min_score: int | None = None
     resume: bool = Field(True, description="Skip candidates already processed")
 

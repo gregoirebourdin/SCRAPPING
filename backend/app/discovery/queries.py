@@ -20,7 +20,15 @@ class Query:
     priority: int
 
 
-def build_queries(extra: list[str] | None = None, *, seed: int = 7) -> list[Query]:
+HOT_SERVICES = {
+    "facebook ads agency", "meta ads agency", "funnel agency", "paid ads agency", "youtube ads agency", "lead generation agency",
+    "sales funnel agency", "launch agency", "webinar funnel agency", "growth partner", "done for you ads", "ads management for",
+}
+HOT_ICP = ["coaches", "course creators", "online coaches", "coaching businesses", "consultants and coaches", "info products", "high ticket coaches"]
+
+
+def build_queries(extra: list[str] | None = None, *, geo: list[str] | None = None, seed: int = 7) -> list[Query]:
+    """``geo`` (cities / countries) multiplies the hottest service × ICP pairs: "meta ads agency for coaches london"."""
     out: list[Query] = []
     seen: set[str] = set()
 
@@ -41,9 +49,7 @@ def build_queries(extra: list[str] | None = None, *, seed: int = 7) -> list[Quer
     rnd = random.Random(seed)
     combos = list(itertools.product(SERVICE_QUERY_TERMS, ICP_QUERY_TERMS))
     rnd.shuffle(combos)
-    # most specific services first
-    hot = {"facebook ads agency", "meta ads agency", "funnel agency", "paid ads agency", "youtube ads agency", "lead generation agency", "sales funnel agency", "launch agency", "webinar funnel agency", "growth partner", "done for you ads", "ads management for"}
-    combos.sort(key=lambda c: 0 if c[0] in hot else 1)
+    combos.sort(key=lambda c: 0 if c[0] in HOT_SERVICES else 1)  # most specific services first
     for service, icp in combos:
         text = f"{service} {icp}" if service.endswith(("for", "management for")) else f"{service} for {icp}"
         add(text, "matrix", 2)
@@ -51,4 +57,15 @@ def build_queries(extra: list[str] | None = None, *, seed: int = 7) -> list[Quer
     for service, icp in combos[:120]:
         for mod in SEARCH_MODIFIERS[:3]:
             add(f"{service} for {icp} {mod}", "modifier", 3)
+
+    for place in geo or []:
+        place = place.strip()
+        if not place:
+            continue
+        for service in sorted(HOT_SERVICES):
+            for icp in HOT_ICP:
+                text = f"{service} {icp} {place}" if service.endswith("for") else f"{service} for {icp} {place}"
+                add(text, "geo", 4)
+        add(f"best marketing agencies for coaches {place}", "geo", 4)
+        add(f"top facebook ads agencies for coaches {place}", "geo", 4)
     return out

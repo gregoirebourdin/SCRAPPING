@@ -34,6 +34,7 @@ async def start_run(body: RunCreate, session: AsyncSession = Depends(get_session
         stages=body.stages or list(STAGES),
         seed_domains=body.seed_domains,
         extra_queries=body.extra_queries,
+        geo_modifiers=body.geo_modifiers,
         min_score=body.min_score,
         resume=body.resume,
         name=body.name,

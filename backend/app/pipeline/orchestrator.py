@@ -56,6 +56,7 @@ class RunConfig:
     stages: list[str] = field(default_factory=lambda: list(STAGES))
     seed_domains: list[str] = field(default_factory=list)
     extra_queries: list[str] = field(default_factory=list)
+    geo_modifiers: list[str] = field(default_factory=list)  # cities/countries appended to the hottest queries (more volume)
     min_score: int | None = None
     resume: bool = True
     candidate_multiplier: float = 8.0  # discovery stops once candidates ≥ target × multiplier
@@ -180,7 +181,7 @@ class Pipeline:
         n = await self._add_candidates(seeds)
         await self.event(f"seeds: {len(seeds)} urls, {n} new candidates", stage="discover")
 
-        queries = build_queries(cfg.extra_queries)
+        queries = build_queries(cfg.extra_queries, geo=cfg.geo_modifiers)
         if cfg.max_queries:
             queries = queries[: cfg.max_queries]
         self.stats["queries_total"] = len(queries) * len(cfg.countries)

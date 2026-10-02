@@ -67,6 +67,7 @@ cd backend && source .venv/bin/activate
 python -m app.cli test-site https://someagency.com          # crawl + extract + score one site, print everything
 python -m app.cli run --target 1000                         # full pipeline → data/exports/run_<id>_<ts>.csv
 python -m app.cli run --target 10000 --multiplier 6         # max volume: ~60k candidates, every one crawled
+python -m app.cli run --target 10000 --geo "london,sydney,toronto,dubai,los angeles,new york,austin,miami"   # + geo-multiplied queries
 python -m app.cli run --max-queries 40 --engines bing       # quick test
 python -m app.cli run --stages clients,founders,emails,finalize   # re-enrich without re-discovering
 python -m app.cli run --reprocess --stages crawl,finalize   # re-extract every known domain from cache
@@ -99,8 +100,25 @@ exists; SMTP not possible from your network) · `no_mx` / `invalid` (never send)
 * `python -m app.cli test-site <url>` after each change, then `run --reprocess --stages crawl,finalize` to re-score
   everything from cache.
 
+## Volume
+
+Discovery stops when the candidate pool reaches `target × multiplier` or the query matrix is exhausted. To go past
+~10 000 candidates: add `--geo` cities, add ICP/service terms in `lexicon.py` (every new term multiplies the matrix),
+drop extra `data/seeds/*.txt` lists, and run with all three engines from a residential connection. The crawl stage
+processes *every* candidate (not just until the target) unless `--stop-at-target` is given, so volume is bounded by
+discovery, never by qualification.
+
 ## Tests
 
 ```bash
-cd backend && python -m pytest -q && ruff check app tests
+cd backend && python -m pytest -q && ruff check app tests     # 20 tests: unit + offline integration (fixture site, pipeline, API)
 ```
+
+## Honest limits
+
+* Named client + funnel is found for roughly half of the qualified agencies — many agencies never name a client.
+  Tier B leads (email + proven ICP) are still good outreach targets.
+* `mx_valid` means the mail server exists, not that the mailbox does; run from a network with outbound port 25 open
+  to get `smtp_valid`.
+* Founder LinkedIn resolution through search engines depends on Google being available (Bing drops the `site:` and
+  quoted operators under pressure); links found on the agency site itself are always reliable.

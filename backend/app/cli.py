@@ -40,6 +40,7 @@ def run(
     max_queries: int | None = typer.Option(None, help="Cap the query matrix (quick tests)"),
     stages: str | None = typer.Option(None, help="Subset of discover,crawl,clients,founders,emails,finalize"),
     seeds: str | None = typer.Option(None, help="Comma separated extra domains"),
+    geo: str | None = typer.Option(None, help="Comma separated cities/countries to multiply the hottest queries (more volume): 'london,sydney,toronto'"),
     min_score: int | None = typer.Option(None),
     stop_at_target: bool = typer.Option(False, help="Stop crawling once the target is reached (default: process everything)"),
     multiplier: float = typer.Option(8.0, help="Candidate pool size = target × multiplier"),
@@ -60,7 +61,8 @@ def run(
     cfg = RunConfig(
         target_leads=target, engines=[e.strip() for e in engines.split(",") if e.strip()], countries=[c.strip() for c in countries.split(",") if c.strip()],
         max_queries=max_queries, stages=[s.strip() for s in stages.split(",")] if stages else list(STAGES),
-        seed_domains=[s.strip() for s in seeds.split(",")] if seeds else [], min_score=min_score, stop_at_target=stop_at_target,
+        seed_domains=[s.strip() for s in seeds.split(",")] if seeds else [], geo_modifiers=[g.strip() for g in geo.split(",")] if geo else [],
+        min_score=min_score, stop_at_target=stop_at_target,
         candidate_multiplier=multiplier, name=name,
     )
 
