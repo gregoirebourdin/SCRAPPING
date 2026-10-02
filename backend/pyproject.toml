@@ -1,0 +1,37 @@
+[project]
+name = "leadforge-backend"
+version = "0.1.0"
+description = "Clay-like lead scraping & enrichment engine for acquisition agencies serving infopreneurs/coaches"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "aiosqlite>=0.20",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "httpx[http2]>=0.27",
+    "playwright>=1.45",
+    "selectolax>=0.3",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "tldextract>=5.1",
+    "langdetect>=1.0.9",
+    "dnspython>=2.6",
+    "spacy>=3.7",
+    "orjson>=3.10",
+    "typer>=0.12",
+    "rich>=13.7",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.5"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
