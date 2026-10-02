@@ -51,18 +51,25 @@ ICP: dict[str, list[str]] = {
 # The ICP labels that define "infopreneur / coach" (must be present for qualification)
 CORE_ICP_LABELS = {"coaches", "course creators", "infopreneurs", "high ticket", "memberships", "webinars"}
 
+# Who the client *is* (role) — used for ``role_title``
 COACH_ROLE_WORDS = [
     "business coach", "life coach", "executive coach", "mindset coach", "health coach", "fitness coach", "wellness coach",
     "relationship coach", "dating coach", "career coach", "leadership coach", "money coach", "financial coach",
     "sales coach", "marketing coach", "real estate coach", "trading coach", "trading educator", "forex educator",
     "ecommerce coach", "amazon fba coach", "spiritual coach", "transformational coach", "confidence coach",
-    "parenting coach", "nutrition coach", "performance coach", "productivity coach", "public speaking coach",
-    "course creator", "online course creator", "infopreneur", "digital course creator", "online educator",
-    "consultant", "mentor", "trainer", "author", "speaker", "founder of", "creator of", "ceo of", "host of",
+    "parenting coach", "nutrition coach", "performance coach", "productivity coach", "public speaking coach", "online coach",
+    "course creator", "online course creator", "infopreneur", "digital course creator", "online educator", "educator",
+    "consultant", "mentor", "trainer", "author", "speaker", "founder of", "creator of", "ceo of", "host of", "coach",
+]
+# What the client *sells* (product) — ICP context, never a role title
+COACH_PRODUCT_WORDS = [
     "coaching program", "signature program", "mastermind", "membership", "academy", "bootcamp", "masterclass",
-    "online program", "group program", "certification program", "online course", "coach",
+    "online program", "group program", "certification program", "online course", "digital course", "course launch",
+    "webinar", "challenge", "high ticket offer", "high-ticket offer", "coaching business", "coaching offer",
 ]
 COACH_ROLE_RE = re.compile(r"\b(" + "|".join(re.escape(w) for w in sorted(COACH_ROLE_WORDS, key=len, reverse=True)) + r")\b", re.I)
+COACH_PRODUCT_RE = re.compile(r"\b(" + "|".join(re.escape(w) for w in sorted(COACH_PRODUCT_WORDS, key=len, reverse=True)) + r")\b", re.I)
+COACH_CONTEXT_RE = re.compile(COACH_ROLE_RE.pattern + "|" + COACH_PRODUCT_RE.pattern, re.I)
 
 # ---------------------------------------------------------------------------------------------------
 # Agency-ness / anti-signals
@@ -94,9 +101,12 @@ PARKED_SIGNALS = re.compile(
 )
 
 LISTICLE_TITLE_RE = re.compile(
-    r"(\b(top|best|leading|\d{1,3})\b.*\b(agenc(y|ies)|companies|firms|partners|experts|freelancers|services)\b)|(\bagenc(y|ies)\b.*\b(to (hire|work with|know)|in \d{4}|list|roundup)\b)",
+    r"(\b(top|best|leading)\s+(\d{1,3}\s+)?(?:[\w&'-]+\s+){0,6}(agencies|companies|firms|partners|experts|freelancers|consultants|providers)\b)"
+    r"|(\b\d{1,3}\s+(?:best|top|leading)?\s*(?:[\w&'-]+\s+){0,6}(agencies|companies|firms|partners|experts)\b(?:\s+(for|to|that|in|you)\b)?)"
+    r"|(\b(agencies|companies|firms)\s+(to (hire|work with|watch|consider)|for (coaches|course creators|consultants|experts|creators|info ?products|online courses|coaching))\b)",
     re.I,
 )
+LISTICLE_CONTEXT_RE = re.compile(r"\b(marketing|ads?|advertising|funnel|lead|growth|digital|coach|course|ppc|media|social|seo|creative|launch)\b", re.I)
 
 # ---------------------------------------------------------------------------------------------------
 # Tech / platform fingerprints (regex on raw HTML)
@@ -238,23 +248,34 @@ ICP_QUERY_TERMS = [
     "spiritual coaches", "wellness coaches", "executive coaches", "career coaches", "money coaches", "ecommerce coaches",
 ]
 
+# Quoted phrases = exact-match precision: these are the sentences agencies literally write on their homepages.
 PHRASE_QUERIES = [
-    "we help coaches scale with facebook ads", "we help course creators scale their launches", "scale your coaching business with paid ads agency",
-    "agency that helps course creators get leads", "coaching funnel agency case study", "high ticket coaching ads agency results",
-    "info product marketing agency case study", "course launch agency case study", "evergreen webinar funnel agency clients",
-    "done for you facebook ads for coaches", "done for you funnels for coaches", "paid ads for online coaches agency",
-    "meta ads agency for course creators case study", "youtube ads agency for coaches case study", "lead generation for coaches agency testimonials",
-    "we help coaches and consultants book more calls", "we scale coaches to 7 figures with ads", "ads agency for experts and coaches",
-    "funnel agency for kajabi course creators", "clickfunnels certified partner coaches", "marketing agency specializing in coaches",
-    "marketing agency specializing in online courses", "marketing agency specializing in info products", "coaching industry marketing agency",
-    "agency for coaches book a call case studies", "we help online course creators generate leads with paid ads",
-    "agency helping coaches generate booked calls with meta ads", "paid media agency for digital course launches",
-    "performance marketing agency for coaches and course creators", "growth partner for coaches and consultants",
-    "facebook ads management for coaches and consultants", "marketing agency for mastermind and membership businesses",
-    "launch strategist agency for course creators", "we build webinar funnels for coaches", "youtube ads for course creators agency",
-    "tiktok ads agency for creators and coaches", "ads agency for online education businesses", "coaching business lead generation agency",
-    "agency for high ticket coaches and consultants", "we help experts scale their online programs", "online course marketing agency clients",
-    "we help infopreneurs scale", "agency for infopreneurs", "paid ads agency for infopreneurs", "funnel agency for infopreneurs",
+    '"we help coaches" "facebook ads"', '"we help coaches" "meta ads"', '"we help coaches" funnels agency', '"we help coaches" "paid ads"',
+    '"we help course creators" ads', '"we help course creators" funnels', '"we help course creators" launch', '"we help online coaches"',
+    '"we help coaches and consultants" ads', '"we help coaches and consultants" "booked calls"', '"we help coaches and course creators"',
+    '"we help experts" "online programs" ads', '"we help experts and coaches"', '"we help infopreneurs"', '"we help info product"',
+    '"for coaches and course creators" agency', '"for coaches and consultants" "ads agency"', '"for coaches, consultants" agency ads',
+    '"coaches and course creators" "meta ads"', '"coaches and course creators" "facebook ads"', '"coaches and course creators" "youtube ads"',
+    '"course creators" "ads agency"', '"course creators" "funnel agency"', '"course creators" "growth partner"', '"course creators" "done-for-you"',
+    '"online coaches" "ads agency"', '"online coaches" "lead generation"', '"high ticket coaches" agency ads', '"high-ticket coaches" "booked calls"',
+    '"coaching businesses" "paid ads" agency', '"coaching business" "facebook ads" agency "case study"', '"coaching industry" "marketing agency"',
+    '"info products" "ads agency"', '"info product" "marketing agency"', '"digital products" "paid ads" agency coaches',
+    '"webinar funnel" agency coaches "case study"', '"evergreen webinar" agency "course creators"', '"course launch" agency "case study" ads',
+    '"done for you" "facebook ads" coaches', '"done-for-you" funnels coaches agency', '"done for you" "meta ads" "course creators"',
+    '"kajabi" "ads agency" coaches', '"clickfunnels" agency coaches "case study"', '"gohighlevel" agency coaches ads',
+    '"appointment setting" agency coaches', '"booked calls" "for coaches" agency', '"book more calls" coaches "paid ads"',
+    '"scale your coaching business" agency ads', '"scale coaches" ads agency', '"7 figure coaches" ads agency',
+    '"marketing agency for coaches"', '"ads agency for coaches"', '"facebook ads agency for coaches"', '"meta ads agency for coaches"',
+    '"youtube ads agency for coaches"', '"funnel agency for coaches"', '"growth agency for coaches"', '"lead generation agency for coaches"',
+    '"marketing agency for course creators"', '"ads agency for course creators"', '"marketing agency for consultants and coaches"',
+    '"marketing agency for online course"', '"marketing agency for personal brands"', '"marketing agency for experts"',
+    '"agency for infopreneurs"', '"paid ads for coaches"', '"paid ads for course creators"', '"meta ads for course creators"',
+    '"facebook ads for course creators" agency', '"youtube ads for course creators"', '"funnels for coaches" agency', '"funnels for course creators"',
+    '"launch agency" "course creators"', '"launch strategist" agency "course"', '"performance marketing" "coaches and course creators"',
+    '"growth partner" coaches consultants', '"client acquisition" "for coaches" agency', '"client acquisition" "course creators"',
+    '"membership" "mastermind" "ads agency"', '"online education" businesses "ads agency"', '"knowledge business" marketing agency',
+    '"ads for coaches" "case study"', '"ads for course creators" "case study"', '"coaches" "case studies" "roas" agency',
+    '"coach" "case study" "facebook ads" agency "booked calls"', '"course creator" "case study" "launch" agency "ad spend"',
 ]
 
 LISTICLE_QUERIES = [

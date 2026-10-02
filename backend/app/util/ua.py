@@ -27,7 +27,7 @@ def browser_headers(ua: str | None = None) -> dict[str, str]:
         "User-Agent": ua or random_ua(),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": ACCEPT_LANGUAGE,
-        "Accept-Encoding": "gzip, deflate, br",
+        # Accept-Encoding is deliberately left to httpx: it only advertises codecs it can decode
         "Upgrade-Insecure-Requests": "1",
         "Sec-Fetch-Dest": "document",
         "Sec-Fetch-Mode": "navigate",

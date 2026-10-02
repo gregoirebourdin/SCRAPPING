@@ -162,10 +162,19 @@ class Agency(Base):
     pages_crawled: Mapped[int] = mapped_column(Integer, default=0)
     key_pages: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)  # kind → url
 
+    # founder (from the site, or resolved through search engines — LinkedIn itself is never scraped)
+    founder_name: Mapped[str | None] = mapped_column(String(160))
+    founder_title: Mapped[str | None] = mapped_column(String(160))
+    founder_linkedin: Mapped[str | None] = mapped_column(Text)
+    founder_source: Mapped[str | None] = mapped_column(String(32))  # site_link|site_name+serp|serp|none
+    founder_confidence: Mapped[float | None] = mapped_column(Float)
+
     score: Mapped[int] = mapped_column(Integer, default=0, index=True)
     score_breakdown: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    tier: Mapped[str | None] = mapped_column(String(4), index=True)  # A|B|C
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)  # qualified|review|rejected
     reject_reason: Mapped[str | None] = mapped_column(String(255))
+    enrich_stage: Mapped[str] = mapped_column(String(32), default="none")  # none|clients|founder|emails|done
     notes: Mapped[str | None] = mapped_column(Text)
     user_status: Mapped[str | None] = mapped_column(String(32))  # user-set: new|contacted|replied|ignored
 

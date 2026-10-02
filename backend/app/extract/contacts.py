@@ -10,10 +10,23 @@ from ..fetch.crawler import CrawledSite
 from ..util.urls import absolutize, registrable_domain, social_network
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,24}")
+# Only *explicit* obfuscation markers count: "name [at] domain [dot] com", "name (at) domain.com", "name at domain dot com".
+# A bare "word at word.word" is ordinary prose ("terrible at this. And...") and is never an email.
+_AT = r"(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|<\s*at\s*>|\[@\]|\(@\)|&#64;)"
+_DOT = r"(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|<\s*dot\s*>)"
 OBFUSCATED_RE = re.compile(
-    r"([A-Za-z0-9._%+\-]+)\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\{\s*at\s*\}|\s+at\s+|<at>|&#64;|\s*\[@\]\s*)\s*([A-Za-z0-9\-]+(?:\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\s+dot\s+|\.)\s*[A-Za-z0-9\-]+)+)",
+    rf"([A-Za-z0-9._%+\-]+)\s*(?:{_AT}|\s+at\s+)\s*([A-Za-z0-9\-]+(?:\s*(?:{_DOT}|\s+dot\s+|\.)\s*[A-Za-z0-9\-]+)+)",
     re.I,
 )
+_OBF_MARKER = re.compile(rf"{_AT}|{_DOT}|\s+dot\s+", re.I)
+KNOWN_TLDS = {
+    "com", "net", "org", "io", "co", "ai", "me", "app", "dev", "agency", "marketing", "media", "digital", "studio", "info", "biz", "us", "uk",
+    "ca", "au", "nz", "ie", "de", "fr", "es", "it", "nl", "be", "ch", "at", "se", "no", "dk", "fi", "pl", "pt", "br", "mx", "ar", "cl", "co.uk",
+    "com.au", "co.nz", "co.za", "za", "in", "sg", "hk", "jp", "kr", "ae", "il", "tv", "cc", "xyz", "online", "site", "club", "live", "pro",
+    "group", "team", "global", "world", "email", "consulting", "coach", "academy", "education", "expert", "guru", "ltd", "llc", "inc", "eu",
+    "ph", "my", "id", "th", "vn", "pk", "ng", "ke", "gh", "eg", "ma", "tr", "ru", "ua", "cz", "ro", "hu", "gr", "sk", "si", "hr", "bg", "lt",
+    "lv", "ee", "is", "lu", "mt", "cy", "cloud", "systems", "solutions", "services", "network", "partners", "ventures", "capital", "fund",
+}
 CF_EMAIL_RE = re.compile(r'(?:data-cfemail="|/cdn-cgi/l/email-protection#)([0-9a-fA-F]{6,})')
 MAILTO_RE = re.compile(r'href="mailto:([^"?]+)', re.I)
 PHONE_RE = re.compile(r"(?:\+\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}(?:[\s.-]?\d{2,4})?")
@@ -59,7 +72,18 @@ def _valid(email: str) -> bool:
     if re.search(r"\d{6,}", local) or dom.count(".") > 4:
         return False
     tld = dom.rsplit(".", 1)[-1]
-    return tld.isalpha() and 2 <= len(tld) <= 24 and tld not in {"png", "jpg", "jpeg", "gif", "svg", "webp", "css", "js", "html", "pdf"}
+    if not (tld.isalpha() and 2 <= len(tld) <= 24) or tld in {"png", "jpg", "jpeg", "gif", "svg", "webp", "css", "js", "html", "pdf", "min"}:
+        return False
+    return True
+
+
+def _valid_obfuscated(email: str) -> bool:
+    """Stricter: de-obfuscated addresses must end with a well-known TLD."""
+    if not _valid(email):
+        return False
+    dom = email.rsplit("@", 1)[1]
+    parts = dom.split(".")
+    return parts[-1] in KNOWN_TLDS or ".".join(parts[-2:]) in KNOWN_TLDS
 
 
 @dataclass
@@ -93,11 +117,13 @@ def extract_emails_from_html(html: str, text: str, page_url: str) -> list[tuple[
     for m in EMAIL_RE.finditer(text):
         found.append((_norm(m.group(0)), "text"))
     for m in OBFUSCATED_RE.finditer(text):
+        if not _OBF_MARKER.search(m.group(0)):
+            continue  # "name at domain.com" with no explicit marker is prose, not an address
         local, dom = m.group(1), m.group(2)
-        dom = re.sub(r"\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\s+dot\s+)\s*", ".", dom, flags=re.I)
+        dom = re.sub(r"\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\{\s*dot\s*\}|<\s*dot\s*>|\s+dot\s+)\s*", ".", dom, flags=re.I)
         dom = re.sub(r"\s+", "", dom)
         e = f"{local}@{dom}".lower()
-        if _valid(e):
+        if _valid_obfuscated(e):
             found.append((e, "obfuscated"))
     # emails hidden in attributes / JSON blobs (e.g. "email":"x@y.com")
     for m in re.finditer(r'"email"\s*:\s*"([^"]+@[^"]+)"', html):

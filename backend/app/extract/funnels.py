@@ -2,6 +2,9 @@
 
 Output per funnel: entry URL, type (webinar, VSL, application, lead magnet, challenge, quiz, low-ticket, course sales...),
 hosting platform, offer headline, price hint, observed steps (opt-in form, video, calendar, checkout...) and evidence.
+
+Signals are read from the *visible* text and the DOM, never from raw markup alone (``application/json`` in a script tag
+is not an application form).
 """
 
 from __future__ import annotations
@@ -16,13 +19,17 @@ from ..config import settings
 from ..fetch.crawler import CrawledSite, SiteCrawler
 from ..lexicon import EXTERNAL_FUNNEL_HOSTS, FUNNEL_PATH_HINTS, FUNNEL_TYPE_RE, PRICE_RE
 from ..util.text import ParsedPage, clean_ws, parse_html
-from ..util.urls import absolutize, canonicalize, is_blocked_domain, looks_like_asset, registrable_domain, social_network
+from ..util.urls import absolutize, canonicalize, looks_like_asset, registrable_domain, social_network
 from .tech import detect_tech, primary_platform
 
 log = logging.getLogger(__name__)
 
-CTA_RE = re.compile(r"\b(apply|book|register|join|enroll|enrol|get (started|access|instant|the|my|your)|start|watch|download|free|claim|reserve|save (my|your) seat|sign up|learn more|work with me|yes,? i)\b", re.I)
+CTA_RE = re.compile(r"\b(apply( now| here| today)?|book (a|your|my) (call|session)|register( now| here| free)?|join( now| the| today| us)?|enrol?l( now| today)?|get (started|access|instant access|the (guide|training|free))|start (now|today|here)|watch (now|the (free )?(training|video|masterclass))|download( now| the| free)?|free (training|masterclass|guide|workshop|class|webinar)|claim (your|my)|reserve (your|my) (seat|spot)|save (my|your) (seat|spot)|sign ?up|work with me|yes,? i|learn more)\b", re.I)
 TYPE_PRIORITY = ["webinar", "vsl", "application", "challenge", "quiz", "lead_magnet", "course_sales", "low_ticket", "book_funnel", "community", "newsletter", "link_in_bio"]
+SKIP_FUNNEL_URL = re.compile(r"(privacy|terms|legal|cookie|login|log-in|signin|sign-in|cart|checkout/|account|/blog/|/news/|/tag/|/category/|/author/|facebook\.com|instagram\.com|/wp-|/feed|\.pdf$|/about|/contact|/faq|/press|/careers|/jobs|/podcast/|/episode)", re.I)
+APPLICATION_TEXT_RE = re.compile(r"\b(apply now|apply here|apply today|apply to work|application form|submit (your|an) application|fill (out|in) (the|this|your) application|see if you qualify|do you qualify)\b", re.I)
+WEBINAR_TEXT_RE = re.compile(r"\b(register (now|here|for the|for this|free)|save (my|your) seat|reserve (my|your) (seat|spot)|choose a time|watch the (free )?training|free (training|masterclass|workshop|class|webinar)|on[- ]demand training)\b", re.I)
+URGENCY_RE = re.compile(r"\b(countdown|deadline|expires in|offer ends|closes in|doors close|cart closes|limited (time|spots)|only \d+ (spots|seats))\b", re.I)
 
 
 @dataclass
@@ -51,14 +58,17 @@ class DetectedFunnel:
 
 
 def _classify(url: str, anchor: str, title: str, h1: str, text_head: str) -> tuple[str, dict[str, int]]:
-    blob_strong = f"{url} {anchor} {title} {h1}"
-    blob_weak = text_head[:1500]
+    """Strong signals (url / anchor / title / h1) weigh 3, body text matches weigh 1 and need ≥2 distinct hits."""
+    strong_blob = f"{url.split('://', 1)[-1]} {anchor} {title} {h1}"
+    weak_blob = text_head[:2500]
     scores: dict[str, int] = {}
     for t, rx in FUNNEL_TYPE_RE.items():
-        s = len(rx.findall(blob_strong)) * 3 + min(3, len(rx.findall(blob_weak)))
+        strong = len(rx.findall(strong_blob))
+        weak = len({m.group(0).lower() for m in rx.finditer(weak_blob)})
+        s = strong * 3 + (weak if weak >= 2 else 0)
         if s:
             scores[t] = s
-    if not scores:
+    if not scores or max(scores.values()) < 3:
         return "landing_page", scores
     best = max(scores.items(), key=lambda kv: (kv[1], -TYPE_PRIORITY.index(kv[0]) if kv[0] in TYPE_PRIORITY else -99))
     return best[0], scores
@@ -68,26 +78,24 @@ def _steps(html: str, parsed: ParsedPage) -> list[dict]:
     steps: list[dict] = []
     tree = HTMLParser(html[:800_000]) if html else None
     low = html.lower() if html else ""
+    text = parsed.text[:60_000]
     if tree is not None:
         if tree.css_first('input[type="email"], input[name*="email" i], input[placeholder*="email" i]'):
             steps.append({"step": "opt-in form (email)", "evidence": "email input"})
-        if tree.css_first('input[type="tel"], input[name*="phone" i]'):
+        if tree.css_first('input[type="tel"], input[name*="phone" i], input[placeholder*="phone" i]'):
             steps.append({"step": "phone capture", "evidence": "phone input"})
-        if tree.css_first("form textarea") or re.search(r"(application|apply now|qualify)", low[:200_000]):
-            if re.search(r"(application|apply)", low[:200_000]):
-                steps.append({"step": "application form", "evidence": "application wording / long form"})
-    if re.search(r"(wistia|vimeo\.com/video|player\.vimeo|youtube\.com/embed|youtube-nocookie|vidalytics|vidyard|loom\.com/embed|<video)", low):
+        if APPLICATION_TEXT_RE.search(text) and (tree.css_first("form textarea, form select") or "typeform" in low or "jotform" in low or "paperform" in low):
+            steps.append({"step": "application form", "evidence": APPLICATION_TEXT_RE.search(text).group(0)})
+    if re.search(r"(wistia|player\.vimeo\.com|youtube\.com/embed|youtube-nocookie|vidalytics|vidyard|loom\.com/embed|<video[\s>]|bunny\.net|muse\.ai)", low):
         steps.append({"step": "video (VSL / training)", "evidence": "video embed"})
-    if re.search(r"(calendly\.com|acuityscheduling|hubspot\.com/meetings|savvycal|tidycal|oncehub|cal\.com/|zcal\.co|book(ing)? a call|schedule (a|your) call)", low):
+    if re.search(r"(calendly\.com|acuityscheduling|hubspot\.com/meetings|savvycal|tidycal|oncehub|cal\.com/|zcal\.co)", low) or re.search(r"\b(book (a|your) (call|session)|schedule (a|your) call)\b", text, re.I):
         steps.append({"step": "calendar booking (sales call)", "evidence": "calendar embed / booking CTA"})
-    if re.search(r"(js\.stripe\.com|checkout\.stripe|samcart|thrivecart|paypal\.com/sdk|kajabi.*checkout|clickfunnels.*order|/checkout|add to cart|buy now|enroll now)", low):
+    if re.search(r"(js\.stripe\.com|checkout\.stripe|samcart|thrivecart|paypal\.com/sdk|/checkout|add to cart|buy now|enroll now|enrol now|pay in full|payment plan)", low) or re.search(r"\b(enroll now|buy now|pay in full|payment plan|add to cart)\b", text, re.I):
         steps.append({"step": "checkout / enrollment", "evidence": "payment or enrollment element"})
-    if re.search(r"(webinarjam|everwebinar|demio|zoom\.us/webinar|register (now|for the)|save (my|your) seat|choose a time)", low):
-        steps.append({"step": "webinar registration", "evidence": "webinar wording / platform"})
-    if re.search(r"(countdown|deadline|expires in|offer ends|closes in|evergreen)", low):
+    if re.search(r"(webinarjam|everwebinar|demio|zoom\.us/webinar|stealthseminar|ewebinar)", low) or WEBINAR_TEXT_RE.search(text):
+        steps.append({"step": "webinar / training registration", "evidence": "webinar wording or platform"})
+    if URGENCY_RE.search(text) or re.search(r"(countdown-timer|class=\"[^\"]*countdown|deadline-funnel|deadlinefunnel)", low):
         steps.append({"step": "deadline / countdown", "evidence": "urgency timer"})
-    if re.search(r"(thank[- ]you|confirmation|next step|watch this video before)", low[:300_000]) and "thank" in parsed.url.lower():
-        steps.append({"step": "thank-you / upsell page", "evidence": "url"})
     seen = set()
     uniq = []
     for s in steps:
@@ -104,32 +112,35 @@ def funnel_candidates(site: CrawledSite) -> list[FunnelCandidate]:
     for p in site.pages:
         for href, anchor in p.parsed.links:
             url = absolutize(p.url, href)
-            if not url or looks_like_asset(url):
+            if not url or looks_like_asset(url) or SKIP_FUNNEL_URL.search(url):
                 continue
             dom = registrable_domain(url)
             if not dom:
                 continue
             ext = dom != home_dom
-            if ext and (is_blocked_domain(dom) and not EXTERNAL_FUNNEL_HOSTS.search(url)):
-                continue
+            is_funnel_host = bool(EXTERNAL_FUNNEL_HOSTS.search(url))
+            if ext and not is_funnel_host:
+                continue  # only follow external links to known funnel platforms
             if social_network(url) and "facebook.com/groups" not in url:
                 continue
             a = (anchor or "").strip()
+            path = url.split("://", 1)[-1]
+            path = path.split("/", 1)[1] if "/" in path else ""
             score = 0.0
-            if EXTERNAL_FUNNEL_HOSTS.search(url):
+            if is_funnel_host:
                 score += 3.0
-            if FUNNEL_PATH_HINTS.search(url.split("://", 1)[-1].split("/", 1)[-1] if "/" in url.split("://", 1)[-1] else ""):
-                score += 1.5
-            for t, rx in FUNNEL_TYPE_RE.items():
-                if rx.search(a) or rx.search(url):
-                    score += 1.0 if t not in ("newsletter", "community", "link_in_bio") else 0.4
-            if CTA_RE.search(a):
+            path_hint = bool(FUNNEL_PATH_HINTS.search(path))
+            type_hits = [t for t, rx in FUNNEL_TYPE_RE.items() if rx.search(a) or rx.search(path)]
+            cta = bool(CTA_RE.search(a))
+            if path_hint:
                 score += 1.0
-            if re.search(r"(privacy|terms|login|cart|blog|/tag/|/category/|/author/|facebook\.com|instagram\.com|/wp-|/feed)", url, re.I):
+            score += sum(1.0 if t not in ("newsletter", "community", "link_in_bio") else 0.4 for t in type_hits)
+            if cta:
+                score += 1.5
+            # an internal page needs two independent hints (path + anchor/type), one hint alone is noise
+            if not is_funnel_host and (path_hint + bool(type_hits) + cta) < 2:
                 continue
             if score <= 0:
-                continue
-            if ext and score < 2:
                 continue
             key = canonicalize(url)
             cur = cands.get(key)
@@ -142,11 +153,11 @@ async def detect_funnels(site: CrawledSite, crawler: SiteCrawler, *, max_pages: 
     max_pages = max_pages or settings.crawl_max_client_pages
     found: list[DetectedFunnel] = []
     home = site.home
-    cands = funnel_candidates(site)[: max_pages]
+    cands = funnel_candidates(site)[:max_pages]
     base_tech = detect_tech(site.all_html)
     base_platform = primary_platform(base_tech)
 
-    # The homepage itself is often the funnel for coaches (single VSL/opt-in page)
+    # The homepage itself is often the funnel for coaches (single VSL / opt-in page)
     pages: list[tuple[str, str, ParsedPage, str, bool]] = []
     if home is not None:
         pages.append((home.url, "", home.parsed, home.parsed.html, False))
@@ -174,25 +185,27 @@ async def detect_funnels(site: CrawledSite, crawler: SiteCrawler, *, max_pages: 
         offer = h1 or parsed.og_title or parsed.title
         offer = clean_ws(offer)[:200] if offer else None
         is_home = home is not None and canonicalize(url) == canonicalize(home.url)
-        conf = 0.3
-        conf += 0.1 * min(3, len(steps))
+        strong_steps = [s for s in steps if s["step"] not in ("phone capture",)]
+        if ftype == "landing_page" and len(strong_steps) < 2:
+            continue  # a page with one email box and no funnel wording is just a page
+        conf = 0.25
+        conf += 0.1 * min(3, len(strong_steps))
         if ftype != "landing_page":
             conf += 0.15
         if external and EXTERNAL_FUNNEL_HOSTS.search(url):
             conf += 0.15
         if platform in ("clickfunnels", "kajabi", "gohighlevel", "kartra", "systeme.io", "leadpages", "funnelish", "groovefunnels"):
             conf += 0.1
-        if is_home and ftype == "landing_page" and not steps:
-            conf -= 0.2
+        if is_home and ftype == "landing_page":
+            conf -= 0.1
         conf = max(0.05, min(0.98, conf))
-        if ftype == "landing_page" and not steps:
+        if conf < 0.5:
             continue
         found.append(DetectedFunnel(
             url=url, funnel_type=ftype, platform=platform, offer=offer, price_hint=price, steps=steps,
             evidence={"anchor": anchor, "type_scores": scores, "tech": tech[:12], "is_homepage": is_home, "external": external},
             confidence=conf,
         ))
-    # de-duplicate by (type, platform) keeping the most confident, max 5
     found.sort(key=lambda f: -f.confidence)
     uniq: list[DetectedFunnel] = []
     seen: set[str] = set()
@@ -202,4 +215,4 @@ async def detect_funnels(site: CrawledSite, crawler: SiteCrawler, *, max_pages: 
             continue
         seen.add(key)
         uniq.append(f)
-    return uniq[:5]
+    return uniq[:3]

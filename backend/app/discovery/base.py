@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -30,7 +31,44 @@ class SerpResult:
 
 
 class EngineBlocked(Exception):
-    """Raised when an engine answers with a captcha/challenge/rate-limit."""
+    """Raised when an engine answers with a captcha/challenge/rate-limit (or silently degraded results)."""
+
+
+_STOP = {
+    "the", "a", "an", "and", "or", "for", "of", "to", "in", "on", "with", "by", "at", "from", "is", "are", "we", "our", "your", "you",
+    "that", "this", "it", "as", "be", "do", "how", "what", "who", "best", "top", "vs", "near", "me", "my", "us", "site", "linkedin",
+    "com", "www", "http", "https", "agency", "agencies", "marketing", "ads", "ad", "online", "digital", "services", "company", "business",
+}
+
+
+def query_terms(query: str) -> list[str]:
+    """Significant lowercase terms of a query (quotes and operators stripped)."""
+    q = re.sub(r"\bsite:\S+", " ", query.lower())
+    q = re.sub(r"[\"'()]", " ", q)
+    return [t for t in re.findall(r"[a-z0-9][a-z0-9.\-]{1,}", q) if t not in _STOP and len(t) > 2]
+
+
+def serp_relevance(query: str, results: list["SerpResult"]) -> float:
+    """Share of results that mention at least two significant query terms.
+
+    Engines under anti-bot pressure (Bing in particular) silently answer a *different*, truncated query
+    ("we help coaches..." → results about "we"). Those pages are worthless and must not be cached.
+    """
+    if not results:
+        return 1.0
+    terms = query_terms(query)
+    if not terms:
+        return 1.0
+    need = min(2, len(terms))
+    hits = 0
+    for r in results:
+        blob = f"{r.title} {r.snippet} {r.url}".lower()
+        if sum(1 for t in terms if t in blob) >= need:
+            hits += 1
+    return hits / len(results)
+
+
+DEGRADED_THRESHOLD = 0.25
 
 
 class EngineError(Exception):

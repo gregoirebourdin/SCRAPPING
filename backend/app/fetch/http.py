@@ -18,7 +18,6 @@ from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
 import httpx
-from sqlalchemy import select
 
 from ..config import settings
 from ..db import SessionLocal

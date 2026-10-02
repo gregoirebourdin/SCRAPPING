@@ -10,7 +10,7 @@ from ..config import settings
 from ..db import SessionLocal
 from ..fetch.http import Fetcher
 from ..models import SerpCache
-from .base import EngineBlocked, EngineError, SearchProvider, SerpResult
+from .base import DEGRADED_THRESHOLD, EngineBlocked, EngineError, SearchProvider, SerpResult, serp_relevance
 from .bing import BingProvider
 from .duckduckgo import DuckDuckGoProvider
 from .google import GoogleProvider
@@ -42,7 +42,10 @@ class SearchRouter:
             row = await s.get(SerpCache, key)
         if row is None or row.fetched_at < datetime.utcnow() - timedelta(hours=settings.serp_cache_ttl_hours):
             return None
-        return [SerpResult.from_dict(d) for d in row.results]
+        results = [SerpResult.from_dict(d) for d in row.results]
+        if results and serp_relevance(row.query, results) < DEGRADED_THRESHOLD:
+            return None  # cached before degradation detection existed: refetch
+        return results
 
     async def _store(self, key: str, engine: str, query: str, results: list[SerpResult]) -> None:
         async with SessionLocal() as s:
@@ -68,15 +71,25 @@ class SearchRouter:
             self.stats["cache_hits"] += 1
             return cached
         async with self._sem:
-            try:
-                results = await provider.search(query, country=country, pages=pages)
-            except EngineBlocked as e:
-                provider.health.blocked(str(e))
-                return []
-            except EngineError as e:
-                provider.health.failed(str(e))
-                log.debug("engine %s error on %r: %s", provider.name, query, e)
-                return []
+            for attempt in (1, 2):
+                try:
+                    results = await provider.search(query, country=country, pages=pages)
+                except EngineBlocked as e:
+                    provider.health.blocked(str(e))
+                    return []
+                except EngineError as e:
+                    provider.health.failed(str(e))
+                    log.debug("engine %s error on %r: %s", provider.name, query, e)
+                    return []
+                rel = serp_relevance(query, results)
+                if results and rel < DEGRADED_THRESHOLD:
+                    # the engine answered a different (truncated) query: worthless, never cached
+                    self.stats["degraded"] = self.stats.get("degraded", 0) + 1
+                    if attempt == 1 and isinstance(provider, BingProvider) and provider.switch_to_browser():
+                        continue
+                    provider.health.blocked(f"degraded:{rel:.2f}")
+                    return []
+                break
         provider.health.ok(len(results))
         self.stats["queries"] += 1
         self.stats["results"] += len(results)
