@@ -1,0 +1,29 @@
+# deps
+node_modules/
+.pnpm-store/
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+# builds
+.next/
+dist/
+build/
+out/
+coverage/
+playwright-report/
+test-results/
+.turbo/
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+# misc
+.DS_Store
+*.log
+/tmp/
