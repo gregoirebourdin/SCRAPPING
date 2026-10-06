@@ -138,11 +138,23 @@ async def update_list(list_id: uuid.UUID, body: ListUpdate, ctx: Ctx) -> dict[st
 
 
 @router.delete("/lists/{list_id}")
-async def delete_list(list_id: uuid.UUID, ctx: Ctx) -> dict[str, Any]:
+async def delete_list(list_id: uuid.UUID, ctx: Ctx, purge_leads: bool = False) -> dict[str, Any]:
+    """Delete a list. ``purge_leads`` also deletes its people and companies that are in no other list
+    (archiving — ``PATCH is_archived`` — is the keep-everything alternative)."""
     async with session_scope() as s:
         lst = await lists_svc.get_list(s, ctx.workspace_id, list_id)
         name = lst.name
+        purged = (
+            await lists_svc.purge_list_leads(s, ctx.workspace_id, list_id)
+            if purge_leads
+            else {"people_deleted": 0, "companies_deleted": 0}
+        )
         n = await lists_svc.delete_list(s, ctx.workspace_id, list_id)
+        detail = (
+            f"{purged['people_deleted']} people and {purged['companies_deleted']} companies deleted"
+            if purge_leads
+            else "leads and discovery history kept"
+        )
         await audit.log(
             s,
             workspace_id=ctx.workspace_id,
@@ -150,9 +162,9 @@ async def delete_list(list_id: uuid.UUID, ctx: Ctx) -> dict[str, Any]:
             action="list.delete",
             entity_type="list",
             entity_ids=[list_id],
-            summary=f'Deleted list "{name}" ({n} memberships; discovery history kept)',
+            summary=f'Deleted list "{name}" ({n} memberships; {detail})',
         )
-    return {"deleted": True, "memberships_removed": n}
+    return {"deleted": True, "memberships_removed": n, **purged}
 
 
 @router.post("/lists/{list_id}/duplicate", response_model=ListOut)

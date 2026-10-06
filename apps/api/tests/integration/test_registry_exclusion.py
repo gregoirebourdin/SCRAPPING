@@ -445,3 +445,25 @@ async def test_suppressed_people_are_never_added_to_lists(leads):
             s, ws, lst.id, EntityType.person, [marie.id, paul.id], user_id=None
         )
     assert change.added == [paul.id] and change.skipped_suppressed == 1
+
+
+async def test_delete_permanently_purges_only_leads_that_are_in_no_other_list(workspace):
+    ws, user = workspace
+    only = await _company(ws, "Agence Seule", "https://agence-seule.fr")
+    shared = await _company(ws, "Agence Partagee", "https://agence-partagee.fr")
+    p_only, _ = await _person(ws, only.id, "Marie Dupont")
+    p_shared, _ = await _person(ws, shared.id, "Paul Martin")
+    async with session_scope() as s:
+        doomed, _ = await lists_svc.create_list(s, ws, name="A supprimer", user_id=user)
+        kept, _ = await lists_svc.create_list(s, ws, name="A garder", user_id=user)
+        doomed_id, kept_id = doomed.id, kept.id
+    async with session_scope() as s:
+        await lists_svc.add_to_list(s, ws, doomed_id, EntityType.person, [p_only.id, p_shared.id], user_id=user)
+        await lists_svc.add_to_list(s, ws, kept_id, EntityType.person, [p_shared.id], user_id=user)
+    async with session_scope() as s:
+        out = await lists_svc.purge_list_leads(s, ws, doomed_id)
+        await lists_svc.delete_list(s, ws, doomed_id)
+    assert out == {"people_deleted": 1, "companies_deleted": 1}
+    async with session_scope() as s:
+        assert await s.get(Person, p_only.id) is None and await s.get(Company, only.id) is None
+        assert await s.get(Person, p_shared.id) is not None and await s.get(Company, shared.id) is not None

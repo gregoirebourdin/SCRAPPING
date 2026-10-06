@@ -189,6 +189,74 @@ async def delete_list(s: AsyncSession, workspace_id: uuid.UUID, list_id: uuid.UU
     return int(count or 0)
 
 
+async def purge_list_leads(s: AsyncSession, workspace_id: uuid.UUID, list_id: uuid.UUID) -> dict[str, int]:
+    """Delete the people and companies of a list that belong to NO other list ("delete permanently").
+
+    Leads also kept in another list stay. A company goes only when none of its people stays in another list.
+    Suppressions are separate (by email / domain) and always survive; purged leads can be found again later.
+    """
+    await get_list(s, workspace_id, list_id)
+    in_other = sa.select(ListMembership.person_id).where(
+        ListMembership.list_id != list_id, ListMembership.person_id.is_not(None)
+    )
+    people = list(
+        (
+            await s.scalars(
+                sa.select(ListMembership.person_id).where(
+                    ListMembership.list_id == list_id,
+                    ListMembership.person_id.is_not(None),
+                    ListMembership.person_id.not_in(in_other),
+                )
+            )
+        ).all()
+    )
+    from_people = sa.select(Person.company_id).where(Person.id.in_(people or [uuid.uuid4()]))
+    candidates = set(
+        (
+            await s.scalars(
+                sa.select(Company.id).where(
+                    Company.workspace_id == workspace_id,
+                    sa.or_(
+                        Company.id.in_(from_people),
+                        Company.id.in_(
+                            sa.select(ListMembership.company_id).where(
+                                ListMembership.list_id == list_id, ListMembership.company_id.is_not(None)
+                            )
+                        ),
+                    ),
+                )
+            )
+        ).all()
+    )
+    keep = set(
+        (
+            await s.scalars(
+                sa.select(Company.id).where(
+                    Company.id.in_(candidates or {uuid.uuid4()}),
+                    sa.or_(
+                        Company.id.in_(
+                            sa.select(ListMembership.company_id).where(
+                                ListMembership.list_id != list_id, ListMembership.company_id.is_not(None)
+                            )
+                        ),
+                        Company.id.in_(
+                            sa.select(Person.company_id).where(
+                                Person.id.in_(in_other), Person.company_id.is_not(None)
+                            )
+                        ),
+                    ),
+                )
+            )
+        ).all()
+    )
+    companies = sorted(candidates - keep)
+    if people:
+        await s.execute(sa.delete(Person).where(Person.workspace_id == workspace_id, Person.id.in_(people)))
+    if companies:
+        await s.execute(sa.delete(Company).where(Company.workspace_id == workspace_id, Company.id.in_(companies)))
+    return {"people_deleted": len(people), "companies_deleted": len(companies)}
+
+
 async def duplicate_list(
     s: AsyncSession, workspace_id: uuid.UUID, list_id: uuid.UUID, *, name: str | None, user_id: str | None
 ) -> List:

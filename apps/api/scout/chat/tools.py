@@ -434,32 +434,57 @@ async def archive_list(a: ListRefArgs, ctx: ToolContext) -> ToolOutcome:
     )
 
 
-async def _confirm_delete_list(a: ListRefArgs, ctx: ToolContext) -> str | None:
+class DeleteListArgs(ListRefArgs):
+    purge_leads: bool = Field(
+        default=False,
+        description="Also erase the people and companies that are in no other list ('supprime tout', 'delete it with "
+        "its leads', 'supprimer carrément'). Default: only the list goes, leads stay. To keep everything but hide "
+        "the list, use archive_list instead.",
+    )
+
+
+async def _confirm_delete_list(a: DeleteListArgs, ctx: ToolContext) -> str | None:
     lst = await _list_by_ref(ctx, a.list_id, a.list_name)
-    return f'Delete list "{lst.name}"? Its memberships are removed; discovery history is kept.'
+    if a.purge_leads:
+        return (
+            f'Delete list "{lst.name}" AND its leads that are in no other list? This cannot be undone '
+            "(archiving keeps everything)."
+        )
+    return f'Delete list "{lst.name}"? Its leads stay in People / Companies; discovery history is kept.'
 
 
 @tool(
     "delete_list",
     "Deleted list",
-    "Delete a list (memberships only; global registry and history are kept). Requires confirmation.",
-    ListRefArgs,
+    "Delete a list permanently — optionally with its leads that are in no other list (purge_leads). "
+    "Archiving (archive_list) is the keep-everything alternative. Requires confirmation.",
+    DeleteListArgs,
     confirm=_confirm_delete_list,
 )
-async def delete_list(a: ListRefArgs, ctx: ToolContext) -> ToolOutcome:
+async def delete_list(a: DeleteListArgs, ctx: ToolContext) -> ToolOutcome:
     lst = await _list_by_ref(ctx, a.list_id, a.list_name)
     async with session_scope() as s:
+        purged = (
+            await lists_svc.purge_list_leads(s, ctx.ws.workspace_id, lst.id)
+            if a.purge_leads
+            else {"people_deleted": 0, "companies_deleted": 0}
+        )
         n = await lists_svc.delete_list(s, ctx.ws.workspace_id, lst.id)
+    detail = (
+        f"{purged['people_deleted']} people and {purged['companies_deleted']} companies erased"
+        if a.purge_leads
+        else "leads and history kept"
+    )
     audit_id = await _log(
         ctx,
         "list.delete",
-        f'Deleted "{lst.name}" ({n} memberships, history kept)',
+        f'Deleted "{lst.name}" ({n} memberships, {detail})',
         entity_type="list",
         ids=[lst.id],
     )
     return ToolOutcome(
-        {"deleted": str(lst.id), "memberships_removed": n},
-        {"kind": "rows_affected", "title": "Deleted list", "detail": f"{lst.name} · history kept"},
+        {"deleted": str(lst.id), "memberships_removed": n, **purged},
+        {"kind": "rows_affected", "title": "Deleted list", "detail": f"{lst.name} · {detail}"},
         ui_effects=[{"type": "list_deleted", "list_id": str(lst.id)}],
         audit_id=audit_id,
     )

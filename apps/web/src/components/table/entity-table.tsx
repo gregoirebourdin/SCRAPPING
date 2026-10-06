@@ -10,6 +10,7 @@ import { useUI } from "@/lib/store";
 
 import { TableView } from "./table-view";
 import type { TableScope } from "./use-rows";
+import { ListActions } from "@/components/lists/list-actions";
 
 function EmptyHint({ icon, title, body, children }: { icon: React.ReactNode; title: string; body: string; children?: React.ReactNode }) {
   return (
@@ -101,6 +102,7 @@ export function ListTable({ listId }: { listId: string }) {
       scope={scope}
       title={list.data?.name ?? "…"}
       icon={<span className="size-2 shrink-0 rounded-full" style={{ background: list.data?.color ?? "var(--text-muted)" }} />}
+      headerExtra={list.data ? <ListActions list={list.data} afterDelete="lists" /> : null}
       emptyState={
         <EmptyHint icon={<Sparkles />} title="This list is empty" body="Ask the assistant to fill it, add leads from People, or import a CSV.">
           <DiscoverButtons />

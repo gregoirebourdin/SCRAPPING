@@ -9,6 +9,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { DataTable, Page } from "@/components/common/page";
+import { ListActions } from "@/components/lists/list-actions";
 import { api } from "@/lib/api";
 import { n, relTime } from "@/lib/format";
 import { qk, useLists } from "@/lib/queries";
@@ -81,6 +82,7 @@ export function ListsIndex() {
           { key: "source", label: "Source", render: (l) => (l.source_campaign_id ? <Badge tone="info">search</Badge> : <span className="text-fg-3">manual</span>) },
           { key: "desc", label: "Description", render: (l) => <span className="line-clamp-1 text-fg-3">{l.description ?? ""}</span> },
           { key: "updated", label: "Updated", className: "text-right", render: (l) => <span className="text-fg-3">{relTime(l.updated_at)}</span> },
+          { key: "actions", label: "", className: "w-10 text-right", render: (l) => <ListActions list={l} /> },
         ]}
       />
       <Dialog open={open} onOpenChange={setOpen}>
