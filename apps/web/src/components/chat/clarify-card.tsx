@@ -67,18 +67,14 @@ export function ClarifyCard({
   const questions = card.questions ?? [];
   const [answers, setAnswers] = useState<Record<string, ClarifyAnswer>>({});
   const [other, setOther] = useState<Record<string, boolean>>({});
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
   const uid = useId();
 
-  if (card.answered || sent) {
-    const text =
-      card.answer_text ??
-      Object.values(answers)
-        .map((a) => a.label ?? a.value)
-        .join(" · ");
+  if (card.answered || sent !== null) {
+    const text = card.answer_text ?? sent ?? "";
     return (
       <div className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-meta text-fg-3 shadow-[inset_0_0_0_1px_var(--border-subtle)] animate-fade-in">
-        {sent && !card.answered ? <Spinner size={11} /> : <Check className="size-3.5 text-success" />}
+        {sent !== null && !card.answered ? <Spinner size={11} /> : <Check className="size-3.5 text-success" />}
         <span className="truncate">{text || t.answered}</span>
       </div>
     );
@@ -90,10 +86,13 @@ export function ClarifyCard({
   }
 
   function submit(kind: "answers" | "defaults" | "skip") {
-    if (disabled || sent) return;
-    setSent(true);
-    const list = Object.values(answers).filter((a) => a.value.trim());
-    if (kind === "skip") return onSubmit({ answers: [], skipped: true, summary: t.skip });
+    if (disabled || sent !== null) return;
+    if (kind === "skip") {
+      setSent(t.skip);
+      return onSubmit({ answers: [], skipped: true, summary: t.skip });
+    }
+    // "Use defaults" ignores partial picks; Continue keeps them and fills the rest with defaults.
+    const list = kind === "defaults" ? [] : Object.values(answers).filter((a) => a.value.trim());
     const filled = [...list];
     for (const q of questions) {
       if (!filled.some((a) => a.id === q.id) && q.default) {
@@ -103,11 +102,9 @@ export function ClarifyCard({
     }
     const order = new Map(questions.map((q, i) => [q.id, i]));
     filled.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-    onSubmit({
-      answers: kind === "defaults" ? [] : list,
-      use_defaults: true,
-      summary: filled.map((a) => a.label ?? a.value).join(" · ") || t.defaults,
-    });
+    const summary = filled.map((a) => a.label ?? a.value).join(" · ") || t.defaults;
+    setSent(summary);
+    onSubmit({ answers: list, use_defaults: true, summary });
   }
 
   return (

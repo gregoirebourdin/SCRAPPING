@@ -284,7 +284,12 @@ export function StallNotice({ run, lang = "en" }: { run: RunView; lang?: Lang })
   const h = run.health;
   const known: string[] = [];
   if (run.silenceS !== null) known.push(fr ? `aucune activité depuis ${fmtSilence(run.silenceS, lang)}` : `no activity for ${fmtSilence(run.silenceS, lang)}`);
-  if (h?.overdue_jobs) known.push(fr ? `${h.overdue_jobs} tâches attendent un worker` : `${h.overdue_jobs} jobs waiting for a worker`);
+  if (h?.overdue_jobs)
+    known.push(
+      fr
+        ? `${h.overdue_jobs} tâche${h.overdue_jobs > 1 ? "s attendent" : " attend"} un worker${h.oldest_overdue_s ? ` (depuis ${fmtSilence(h.oldest_overdue_s, lang)})` : ""}`
+        : `${h.overdue_jobs} job${h.overdue_jobs > 1 ? "s" : ""} waiting for a worker${h.oldest_overdue_s ? ` (oldest ${fmtSilence(h.oldest_overdue_s, lang)})` : ""}`,
+    );
   if (h && !h.workers_enabled) known.push(fr ? "les workers sont désactivés sur ce serveur" : "workers are disabled on this server");
   if (run.conn !== "open") known.push(fr ? "flux temps réel déconnecté" : "live stream disconnected");
   if (run.stall === "slow") {
@@ -343,6 +348,10 @@ export function RunHeader({ campaignId, onDismiss }: { campaignId: string; onDis
               {stage.text}
             </span>
           )}
+        </span>
+        <span className="tabular shrink-0 text-meta font-medium text-fg sm:hidden">
+          {run.qualified.toLocaleString()}
+          <span className="text-fg-3">/{run.target.toLocaleString()}</span>
         </span>
         <ConnIndicator run={run} />
         <RunActions run={run} />

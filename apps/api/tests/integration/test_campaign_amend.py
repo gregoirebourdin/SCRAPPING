@@ -458,6 +458,19 @@ async def test_live_snapshot_kick_and_http_routes(env, workspace):
         assert r.status_code == 422 and r.json()["error"]["code"] == "amend_not_understood"
         r = await client.post("/v1/campaigns/clarify", headers=headers, json={"prompt": "Find dentists"})
         assert r.status_code == 200 and len(r.json()["questions"]) == 3
+        r = await client.post(
+            "/v1/campaigns/plan",
+            headers=headers,
+            json={
+                "prompt": "Find marketing agencies",
+                "answers": [{"id": "geography", "value": "Lyon"}, {"id": "volume", "value": "30"}],
+            },
+        )
+        assert r.status_code == 200, r.text
+        planned = r.json()
+        assert planned["definition"]["company_filters"]["cities"] == ["Lyon"]
+        assert planned["definition"]["target_qualified_count"] == 30
+        assert {"Location", "Target"} <= {i["label"] for i in planned["interpretation"]}
     async with session_scope() as s:
         delayed = await s.scalar(
             sa.select(sa.func.count())

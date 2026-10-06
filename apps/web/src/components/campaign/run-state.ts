@@ -194,6 +194,9 @@ export function stageLine(r: RunView, lang: Lang): StageLine {
   const fr = lang === "fr";
   const q = r.qualified.toLocaleString();
   const t = r.target.toLocaleString();
+  if (r.stall === "stuck" && ACTIVE.includes(r.status)) {
+    return { text: fr ? "Ça semble bloqué…" : "Looks stuck…", active: false, tone: "danger" };
+  }
   switch (r.status) {
     case "planning":
     case "draft":
@@ -212,9 +215,6 @@ export function stageLine(r: RunView, lang: Lang): StageLine {
       return { text: fr ? `Échec — ${r.reason ?? "erreur inconnue"}` : `Failed — ${r.reason ?? "unknown error"}`, active: false, tone: "danger" };
     case "cancelled":
       return { text: fr ? `Arrêtée — ${q} leads conservés` : `Cancelled — ${q} leads kept`, active: false, tone: "muted" };
-  }
-  if (r.stall === "stuck") {
-    return { text: fr ? "Ça semble bloqué…" : "Looks stuck…", active: false, tone: "danger" };
   }
   const sc = r.stageCounts;
   const reading = sc.website ?? 0;

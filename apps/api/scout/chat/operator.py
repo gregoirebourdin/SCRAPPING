@@ -465,13 +465,12 @@ async def run_turn(
         await s.flush()
         assistant_id = am.id
     yield "start", {"thread_id": str(thread.id), "message_id": str(assistant_id)}
-    route = await _preroute(ws, thread, user_text, ui, clarification, exclude_message_id=assistant_id)
-    lang: Lang = (route.card.get("lang") if route and route.card.get("lang") else None) or detect_lang(
-        user_text
-    )
-    turn = _Turn(lang)
+    turn = _Turn(detect_lang(user_text))
     tctx = ToolContext(ws=ws, ui=ui, thread_id=thread.id, message_id=assistant_id)
     try:
+        route = await _preroute(ws, thread, user_text, ui, clarification, exclude_message_id=assistant_id)
+        if route is not None and route.card.get("lang") in ("fr", "en"):
+            turn.lang = route.card["lang"]
         if route is not None:
             async for ev in _run_route(route, turn, tctx):
                 yield ev
@@ -675,6 +674,8 @@ async def _preroute(
                     )
         if clarification.skipped:
             answers = []
+        order = {q.get("id"): i for i, q in enumerate(card.get("questions", []))}
+        answers.sort(key=lambda a: order.get(a.id, 99))
         return _Route(
             "answers",
             clarification.action_id,
@@ -718,6 +719,11 @@ async def _clarify_card(
             raise NotFound("These questions are no longer available")
         res = a.result or {}
         message_id = a.message_id
+        msg = await s.get(ChatMessage, message_id) if message_id else None
+        for p in (msg.parts or []) if msg else []:
+            c = p.get("card") or {}
+            if c.get("action_id") == str(action_id) and c.get("answered"):
+                raise Conflict("These questions were already answered", code="already_answered")
     from scout.chat.i18n import detect_lang as _dl
 
     request = str(res.get("request") or (a.arguments or {}).get("request") or "")

@@ -103,6 +103,19 @@ async def test_vague_request_asks_questions_then_plans_then_launches_once(worksp
     assert first_cards[0]["answered"] is True, "the answered state survives a reload"
     assert msgs[-1].parts[0]["type"] == "steps", "completed steps are persisted with the message"
 
+    # the same answers sent again (second tab, double submit) are refused — no second plan
+    _, again = await _say(
+        ws,
+        user,
+        thread,
+        "Lyon",
+        clarification=operator.ClarificationIn(
+            action_id=uuid.UUID(card["action_id"]), answers=[ClarifyAnswer(id="geography", value="Lyon")]
+        ),
+    )
+    assert [d["code"] for e, d in again if e == "error"] == ["already_answered"]
+    assert not _cards(again, "campaign_plan")
+
     # Launch (twice: double click / second tab) → exactly one campaign
     wctx = WorkspaceContext(workspace_id=ws, user_id=user, role=MemberRole.owner)
     first = await operator.launch_plan(wctx, uuid.UUID(plan["action_id"]), UIContext())
