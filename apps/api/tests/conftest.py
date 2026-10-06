@@ -15,7 +15,9 @@ from pathlib import Path
 import pytest
 
 API_DIR = Path(__file__).resolve().parents[1]
-TEST_DB = os.environ.get("TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/scout_test")
+TEST_DB = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/scout_test"
+)
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ["DATABASE_URL"] = TEST_DB
@@ -57,10 +59,18 @@ def migrated_db() -> str:
         pytest.skip("Postgres test database not available")
     env = {**os.environ, "DATABASE_URL": TEST_DB}
     subprocess.run(
-        [sys.executable, "-m", "alembic", "downgrade", "base"], cwd=API_DIR, env=env, check=False, capture_output=True
+        [sys.executable, "-m", "alembic", "downgrade", "base"],
+        cwd=API_DIR,
+        env=env,
+        check=False,
+        capture_output=True,
     )
     res = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"], cwd=API_DIR, env=env, capture_output=True, text=True
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=API_DIR,
+        env=env,
+        capture_output=True,
+        text=True,
     )
     if res.returncode != 0:
         raise RuntimeError(res.stderr[-3000:])
@@ -82,14 +92,20 @@ async def db(migrated_db: str):
     engine = get_engine()
     async with engine.begin() as conn:
         tables = (
-            await conn.execute(
-                sa.text(
-                    "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'alembic_version'"
+            (
+                await conn.execute(
+                    sa.text(
+                        "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'alembic_version'"
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         if tables:
-            await conn.execute(sa.text("TRUNCATE " + ", ".join(f'"{t}"' for t in tables) + " RESTART IDENTITY CASCADE"))
+            await conn.execute(
+                sa.text("TRUNCATE " + ", ".join(f'"{t}"' for t in tables) + " RESTART IDENTITY CASCADE")
+            )
     yield engine
     await dispose_engine()
 

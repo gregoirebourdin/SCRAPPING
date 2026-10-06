@@ -35,7 +35,11 @@ def test_signature_catalog_size_and_aliases():
 
 
 def test_shopify_store():
-    techs = _detect("tech/shopify.html", "https://maison-celeste.fr/", {"x-shopid": "62345678", "server": "cloudflare", "cf-ray": "8a1b"})
+    techs = _detect(
+        "tech/shopify.html",
+        "https://maison-celeste.fr/",
+        {"x-shopid": "62345678", "server": "cloudflare", "cf-ray": "8a1b"},
+    )
     assert techs["Shopify"].confidence >= 0.9 and techs["Shopify"].category == "Ecommerce"
     assert "cdn.shopify.com" in techs["Shopify"].evidence or "x-shopid" in techs["Shopify"].evidence
     assert techs["Google Analytics"].version == "GA4"
@@ -45,7 +49,11 @@ def test_shopify_store():
 
 
 def test_wordpress_elementor_site():
-    techs = _detect("agence_lumiere/home.html", "https://agence-lumiere.fr/", {"server": "nginx/1.24.0", "x-powered-by": "PHP/8.2.12"})
+    techs = _detect(
+        "agence_lumiere/home.html",
+        "https://agence-lumiere.fr/",
+        {"server": "nginx/1.24.0", "x-powered-by": "PHP/8.2.12"},
+    )
     assert techs["WordPress"].version == "6.6.2" and techs["WordPress"].confidence >= 0.95
     assert techs["Elementor"].version == "3.24.4"
     for name in ("Google Tag Manager", "Meta Pixel", "HubSpot", "Google Fonts", "jQuery", "YouTube"):
@@ -56,14 +64,27 @@ def test_wordpress_elementor_site():
 
 def test_hubspot_meta_pixel_manychat():
     techs = _detect("tech/hubspot_meta_manychat.html", "https://growthly.com/")
-    for name in ("HubSpot", "HubSpot Forms", "Meta Pixel", "ManyChat", "LinkedIn Insight Tag", "Hotjar", "Axeptio", "Calendly"):
+    for name in (
+        "HubSpot",
+        "HubSpot Forms",
+        "Meta Pixel",
+        "ManyChat",
+        "LinkedIn Insight Tag",
+        "Hotjar",
+        "Axeptio",
+        "Calendly",
+    ):
         assert name in techs, name
     assert "fbq('init'" in techs["Meta Pixel"].evidence or "fbevents.js" in techs["Meta Pixel"].evidence
     assert techs["Calendly"].confidence == 0.8  # from a link, not a script
 
 
 def test_nextjs_app():
-    techs = _detect("tech/nextjs.html", "https://fluxo.io/", {"x-powered-by": "Next.js", "x-vercel-id": "cdg1::abc", "server": "Vercel"})
+    techs = _detect(
+        "tech/nextjs.html",
+        "https://fluxo.io/",
+        {"x-powered-by": "Next.js", "x-vercel-id": "cdg1::abc", "server": "Vercel"},
+    )
     assert techs["Next.js"].confidence >= 0.9
     assert techs["React"].evidence == "implied by Next.js"
     for name in ("Vercel", "Google Tag Manager", "Plausible", "Segment", "Intercom"):
@@ -89,12 +110,17 @@ def service_env(monkeypatch):
 async def test_service_client(service_env):
     with respx.mock(assert_all_called=True) as mock:
         route = mock.post("http://verifier.internal:8080/v1/tech").mock(
-            return_value=httpx.Response(200, json=[
-                {"name": "Shopify", "categories": ["Ecommerce"], "version": ""},
-                {"name": "Facebook Pixel", "categories": ["Advertising"], "version": "2.9"},
-            ])
+            return_value=httpx.Response(
+                200,
+                json=[
+                    {"name": "Shopify", "categories": ["Ecommerce"], "version": ""},
+                    {"name": "Facebook Pixel", "categories": ["Advertising"], "version": "2.9"},
+                ],
+            )
         )
-        techs = await detect_via_service("https://maison-celeste.fr/", {"server": "cloudflare"}, "<html></html>")
+        techs = await detect_via_service(
+            "https://maison-celeste.fr/", {"server": "cloudflare"}, "<html></html>"
+        )
         request = route.calls.last.request
         assert request.headers["authorization"] == "Bearer s3cret"
     assert techs is not None

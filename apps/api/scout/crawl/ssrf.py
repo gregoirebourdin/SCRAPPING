@@ -193,7 +193,9 @@ async def _getaddrinfo(host: str, port: int) -> list[tuple[str, int]]:
     return out
 
 
-async def resolve_safe(host: str, port: int, *, dns_timeout: float | None = DNS_TIMEOUT_S) -> list[tuple[str, int]]:
+async def resolve_safe(
+    host: str, port: int, *, dns_timeout: float | None = DNS_TIMEOUT_S
+) -> list[tuple[str, int]]:
     """Resolve and validate every address of ``host``. Raises SSRFBlocked / httpcore.ConnectError."""
     host = host.lower().strip(".")
     override = _override_for(host)
@@ -272,7 +274,9 @@ class SafeAsyncTransport(httpx.AsyncHTTPTransport):
         http2: bool = False,
         retries: int = 0,
     ) -> None:
-        limits = limits or httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=5.0)
+        limits = limits or httpx.Limits(
+            max_connections=100, max_keepalive_connections=20, keepalive_expiry=5.0
+        )
         super().__init__(verify=verify, limits=limits, http2=http2, retries=retries, trust_env=False)
         self._pool = httpcore.AsyncConnectionPool(
             ssl_context=httpx.create_ssl_context(verify=verify, trust_env=False),

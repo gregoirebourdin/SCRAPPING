@@ -82,7 +82,10 @@ def test_social_links_ignore_share_and_intent_links():
     assert "x" not in social
     assert not any("sharer" in e["url"] or "intent" in e["url"] for e in page.links["external"])
     internal = [link["url"] for link in page.links["internal"]]
-    assert "http://agence-lumiere.fr/equipe" in internal and "http://agence-lumiere.fr/mentions-legales" in internal
+    assert (
+        "http://agence-lumiere.fr/equipe" in internal
+        and "http://agence-lumiere.fr/mentions-legales" in internal
+    )
     assert len(internal) == len(set(internal))
     team = parse_html(_read("agence_lumiere/equipe.html"), "http://agence-lumiere.fr/equipe")
     assert team.links["people_profiles"][0]["url"] == "https://www.linkedin.com/in/claire-fontaine-12345/"
@@ -97,7 +100,9 @@ def test_jsonld_graph_is_flattened():
 
 
 def test_legal_notice_page_keeps_one_fact_per_line():
-    page = parse_html(_read("agence_lumiere/mentions-legales.html"), "http://agence-lumiere.fr/mentions-legales")
+    page = parse_html(
+        _read("agence_lumiere/mentions-legales.html"), "http://agence-lumiere.fr/mentions-legales"
+    )
     lines = page.content_text.split("\n")
     assert "RCS Paris B 812 345 676" in lines
     assert "Directeur de la publication : M. Julien Moreau" in lines
@@ -118,7 +123,13 @@ def test_head_html_only_for_home_and_contains_fingerprints():
 
 
 def test_language_fallbacks():
-    assert parse_html("<html><head><meta property='og:locale' content='de_DE'></head><body>x</body></html>", "https://a.de/").language == "de"
+    assert (
+        parse_html(
+            "<html><head><meta property='og:locale' content='de_DE'></head><body>x</body></html>",
+            "https://a.de/",
+        ).language
+        == "de"
+    )
     en = "<html><body><p>We are a creative agency and we help our clients with their brand and their website for the long term.</p></body></html>"
     assert parse_html(en, "https://a.com/").language == "en"
     fr = "<html><body><p>Nous sommes une agence créative et nous accompagnons nos clients pour leur marque et leur site dans la durée.</p></body></html>"
@@ -134,6 +145,10 @@ def test_broken_html_and_hidden_elements():
 
 
 def test_text_is_capped():
-    html = "<html><body>" + "".join(f"<p>Paragraphe numéro {i} avec du texte unique {i * 7}</p>" for i in range(5000)) + "</body></html>"
+    html = (
+        "<html><body>"
+        + "".join(f"<p>Paragraphe numéro {i} avec du texte unique {i * 7}</p>" for i in range(5000))
+        + "</body></html>"
+    )
     page = parse_html(html, "https://x.fr/")
     assert len(page.content_text.encode("utf-8")) <= MAX_TEXT_BYTES

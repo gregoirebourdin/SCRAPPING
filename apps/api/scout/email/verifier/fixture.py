@@ -26,7 +26,9 @@ from scout.email.types import VerificationResult
 class FixtureVerifier:
     name = "fixture"
 
-    def __init__(self, manifest_path: str | Path | None = None, *, manifest: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self, manifest_path: str | Path | None = None, *, manifest: dict[str, Any] | None = None
+    ) -> None:
         settings = get_settings()
         if settings.is_production:
             raise RuntimeError("FixtureVerifier is a test backend and is forbidden in production")
@@ -47,15 +49,30 @@ class FixtureVerifier:
         addr = normalize_address(address)
         if addr is None or not is_valid_syntax(addr):
             return VerificationResult(
-                address=(address or "").strip().lower(), syntax_valid=False, mx_valid=None,
-                smtp_result=SmtpResult.not_attempted, catch_all=None, disposable=False, role_address=False,
-                free_provider=False, verifier=self.name, error="invalid_syntax", duration_ms=0,
+                address=(address or "").strip().lower(),
+                syntax_valid=False,
+                mx_valid=None,
+                smtp_result=SmtpResult.not_attempted,
+                catch_all=None,
+                disposable=False,
+                role_address=False,
+                free_provider=False,
+                verifier=self.name,
+                error="invalid_syntax",
+                duration_ms=0,
             )
         local, domain = split_address(addr)
         res = VerificationResult(
-            address=addr, syntax_valid=True, mx_valid=None, smtp_result=SmtpResult.not_attempted,
-            catch_all=None, disposable=is_disposable_domain(domain), role_address=is_role_local_part(local),
-            free_provider=is_free_provider(domain), verifier=self.name, duration_ms=0,
+            address=addr,
+            syntax_valid=True,
+            mx_valid=None,
+            smtp_result=SmtpResult.not_attempted,
+            catch_all=None,
+            disposable=is_disposable_domain(domain),
+            role_address=is_role_local_part(local),
+            free_provider=is_free_provider(domain),
+            verifier=self.name,
+            duration_ms=0,
         )
         if res.disposable:
             return res

@@ -114,9 +114,13 @@ def coerce_value(value: Any, data_type: ColumnDataType | str, enum_values: list[
     return str(value)[:MAX_TEXT]
 
 
-def coerce_user_value(value: Any, data_type: ColumnDataType | str, enum_values: list[str] | None = None) -> Any:
+def coerce_user_value(
+    value: Any, data_type: ColumnDataType | str, enum_values: list[str] | None = None
+) -> Any:
     """Coerce a user-entered value; raise ValidationFailed when it does not fit the column type."""
     out = coerce_value(value, data_type, enum_values)
     if out is None:
-        raise ValidationFailed(f"Value does not match the column type ({getattr(data_type, 'value', data_type)})")
+        raise ValidationFailed(
+            f"Value does not match the column type ({getattr(data_type, 'value', data_type)})"
+        )
     return out

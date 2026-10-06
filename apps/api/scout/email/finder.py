@@ -137,7 +137,9 @@ async def find_email(
         queue += [
             c
             for c in rank_candidates(
-                first, last, dom,
+                first,
+                last,
+                dom,
                 known_patterns=known_patterns,
                 observed_local_parts=observed_local_parts,
                 observed_samples=observed_samples,
@@ -181,8 +183,16 @@ async def find_email(
     tried = [a.candidate.address for a in attempts]
     if best.status == EmailStatus.INVALID:
         return EmailFinding(
-            None, EmailStatus.INVALID, 0.0, None, None, None, best.verification,
-            candidates_tried=tried, reason=_failure_reason(attempts), attempts=attempts,
+            None,
+            EmailStatus.INVALID,
+            0.0,
+            None,
+            None,
+            None,
+            best.verification,
+            candidates_tried=tried,
+            reason=_failure_reason(attempts),
+            attempts=attempts,
         )
     c = best.candidate
     finding = EmailFinding(

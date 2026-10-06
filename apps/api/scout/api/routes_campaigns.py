@@ -22,10 +22,21 @@ from scout.services import audit
 router = APIRouter(tags=["campaigns"])
 
 
-async def build_parse_context(ctx: Any, list_id: uuid.UUID | None, selected_ids: list[uuid.UUID]) -> ParseContext:
+async def build_parse_context(
+    ctx: Any, list_id: uuid.UUID | None, selected_ids: list[uuid.UUID]
+) -> ParseContext:
     async with session_scope() as s:
-        rows = (await s.execute(sa.select(List.id, List.name, List.entity_type).where(List.workspace_id == ctx.workspace_id, List.is_archived.is_(False)))).all()
-        pc = ParseContext(lists={n.lower(): i for i, n, _ in rows}, latest_import_id=await svc.latest_import_id(s, ctx.workspace_id))
+        rows = (
+            await s.execute(
+                sa.select(List.id, List.name, List.entity_type).where(
+                    List.workspace_id == ctx.workspace_id, List.is_archived.is_(False)
+                )
+            )
+        ).all()
+        pc = ParseContext(
+            lists={n.lower(): i for i, n, _ in rows},
+            latest_import_id=await svc.latest_import_id(s, ctx.workspace_id),
+        )
         if list_id:
             match = next(((n, et) for i, n, et in rows if i == list_id), None)
             pc.current_list_id = list_id
@@ -45,7 +56,9 @@ async def parse(body: ParseRequest, ctx: Ctx) -> ParseOut:
     pc = await build_parse_context(ctx, body.list_id, body.selected_ids)
     defn, parser = await parse_prompt(body.prompt, pc)
     names = {v: k for k, v in pc.lists.items()}
-    return ParseOut(definition=defn, interpretation=[i.model_dump() for i in interpret(defn, names)], parser=parser)
+    return ParseOut(
+        definition=defn, interpretation=[i.model_dump() for i in interpret(defn, names)], parser=parser
+    )
 
 
 @router.post("/campaigns", status_code=201)
@@ -57,10 +70,25 @@ async def create(body: CampaignCreate, ctx: Ctx) -> dict[str, Any]:
         pc = await build_parse_context(ctx, body.list_id, body.selected_ids)
         defn, _ = await parse_prompt(body.prompt or "", pc)
     async with session_scope() as s:
-        c = await svc.create_campaign(s, ctx.workspace_id, defn, user_id=ctx.user_id, prompt=body.prompt,
-                                      target_list_id=body.target_list_id, start=body.start)
-        await audit.log(s, workspace_id=ctx.workspace_id, actor_id=ctx.user_id, action="campaign.create", entity_type="campaign",
-                        entity_ids=[c.id], campaign_id=c.id, summary=f'Started campaign "{c.name}"')
+        c = await svc.create_campaign(
+            s,
+            ctx.workspace_id,
+            defn,
+            user_id=ctx.user_id,
+            prompt=body.prompt,
+            target_list_id=body.target_list_id,
+            start=body.start,
+        )
+        await audit.log(
+            s,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            action="campaign.create",
+            entity_type="campaign",
+            entity_ids=[c.id],
+            campaign_id=c.id,
+            summary=f'Started campaign "{c.name}"',
+        )
         cid = c.id
     async with session_scope() as s:
         return await svc.campaign_status(s, ctx.workspace_id, cid)
@@ -86,14 +114,23 @@ async def rejections(campaign_id: uuid.UUID, ctx: Ctx, limit: int = 200) -> list
 
 @router.post("/campaigns/{campaign_id}/{action}")
 async def lifecycle(campaign_id: uuid.UUID, action: str, ctx: Ctx) -> dict[str, Any]:
-    fn = {"pause": svc.pause_campaign, "resume": svc.resume_campaign, "cancel": svc.cancel_campaign}.get(action)
+    fn = {"pause": svc.pause_campaign, "resume": svc.resume_campaign, "cancel": svc.cancel_campaign}.get(
+        action
+    )
     if fn is None:
         raise ValidationFailed("Unknown action (pause, resume, cancel)")
     async with session_scope() as s:
         c = await fn(s, ctx.workspace_id, campaign_id)
-        await audit.log(s, workspace_id=ctx.workspace_id, actor_id=ctx.user_id, action=f"campaign.{action}",
-                        entity_type="campaign", entity_ids=[campaign_id], campaign_id=campaign_id,
-                        summary=f'{action.title()} campaign "{c.name}"')
+        await audit.log(
+            s,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            action=f"campaign.{action}",
+            entity_type="campaign",
+            entity_ids=[campaign_id],
+            campaign_id=campaign_id,
+            summary=f'{action.title()} campaign "{c.name}"',
+        )
     async with session_scope() as s:
         return await svc.campaign_status(s, ctx.workspace_id, campaign_id)
 
@@ -101,25 +138,58 @@ async def lifecycle(campaign_id: uuid.UUID, action: str, ctx: Ctx) -> dict[str, 
 @router.get("/campaign-templates")
 async def templates(ctx: Ctx) -> list[dict[str, Any]]:
     async with session_scope() as s:
-        rows = (await s.scalars(sa.select(CampaignTemplate).where(CampaignTemplate.workspace_id == ctx.workspace_id).order_by(CampaignTemplate.updated_at.desc()))).all()
-        return [{"id": t.id, "name": t.name, "prompt": t.prompt, "definition": t.definition, "last_run_at": t.last_run_at,
-                 "created_at": t.created_at} for t in rows]
+        rows = (
+            await s.scalars(
+                sa.select(CampaignTemplate)
+                .where(CampaignTemplate.workspace_id == ctx.workspace_id)
+                .order_by(CampaignTemplate.updated_at.desc())
+            )
+        ).all()
+        return [
+            {
+                "id": t.id,
+                "name": t.name,
+                "prompt": t.prompt,
+                "definition": t.definition,
+                "last_run_at": t.last_run_at,
+                "created_at": t.created_at,
+            }
+            for t in rows
+        ]
 
 
 @router.post("/campaign-templates", status_code=201)
 async def save_template(body: TemplateCreate, ctx: Ctx) -> dict[str, Any]:
     async with session_scope() as s:
-        t = await svc.save_template(s, ctx.workspace_id, name=body.name, campaign_id=body.campaign_id,
-                                    definition=body.definition, user_id=ctx.user_id)
-        await audit.log(s, workspace_id=ctx.workspace_id, actor_id=ctx.user_id, action="template.create", summary=f'Saved search "{t.name}"')
+        t = await svc.save_template(
+            s,
+            ctx.workspace_id,
+            name=body.name,
+            campaign_id=body.campaign_id,
+            definition=body.definition,
+            user_id=ctx.user_id,
+        )
+        await audit.log(
+            s,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            action="template.create",
+            summary=f'Saved search "{t.name}"',
+        )
         return {"id": t.id, "name": t.name}
 
 
 @router.post("/campaign-templates/{template_id}/run")
 async def run_template(template_id: uuid.UUID, body: TemplateRun, ctx: Ctx) -> dict[str, Any]:
     async with session_scope() as s:
-        c = await svc.run_template(s, ctx.workspace_id, template_id, user_id=ctx.user_id, only_new=body.only_new,
-                                   target_count=body.target_count)
+        c = await svc.run_template(
+            s,
+            ctx.workspace_id,
+            template_id,
+            user_id=ctx.user_id,
+            only_new=body.only_new,
+            target_count=body.target_count,
+        )
         cid = c.id
     async with session_scope() as s:
         return await svc.campaign_status(s, ctx.workspace_id, cid)

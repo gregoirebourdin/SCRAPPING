@@ -18,17 +18,17 @@ from scout.db.enums import (
 )
 
 Strategy = Literal[
-    "keyword",              # deterministic, cached website text contains term(s)
-    "regex",                # deterministic regex on cached text
-    "social_profile",       # deterministic: social link from cached pages (field = network)
-    "website_field",        # deterministic extractor on cached pages (field = phone|email|address|cta|testimonials|pricing_page|careers_page|blog|newsletter|chat_widget|booking_link)
+    "keyword",  # deterministic, cached website text contains term(s)
+    "regex",  # deterministic regex on cached text
+    "social_profile",  # deterministic: social link from cached pages (field = network)
+    "website_field",  # deterministic extractor on cached pages (field = phone|email|address|cta|testimonials|pricing_page|careers_page|blog|newsletter|chat_widget|booking_link)
     "deterministic_field",  # copy/derive a canonical field (field = city|employee_range|email_status|…)
-    "tech_detection",       # fingerprints (wappalyzergo service or builtin signatures)
+    "tech_detection",  # fingerprints (wappalyzergo service or builtin signatures)
     "semantic_classifier",  # AI true/false/unknown on relevant cached chunks, with evidence
-    "ai_extraction",        # AI extracts a value from relevant cached chunks, with verbatim evidence
-    "web_research",         # grounded web search with sources
-    "generated_text",       # AI-generated copy (summary, outreach angle) — kind=generated
-    "composite",            # dependency chain (e.g. CEO email = person → email → verify)
+    "ai_extraction",  # AI extracts a value from relevant cached chunks, with verbatim evidence
+    "web_research",  # grounded web search with sources
+    "generated_text",  # AI-generated copy (summary, outreach angle) — kind=generated
+    "composite",  # dependency chain (e.g. CEO email = person → email → verify)
 ]
 
 
@@ -58,13 +58,13 @@ class EnrichmentPlan(BaseModel):
 
 @dataclass
 class CellResult:
-    status: CellStatus                 # success | unknown | failed
-    value: Any = None                  # JSON value; booleans stay true/false; unknown → None with status unknown
-    display_value: str | None = None   # for sort/filter ("true"/"false"/"unknown"/text)
+    status: CellStatus  # success | unknown | failed
+    value: Any = None  # JSON value; booleans stay true/false; unknown → None with status unknown
+    display_value: str | None = None  # for sort/filter ("true"/"false"/"unknown"/text)
     confidence: float | None = None
     evidence: str | None = None
     source_url: str | None = None
-    source_id: str | None = None       # sources.key ("website", "tech_scan", "gemini_search"…)
+    source_id: str | None = None  # sources.key ("website", "tech_scan", "gemini_search"…)
     resolver: str = ""
     error: str | None = None
     input_hash: str | None = None

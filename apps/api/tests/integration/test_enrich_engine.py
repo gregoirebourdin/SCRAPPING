@@ -61,12 +61,21 @@ def local_ai():
 @pytest.fixture
 def fake_ai():
     fake = FakeProvider()
-    ruche_quote, ruche_url = sentence_containing(load_fixture("agency_instagram"), "Nous gérons vos comptes Instagram")
-    lum_quote, lum_url = sentence_containing(load_fixture("agency_social_follow"), "Nous gérons vos campagnes Google Ads")
+    ruche_quote, ruche_url = sentence_containing(
+        load_fixture("agency_instagram"), "Nous gérons vos comptes Instagram"
+    )
+    lum_quote, lum_url = sentence_containing(
+        load_fixture("agency_social_follow"), "Nous gérons vos campagnes Google Ads"
+    )
 
     def verdict(prompt: str) -> dict:
         if "larushesociale" in prompt:
-            return {"verdict": "true", "confidence": 0.93, "evidence_quote": ruche_quote, "source_url": ruche_url}
+            return {
+                "verdict": "true",
+                "confidence": 0.93,
+                "evidence_quote": ruche_quote,
+                "source_url": ruche_url,
+            }
         return {"verdict": "false", "confidence": 0.86, "evidence_quote": lum_quote, "source_url": lum_url}
 
     fake.on("SemanticVerdict", verdict)
@@ -81,20 +90,30 @@ async def _run() -> None:
 
 async def _cells(column_id) -> dict:
     async with session_scope() as s:
-        rows = (await s.scalars(sa.select(CustomFieldValue).where(CustomFieldValue.column_id == column_id))).all()
+        rows = (
+            await s.scalars(sa.select(CustomFieldValue).where(CustomFieldValue.column_id == column_id))
+        ).all()
     return {r.entity_id: r for r in rows}
 
 
 async def test_keyword_column_end_to_end(workspace, crawl, local_ai):
     ws, user = workspace
     ids = await seed_agencies(ws)
-    col = await create_column(ws, name="Mentions Instagram", instruction="Whether their site mentions Instagram",
-                              list_id=ids["list"], created_by=user)
+    col = await create_column(
+        ws,
+        name="Mentions Instagram",
+        instruction="Whether their site mentions Instagram",
+        list_id=ids["list"],
+        created_by=user,
+    )
     assert col.resolver_type == ResolverType.CACHED_WEBSITE and col.slug == "mentions_instagram"
     assert col.configuration["strategy"] == "keyword" and col.refresh_policy == {"refresh_days": 30}
 
     targets = await column_entity_ids(ws, col)
-    assert set(targets) == {ids["lumiere"], ids["ruche"]}  # company-level: distinct companies of the list's people
+    assert set(targets) == {
+        ids["lumiere"],
+        ids["ruche"],
+    }  # company-level: distinct companies of the list's people
     assert await estimate_coverage(ws, col, targets) == {"total": 2, "cached": 2, "done": 0}
 
     assert await enqueue_column(ws, col.id) == 2
@@ -152,7 +171,9 @@ async def test_semantic_column_unchanged_inputs_make_zero_ai_calls(workspace, cr
 
     # A changed page re-runs only that company.
     async with session_scope() as s:
-        page = await s.scalar(sa.select(WebsitePage).where(WebsitePage.url == "https://larushesociale.fr/services"))
+        page = await s.scalar(
+            sa.select(WebsitePage).where(WebsitePage.url == "https://larushesociale.fr/services")
+        )
         page.content_text += "\nNouveau : formations Instagram pour les équipes marketing."
         page.content_hash = content_hash(page.content_text)
     await enqueue_column(ws, col.id, only_missing=False)
@@ -168,12 +189,21 @@ async def test_semantic_column_unchanged_inputs_make_zero_ai_calls(workspace, cr
 async def test_user_override_is_preserved(workspace, crawl, local_ai):
     ws, user = workspace
     ids = await seed_agencies(ws)
-    col = await create_column(ws, name="Mentions Instagram", instruction="Whether their site mentions Instagram",
-                              list_id=ids["list"])
+    col = await create_column(
+        ws,
+        name="Mentions Instagram",
+        instruction="Whether their site mentions Instagram",
+        list_id=ids["list"],
+    )
     await enqueue_column(ws, col.id)
     await _run()
     cell = await set_user_value(ws, col.id, "company", ids["lumiere"], "no", user_id=user)
-    assert cell.is_user_override and cell.value_json is False and cell.source_id == "user" and cell.confidence == 1.0
+    assert (
+        cell.is_user_override
+        and cell.value_json is False
+        and cell.source_id == "user"
+        and cell.confidence == 1.0
+    )
 
     assert await enqueue_column(ws, col.id, force=True) == 1  # the override is never queued
     await _run()
@@ -211,22 +241,34 @@ async def test_one_failing_entity_does_not_fail_the_batch(workspace, crawl, loca
     ws, _ = workspace
     ids = await seed_agencies(ws)
     async with session_scope() as s:
-        dead = Company(workspace_id=ws, name="Ghost Agency", normalized_name="ghost", domain="ghost.example",
-                       normalized_domain="ghost.example", website_status=WebsiteStatus.unreachable)
+        dead = Company(
+            workspace_id=ws,
+            name="Ghost Agency",
+            normalized_name="ghost",
+            domain="ghost.example",
+            normalized_domain="ghost.example",
+            website_status=WebsiteStatus.unreachable,
+        )
         nosite = Company(workspace_id=ws, name="Offline Co", normalized_name="offline co")
         s.add_all([dead, nosite])
         await s.flush()
         for c in (dead, nosite):
             s.add(ListMembership(workspace_id=ws, list_id=ids["list"], company_id=c.id))
-    col = await create_column(ws, name="Mentions Instagram", instruction="Whether their site mentions Instagram",
-                              list_id=ids["list"])
+    col = await create_column(
+        ws,
+        name="Mentions Instagram",
+        instruction="Whether their site mentions Instagram",
+        list_id=ids["list"],
+    )
     assert await enqueue_column(ws, col.id) == 4
     await _run()
     cells = await _cells(col.id)
     assert cells[dead.id].status == CellStatus.failed and cells[dead.id].error == "Website unreachable"
     assert cells[nosite.id].status == CellStatus.unknown and cells[nosite.id].error == "No website"
     assert cells[ids["ruche"]].status == CellStatus.success
-    assert crawl["ensure_calls"] == [dead.id]  # crawl attempted only where a website exists and nothing is cached
+    assert crawl["ensure_calls"] == [
+        dead.id
+    ]  # crawl attempted only where a website exists and nothing is cached
     async with session_scope() as s:
         statuses = (await s.scalars(sa.select(Job.status).where(Job.type == "enrichment.batch"))).all()
     assert statuses == [JobStatus.completed]
@@ -237,14 +279,21 @@ async def test_one_failing_entity_does_not_fail_the_batch(workspace, crawl, loca
 async def test_stale_cells_and_refresh(workspace, crawl, local_ai):
     ws, _ = workspace
     ids = await seed_agencies(ws)
-    col = await create_column(ws, name="Mentions Instagram", instruction="Whether their site mentions Instagram",
-                              list_id=ids["list"])
+    col = await create_column(
+        ws,
+        name="Mentions Instagram",
+        instruction="Whether their site mentions Instagram",
+        list_id=ids["list"],
+    )
     await enqueue_column(ws, col.id)
     await _run()
     old = datetime.now(UTC) - timedelta(days=40)
     async with session_scope() as s:
-        await s.execute(sa.update(CustomFieldValue).where(CustomFieldValue.entity_id == ids["lumiere"])
-                        .values(observed_at=old))
+        await s.execute(
+            sa.update(CustomFieldValue)
+            .where(CustomFieldValue.entity_id == ids["lumiere"])
+            .values(observed_at=old)
+        )
     assert await mark_stale_cells(ws) == 1
     assert (await _cells(col.id))[ids["lumiere"]].status == CellStatus.stale
     assert await enqueue_column(ws, col.id) == 1
@@ -261,12 +310,14 @@ async def test_stale_cells_and_refresh(workspace, crawl, local_ai):
 async def test_update_definition_replans_and_marks_stale(workspace, crawl, local_ai):
     ws, _ = workspace
     ids = await seed_agencies(ws)
-    col = await create_column(ws, name="Mention", instruction="Whether their site mentions Instagram",
-                              list_id=ids["list"])
+    col = await create_column(
+        ws, name="Mention", instruction="Whether their site mentions Instagram", list_id=ids["list"]
+    )
     await enqueue_column(ws, col.id)
     await _run()
-    col = await update_column_definition(ws, col.id, instruction="Whether their site mentions TikTok",
-                                         refresh_days=7)
+    col = await update_column_definition(
+        ws, col.id, instruction="Whether their site mentions TikTok", refresh_days=7
+    )
     assert col.configuration["keywords"][0] == "TikTok" and col.refresh_policy["refresh_days"] == 7
     assert {c.status for c in (await _cells(col.id)).values()} == {CellStatus.stale}
     await enqueue_column(ws, col.id)
@@ -294,21 +345,39 @@ async def test_web_research_persisted_cached_and_source_rules(workspace, crawl):
         calls.append(query)
         if "La Ruche Sociale" in query:
             return GroundedResult(
-                text="", value=ResearchAnswer(value="Community manager (CDI, Lyon)", confidence=0.8,
-                                              evidence_quote="La Ruche Sociale recrute un community manager",
-                                              source_url=job_url),
-                sources=[GroundingSource(uri="https://vertexaisearch.example/redirect/1", title="welcometothejungle.com",
-                                         domain="welcometothejungle.com")],
-                search_queries=["La Ruche Sociale offre d'emploi"], supports=[],
-                usage=AIUsage(model="fake-search", cost_usd=0.014, grounded_queries=1))
-        return GroundedResult(text="", value=ResearchAnswer(value="Growth marketer", confidence=0.9), sources=[],
-                              search_queries=["Studio Lumière jobs"], supports=[],
-                              usage=AIUsage(model="fake-search", cost_usd=0.014, grounded_queries=1))
+                text="",
+                value=ResearchAnswer(
+                    value="Community manager (CDI, Lyon)",
+                    confidence=0.8,
+                    evidence_quote="La Ruche Sociale recrute un community manager",
+                    source_url=job_url,
+                ),
+                sources=[
+                    GroundingSource(
+                        uri="https://vertexaisearch.example/redirect/1",
+                        title="welcometothejungle.com",
+                        domain="welcometothejungle.com",
+                    )
+                ],
+                search_queries=["La Ruche Sociale offre d'emploi"],
+                supports=[],
+                usage=AIUsage(model="fake-search", cost_usd=0.014, grounded_queries=1),
+            )
+        return GroundedResult(
+            text="",
+            value=ResearchAnswer(value="Growth marketer", confidence=0.9),
+            sources=[],
+            search_queries=["Studio Lumière jobs"],
+            supports=[],
+            usage=AIUsage(model="fake-search", cost_usd=0.014, grounded_queries=1),
+        )
 
     fake.grounded_handler = grounded
     set_ai(fake)
     try:
-        col = await create_column(ws, name="Latest job", instruction="Find their latest job posting", list_id=ids["list"])
+        col = await create_column(
+            ws, name="Latest job", instruction="Find their latest job posting", list_id=ids["list"]
+        )
         assert col.resolver_type == ResolverType.AI_WEB_RESEARCH
         await enqueue_column(ws, col.id)
         await _run()
@@ -316,15 +385,20 @@ async def test_web_research_persisted_cached_and_source_rules(workspace, crawl):
         ruche, lum = cells[ids["ruche"]], cells[ids["lumiere"]]
         assert ruche.status == CellStatus.success and ruche.value_json == "Community manager (CDI, Lyon)"
         assert ruche.source_url == job_url and ruche.source_id == "gemini_search"
-        assert lum.status == CellStatus.unknown and lum.confidence <= 0.4  # no grounding sources → never a value
+        assert (
+            lum.status == CellStatus.unknown and lum.confidence <= 0.4
+        )  # no grounding sources → never a value
         async with session_scope() as s:
-            rows = (await s.scalars(sa.select(GroundedResearch).where(GroundedResearch.workspace_id == ws))).all()
+            rows = (
+                await s.scalars(sa.select(GroundedResearch).where(GroundedResearch.workspace_id == ws))
+            ).all()
         assert len(rows) == 2 and all(r.cache_key and r.query for r in rows)
         assert any(r.sources and r.search_queries == ["La Ruche Sociale offre d'emploi"] for r in rows)
 
         # Same research in another column → served from the 14-day cache, no new grounded search.
-        twin = await create_column(ws, name="Latest job (copy)", instruction="Find their latest job posting",
-                                   list_id=ids["list"])
+        twin = await create_column(
+            ws, name="Latest job (copy)", instruction="Find their latest job posting", list_id=ids["list"]
+        )
         await enqueue_column(ws, twin.id)
         await _run()
         assert len(calls) == 2
@@ -340,14 +414,23 @@ async def test_composite_email_of_role(workspace, crawl, local_ai):
     ws, _ = workspace
     ids = await seed_agencies(ws)
     async with session_scope() as s:
-        email = Email(workspace_id=ws, person_id=ids["people"]["claire"], company_id=ids["lumiere"],
-                      address="claire@studiolumiere.fr", local_part="claire", domain="studiolumiere.fr",
-                      discovery_method=EmailDiscoveryMethod.known_pattern, status=EmailStatus.SAFE,
-                      overall_confidence=0.92, is_primary=True)
+        email = Email(
+            workspace_id=ws,
+            person_id=ids["people"]["claire"],
+            company_id=ids["lumiere"],
+            address="claire@studiolumiere.fr",
+            local_part="claire",
+            domain="studiolumiere.fr",
+            discovery_method=EmailDiscoveryMethod.known_pattern,
+            status=EmailStatus.SAFE,
+            overall_confidence=0.92,
+            is_primary=True,
+        )
         s.add(email)
         await s.flush()
-        await s.execute(sa.update(Person).where(Person.id == ids["people"]["claire"])
-                        .values(primary_email_id=email.id))
+        await s.execute(
+            sa.update(Person).where(Person.id == ids["people"]["claire"]).values(primary_email_id=email.id)
+        )
     col = await create_column(ws, name="CEO email", instruction="Find the CEO's email", list_id=ids["list"])
     assert col.configuration["strategy"] == "composite"
     await enqueue_column(ws, col.id)
@@ -356,7 +439,9 @@ async def test_composite_email_of_role(workspace, crawl, local_ai):
     lum, ruche = cells[ids["lumiere"]], cells[ids["ruche"]]
     assert lum.status == CellStatus.success and lum.value_json == "claire@studiolumiere.fr"
     assert "SAFE" in lum.evidence and "Claire Martin" in lum.evidence and lum.confidence == 0.92
-    assert ruche.status == CellStatus.unknown and ruche.error == "Missing dependency: email for Thomas Bernard"
+    assert (
+        ruche.status == CellStatus.unknown and ruche.error == "Missing dependency: email for Thomas Bernard"
+    )
 
 
 async def test_resolve_plan_preview(workspace, crawl, local_ai):

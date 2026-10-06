@@ -41,7 +41,11 @@ _TYPE_HINTS = {
 def _prompt(rc: ResolveContext, passages: Sequence[Passage]) -> str:
     plan = rc.plan
     dtype = ColumnDataType(str(getattr(plan.data_type, "value", plan.data_type)))
-    lines = [subject_line(rc), f"Extract: {plan.concept or plan.name}", f"Expected value: {_TYPE_HINTS[dtype]}"]
+    lines = [
+        subject_line(rc),
+        f"Extract: {plan.concept or plan.name}",
+        f"Expected value: {_TYPE_HINTS[dtype]}",
+    ]
     if plan.enum_values:
         lines.append(f"Allowed values: {', '.join(plan.enum_values)}")
     if plan.output_instructions:
@@ -68,8 +72,12 @@ async def resolve(rc: ResolveContext) -> CellResult:
     if not ai.available:
         return unknown(plan, resolver=RESOLVER, error=NO_AI)
     passages = relevant_passages(rc, include_unmatched=True)  # matched passages first, padded with key pages
-    res = await ai.structured(role=ModelRole.extractor, system=EXTRACTION_SYSTEM, prompt=_prompt(rc, passages),
-                              schema=ExtractedValue)
+    res = await ai.structured(
+        role=ModelRole.extractor,
+        system=EXTRACTION_SYSTEM,
+        prompt=_prompt(rc, passages),
+        schema=ExtractedValue,
+    )
     v: ExtractedValue = res.value
     common: dict[str, Any] = {"resolver": RESOLVER, "model": res.usage.model, "cost_usd": res.usage.cost_usd}
     value = coerce_value(v.value, plan.data_type, plan.enum_values)
@@ -77,10 +85,22 @@ async def resolve(rc: ResolveContext) -> CellResult:
         return unknown(plan, evidence="Not stated on the website", confidence=v.confidence, **common)
     valid, url = verify_quote(v.evidence_quote, v.source_url, passages)
     if not valid:
-        return unknown(plan, evidence=f"{INSUFFICIENT} — the quoted text was not found on the website",
-                       confidence=min(v.confidence, UNVERIFIED_CAP), **common)
+        return unknown(
+            plan,
+            evidence=f"{INSUFFICIENT} — the quoted text was not found on the website",
+            confidence=min(v.confidence, UNVERIFIED_CAP),
+            **common,
+        )
     if v.confidence < plan.confidence_threshold:
-        return unknown(plan, evidence=f"Below confidence threshold ({v.confidence:.2f} < "
-                                      f"{plan.confidence_threshold:.2f}): “{v.evidence_quote.strip()}”",
-                       confidence=v.confidence, source_url=url, source_id="website", **common)
-    return ok(plan, value, confidence=v.confidence, evidence=v.evidence_quote.strip(), source_url=url, **common)
+        return unknown(
+            plan,
+            evidence=f"Below confidence threshold ({v.confidence:.2f} < "
+            f"{plan.confidence_threshold:.2f}): “{v.evidence_quote.strip()}”",
+            confidence=v.confidence,
+            source_url=url,
+            source_id="website",
+            **common,
+        )
+    return ok(
+        plan, value, confidence=v.confidence, evidence=v.evidence_quote.strip(), source_url=url, **common
+    )

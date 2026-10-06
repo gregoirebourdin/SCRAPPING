@@ -97,7 +97,9 @@ def test_parse_uk_company_info():
 
 
 def test_legal_notice_never_invents_people():
-    info = parse_legal_notice("Directeur de la publication : la société Agence Lumière\nGérant : voir ci-dessous")
+    info = parse_legal_notice(
+        "Directeur de la publication : la société Agence Lumière\nGérant : voir ci-dessous"
+    )
     assert info.people == [] and info.publication_director is None
 
 
@@ -135,21 +137,39 @@ def test_match_email_to_person():
 
 def test_emails_on_domain():
     emails = ["A@Agence-Lumiere.fr", "b@gmail.com", "c@mail.agence-lumiere.fr", "a@agence-lumiere.fr", "bad"]
-    assert emails_on_domain(emails, "agence-lumiere.fr") == ["a@agence-lumiere.fr", "c@mail.agence-lumiere.fr"]
+    assert emails_on_domain(emails, "agence-lumiere.fr") == [
+        "a@agence-lumiere.fr",
+        "c@mail.agence-lumiere.fr",
+    ]
     assert emails_on_domain(emails, None) == []
 
 
 @pytest.mark.parametrize(
     ("url", "expected"),
     [
-        ("https://www.instagram.com/agencelumiere/", ("instagram", "https://www.instagram.com/agencelumiere/")),
-        ("https://instagram.com/AgenceLumiere?hl=fr", ("instagram", "https://www.instagram.com/agencelumiere/")),
+        (
+            "https://www.instagram.com/agencelumiere/",
+            ("instagram", "https://www.instagram.com/agencelumiere/"),
+        ),
+        (
+            "https://instagram.com/AgenceLumiere?hl=fr",
+            ("instagram", "https://www.instagram.com/agencelumiere/"),
+        ),
         ("https://www.instagram.com/p/C1234abcd/", None),
         ("https://fr-fr.facebook.com/agencelumiere/", ("facebook", "https://www.facebook.com/agencelumiere")),
         ("https://www.facebook.com/sharer/sharer.php?u=x", None),
-        ("https://www.facebook.com/profile.php?id=100064", ("facebook", "https://www.facebook.com/profile.php?id=100064")),
-        ("https://fr.linkedin.com/company/agence-lumiere", ("linkedin", "https://www.linkedin.com/company/agence-lumiere/")),
-        ("https://www.linkedin.com/in/claire-fontaine-12345", ("linkedin_profile", "https://www.linkedin.com/in/claire-fontaine-12345/")),
+        (
+            "https://www.facebook.com/profile.php?id=100064",
+            ("facebook", "https://www.facebook.com/profile.php?id=100064"),
+        ),
+        (
+            "https://fr.linkedin.com/company/agence-lumiere",
+            ("linkedin", "https://www.linkedin.com/company/agence-lumiere/"),
+        ),
+        (
+            "https://www.linkedin.com/in/claire-fontaine-12345",
+            ("linkedin_profile", "https://www.linkedin.com/in/claire-fontaine-12345/"),
+        ),
         ("https://www.linkedin.com/shareArticle?mini=true&url=x", None),
         ("https://twitter.com/agencelumiere", ("x", "https://x.com/agencelumiere")),
         ("https://twitter.com/intent/tweet?text=hi", None),
@@ -159,7 +179,10 @@ def test_emails_on_domain():
         ("https://www.youtube.com/@AgenceLumiere", ("youtube", "https://www.youtube.com/@AgenceLumiere")),
         ("https://www.youtube.com/channel/UC123abc", ("youtube", "https://www.youtube.com/channel/UC123abc")),
         ("https://www.youtube.com/watch?v=dQw4w9WgXcQ", None),
-        ("https://www.pinterest.fr/agencelumiere/", ("pinterest", "https://www.pinterest.com/agencelumiere/")),
+        (
+            "https://www.pinterest.fr/agencelumiere/",
+            ("pinterest", "https://www.pinterest.com/agencelumiere/"),
+        ),
         ("https://www.pinterest.com/pin/create/button/?url=x", None),
         ("https://www.threads.net/@agencelumiere", ("threads", "https://www.threads.net/@agencelumiere")),
         ("https://agence-lumiere.fr/contact", None),

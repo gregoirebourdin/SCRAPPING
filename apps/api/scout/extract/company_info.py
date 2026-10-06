@@ -5,6 +5,7 @@ VAT, legal name/form, address / city / postal code and social profiles."""
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -36,20 +37,47 @@ _STAFF_NOUNS = (
 _NUM = r"(\d{1,3}(?:[ ., ]\d{3})*|\d+)"
 _EMP_PATTERNS: tuple[tuple[re.Pattern[str], str, float], ...] = (
     # ranges: "entre 10 et 20 collaborateurs", "10 à 20 salariés", "10-20 employees"
-    (re.compile(rf"(?:entre|between)\s+{_NUM}\s+(?:et|and|à)\s+{_NUM}\s+(?:{_STAFF_NOUNS})", re.I), "range", 0.6),
+    (
+        re.compile(rf"(?:entre|between)\s+{_NUM}\s+(?:et|and|à)\s+{_NUM}\s+(?:{_STAFF_NOUNS})", re.I),
+        "range",
+        0.6,
+    ),
     (re.compile(rf"{_NUM}\s*(?:à|-|–|to)\s*{_NUM}\s+(?:{_STAFF_NOUNS})", re.I), "range", 0.6),
     # lower bounds: "plus de 50 collaborateurs", "+50 experts", "over 100 employees"
-    (re.compile(rf"(?:plus\s+de|more\s+than|over|au-del[àa]\s+de|mehr\s+als|m[áa]s\s+de|oltre)\s+{_NUM}\s+(?:{_STAFF_NOUNS})", re.I), "min", 0.55),
+    (
+        re.compile(
+            rf"(?:plus\s+de|more\s+than|over|au-del[àa]\s+de|mehr\s+als|m[áa]s\s+de|oltre)\s+{_NUM}\s+(?:{_STAFF_NOUNS})",
+            re.I,
+        ),
+        "min",
+        0.55,
+    ),
     (re.compile(rf"(?<![\w])\+\s?{_NUM}\s+(?:{_STAFF_NOUNS})", re.I), "min", 0.55),
     # exact: "une équipe de 12 personnes", "team of 25", "15 collaborateurs"
-    (re.compile(rf"(?:[ée]quipe|team|teams)\s+(?:de|of|von|di)\s+{_NUM}(?:\s+(?:{_STAFF_NOUNS}))?", re.I), "exact", 0.65),
+    (
+        re.compile(rf"(?:[ée]quipe|team|teams)\s+(?:de|of|von|di)\s+{_NUM}(?:\s+(?:{_STAFF_NOUNS}))?", re.I),
+        "exact",
+        0.65,
+    ),
     (re.compile(rf"(?<![\d+.,])\b{_NUM}\s+(?:{_STAFF_NOUNS})\b", re.I), "exact", 0.6),
 )
 _FOUNDED_PATTERNS: tuple[tuple[re.Pattern[str], float], ...] = (
-    (re.compile(r"(?:fond[ée]e?|cr[ée]{1,2}e?|cr[ée]ation|lanc[ée]e?|n[ée]e?|founded|established|incorporated|"
-                r"gegr[üu]ndet|fundada|fundado|fondata|fondato)\s+(?:en|in|im|el|nel|le\s+\d{1,2}\s+\w+)?\s*((?:18|19|20)\d{2})\b", re.I), 0.8),
+    (
+        re.compile(
+            r"(?:fond[ée]e?|cr[ée]{1,2}e?|cr[ée]ation|lanc[ée]e?|n[ée]e?|founded|established|incorporated|"
+            r"gegr[üu]ndet|fundada|fundado|fondata|fondato)\s+(?:en|in|im|el|nel|le\s+\d{1,2}\s+\w+)?\s*((?:18|19|20)\d{2})\b",
+            re.I,
+        ),
+        0.8,
+    ),
     (re.compile(r"\b(?:est\.|estd\.?|since|depuis|seit|desde|dal)\s+((?:18|19|20)\d{2})\b", re.I), 0.55),
-    (re.compile(r"\b(?:en|in)\s+((?:19|20)\d{2})\b[^.\n]{0,40}\b(?:fond[ée]|cr[ée]{1,2}|founded|started|launched|lanc[ée])", re.I), 0.7),
+    (
+        re.compile(
+            r"\b(?:en|in)\s+((?:19|20)\d{2})\b[^.\n]{0,40}\b(?:fond[ée]|cr[ée]{1,2}|founded|started|launched|lanc[ée])",
+            re.I,
+        ),
+        0.7,
+    ),
 )
 _FR_POSTAL_LINE_RE = re.compile(
     r"(?<![\d€.,])(?P<cp>(?:0[1-9]|[1-8]\d|9[0-5]|97|98)\d{3})\s+(?P<city>[A-ZÉÈÀÂÎÔÛÇ][A-Za-zÀ-ÿ'’\-]+(?:[ \-](?:[Ss]ur|[Ll]es|[Ll]e|[Ll]a|de|du|en|[A-ZÉÈÀ][A-Za-zÀ-ÿ'’\-]+)){0,4})(?:\s+(?:Cedex|CEDEX)(?:\s+\d+)?)?"
@@ -59,7 +87,9 @@ _STREET_RE = re.compile(
     r"route|cours|square|passage|parvis|esplanade|faubourg|rond-point|voie|zone|za|zi|zac|parc|r[ée]sidence)\b[^\n]{2,80}",
     re.IGNORECASE,
 )
-_COOKIE_RE = re.compile(r"cookie|javascript|navigateur|browser|consent|rgpd|gdpr|copyright|©|tous droits", re.IGNORECASE)
+_COOKIE_RE = re.compile(
+    r"cookie|javascript|navigateur|browser|consent|rgpd|gdpr|copyright|©|tous droits", re.IGNORECASE
+)
 
 
 def _ptype(page: PageLike) -> str:
@@ -144,12 +174,14 @@ def _best(facts: list[Fact]) -> Fact | None:
     return max(facts, key=lambda f: f.confidence) if facts else None
 
 
-def extract_company_facts(pages: list[PageLike]) -> list[Fact]:
+def extract_company_facts(pages: Sequence[PageLike]) -> list[Fact]:
     """Facts with provenance; at most one value per field (highest confidence, home/legal first)."""
     by_type: dict[str, list[PageLike]] = {}
     for p in pages:
         by_type.setdefault(_ptype(p), []).append(p)
-    ordered = sorted(pages, key=lambda p: {"home": 0, "about": 1, "contact": 2, "legal": 3, "team": 4}.get(_ptype(p), 9))
+    ordered = sorted(
+        pages, key=lambda p: {"home": 0, "about": 1, "contact": 2, "legal": 3, "team": 4}.get(_ptype(p), 9)
+    )
     facts: list[Fact] = []
 
     # description
@@ -190,7 +222,12 @@ def extract_company_facts(pages: list[PageLike]) -> list[Fact]:
     # employee count / founded year (about first)
     emp: list[Fact] = []
     founded: list[Fact] = []
-    for p in by_type.get("about", []) + by_type.get("home", []) + by_type.get("team", []) + by_type.get("careers", []):
+    for p in (
+        by_type.get("about", [])
+        + by_type.get("home", [])
+        + by_type.get("team", [])
+        + by_type.get("careers", [])
+    ):
         emp.extend(_employee_facts(p))
         founded.extend(_founded_facts(p))
     if (b := _best(emp)) is not None:
@@ -211,21 +248,35 @@ def extract_company_facts(pages: list[PageLike]) -> list[Fact]:
         if info.siret:
             facts.append(Fact("siret", info.siret, p.url, ev.get("siret", info.siret), conf))
         if info.vat_number:
-            facts.append(Fact("vat_number", info.vat_number, p.url, ev.get("vat_number", info.vat_number), conf))
+            facts.append(
+                Fact("vat_number", info.vat_number, p.url, ev.get("vat_number", info.vat_number), conf)
+            )
         if info.register_number:
-            facts.append(Fact("register_number", info.register_number, p.url, ev.get("register_number", ""), conf - 0.05))
+            facts.append(
+                Fact(
+                    "register_number", info.register_number, p.url, ev.get("register_number", ""), conf - 0.05
+                )
+            )
         if info.legal_name:
-            facts.append(Fact("legal_name", info.legal_name, p.url, ev.get("legal_name", info.legal_name), conf - 0.1))
+            facts.append(
+                Fact("legal_name", info.legal_name, p.url, ev.get("legal_name", info.legal_name), conf - 0.1)
+            )
         if info.legal_form:
-            facts.append(Fact("legal_form", info.legal_form, p.url, ev.get("legal_form", info.legal_form), conf - 0.1))
+            facts.append(
+                Fact("legal_form", info.legal_form, p.url, ev.get("legal_form", info.legal_form), conf - 0.1)
+            )
         if info.share_capital:
-            facts.append(Fact("share_capital", info.share_capital, p.url, ev.get("share_capital", ""), conf - 0.1))
+            facts.append(
+                Fact("share_capital", info.share_capital, p.url, ev.get("share_capital", ""), conf - 0.1)
+            )
         if info.address:
             legal_address.append(Fact("address", info.address, p.url, ev.get("address", info.address), 0.85))
             m = _FR_POSTAL_LINE_RE.search(info.address)
             if m:
                 legal_address.append(Fact("postal_code", m.group("cp"), p.url, ev.get("address", ""), 0.85))
-                legal_address.append(Fact("city", collapse_ws(m.group("city")), p.url, ev.get("address", ""), 0.85))
+                legal_address.append(
+                    Fact("city", collapse_ws(m.group("city")), p.url, ev.get("address", ""), 0.85)
+                )
         break
 
     # address / city / postal code: legal siège first, then contact page, then home footer

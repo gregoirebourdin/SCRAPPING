@@ -24,16 +24,47 @@ def test_list_sizes_and_disjointness():
 
 @pytest.mark.parametrize(
     "domain",
-    ["gmail.com", "googlemail.com", "yahoo.fr", "outlook.com", "hotmail.fr", "live.fr", "msn.com", "icloud.com",
-     "me.com", "aol.com", "proton.me", "protonmail.com", "gmx.de", "web.de", "orange.fr", "wanadoo.fr", "free.fr",
-     "sfr.fr", "laposte.net", "bbox.fr", "numericable.fr", "neuf.fr", "club-internet.fr", "libero.it",
-     "virgilio.it", "t-online.de", "yandex.ru", "mail.ru", "zoho.com", "yahoo.com.mx", "gmx.es"],
+    [
+        "gmail.com",
+        "googlemail.com",
+        "yahoo.fr",
+        "outlook.com",
+        "hotmail.fr",
+        "live.fr",
+        "msn.com",
+        "icloud.com",
+        "me.com",
+        "aol.com",
+        "proton.me",
+        "protonmail.com",
+        "gmx.de",
+        "web.de",
+        "orange.fr",
+        "wanadoo.fr",
+        "free.fr",
+        "sfr.fr",
+        "laposte.net",
+        "bbox.fr",
+        "numericable.fr",
+        "neuf.fr",
+        "club-internet.fr",
+        "libero.it",
+        "virgilio.it",
+        "t-online.de",
+        "yandex.ru",
+        "mail.ru",
+        "zoho.com",
+        "yahoo.com.mx",
+        "gmx.es",
+    ],
 )
 def test_free_providers(domain):
     assert is_free_provider(domain)
 
 
-@pytest.mark.parametrize("domain", ["agence-x.fr", "orange-business.com", "google.com", "yahoo-group.example.fr"])
+@pytest.mark.parametrize(
+    "domain", ["agence-x.fr", "orange-business.com", "google.com", "yahoo-group.example.fr"]
+)
 def test_not_free_providers(domain):
     assert not is_free_provider(domain)
 
@@ -48,11 +79,51 @@ def test_disposable_including_subdomains():
 
 @pytest.mark.parametrize(
     "local",
-    ["contact", "info", "hello", "bonjour", "salut", "support", "sales", "admin", "office", "team", "jobs",
-     "careers", "recrutement", "rh", "hr", "compta", "comptabilite", "billing", "facturation", "noreply",
-     "no-reply", "marketing", "presse", "press", "communication", "commercial", "devis", "webmaster",
-     "postmaster", "abuse", "service-client", "service.client", "serviceclient", "sav", "accueil", "direction",
-     "agence", "studio", "booking", "reservation", "info.paris", "contact-lyon", "Contact+site"],
+    [
+        "contact",
+        "info",
+        "hello",
+        "bonjour",
+        "salut",
+        "support",
+        "sales",
+        "admin",
+        "office",
+        "team",
+        "jobs",
+        "careers",
+        "recrutement",
+        "rh",
+        "hr",
+        "compta",
+        "comptabilite",
+        "billing",
+        "facturation",
+        "noreply",
+        "no-reply",
+        "marketing",
+        "presse",
+        "press",
+        "communication",
+        "commercial",
+        "devis",
+        "webmaster",
+        "postmaster",
+        "abuse",
+        "service-client",
+        "service.client",
+        "serviceclient",
+        "sav",
+        "accueil",
+        "direction",
+        "agence",
+        "studio",
+        "booking",
+        "reservation",
+        "info.paris",
+        "contact-lyon",
+        "Contact+site",
+    ],
 )
 def test_role_local_parts(local):
     assert is_role_local_part(local)
@@ -85,8 +156,15 @@ def test_normalize_domain():
 
 @pytest.mark.parametrize(
     ("addr", "ok"),
-    [("marie@agence-x.fr", True), ("marie.dupont+news@agence-x.fr", True), ("marie..x@agence-x.fr", False),
-     ("@agence-x.fr", False), ("marie@agence", False), ("marie dupont@agence-x.fr", False), (None, False)],
+    [
+        ("marie@agence-x.fr", True),
+        ("marie.dupont+news@agence-x.fr", True),
+        ("marie..x@agence-x.fr", False),
+        ("@agence-x.fr", False),
+        ("marie@agence", False),
+        ("marie dupont@agence-x.fr", False),
+        (None, False),
+    ],
 )
 def test_is_valid_syntax(addr, ok):
     assert is_valid_syntax(addr) is ok

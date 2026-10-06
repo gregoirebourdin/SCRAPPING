@@ -71,15 +71,25 @@ def test_requires_manifest(monkeypatch):
 def test_build_verifier_backends():
     assert isinstance(vmod.build_verifier(Settings(verifier_backend="builtin")), BuiltinVerifier)
     assert isinstance(
-        vmod.build_verifier(Settings(verifier_backend="fixture", discovery_fixture_manifest=str(MANIFEST_PATH))),
+        vmod.build_verifier(
+            Settings(verifier_backend="fixture", discovery_fixture_manifest=str(MANIFEST_PATH))
+        ),
         FixtureVerifier,
     )
     auto_service = vmod.build_verifier(
-        Settings(verifier_backend="auto", verifier_service_url="http://ev:8080", verifier_service_token=SecretStr("t"))
+        Settings(
+            verifier_backend="auto",
+            verifier_service_url="http://ev:8080",
+            verifier_service_token=SecretStr("t"),
+        )
     )
     assert isinstance(auto_service, ServiceVerifier) and auto_service.base_url == "http://ev:8080"
-    assert isinstance(vmod.build_verifier(Settings(verifier_backend="auto", verifier_service_url=None)), BuiltinVerifier)
-    assert isinstance(vmod.build_verifier(Settings(verifier_backend="service", verifier_service_url=None)), BuiltinVerifier)
+    assert isinstance(
+        vmod.build_verifier(Settings(verifier_backend="auto", verifier_service_url=None)), BuiltinVerifier
+    )
+    assert isinstance(
+        vmod.build_verifier(Settings(verifier_backend="service", verifier_service_url=None)), BuiltinVerifier
+    )
 
 
 def test_get_and_set_verifier(fv):

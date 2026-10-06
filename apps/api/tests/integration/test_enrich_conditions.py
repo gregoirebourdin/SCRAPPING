@@ -31,8 +31,10 @@ async def _company_and_pages(company_id):
 def fake_ai():
     fake = FakeProvider()
     quote, url = sentence_containing(load_fixture("agency_instagram"), "Nous gérons vos comptes Instagram")
-    fake.on("SemanticVerdict", lambda prompt: {
-        "verdict": "true", "confidence": 0.9, "evidence_quote": quote, "source_url": url})
+    fake.on(
+        "SemanticVerdict",
+        lambda prompt: {"verdict": "true", "confidence": 0.9, "evidence_quote": quote, "source_url": url},
+    )
     set_ai(fake)
     yield fake
     set_ai(None)
@@ -66,7 +68,9 @@ async def test_threshold_maps_to_unknown(workspace, fake_ai):
     ws, _ = workspace
     ids = await seed_agencies(ws)
     company, pages = await _company_and_pages(ids["ruche"])
-    strict = SemanticCondition(concept="offers Instagram management", keywords=["Instagram"], min_confidence=0.95)
+    strict = SemanticCondition(
+        concept="offers Instagram management", keywords=["Instagram"], min_confidence=0.95
+    )
     res = await evaluate_condition(ws, company, strict, pages)
     assert res.passed is None and res.confidence == 0.9
 
@@ -79,12 +83,18 @@ async def test_keyword_regex_and_absence(workspace):
         company, pages = await _company_and_pages(ids["lumiere"])
         kw = await evaluate_condition(ws, company, KeywordCondition(terms=["référencement", "SEO"]), pages)
         assert kw.passed is True and kw.confidence == 1.0 and kw.resolver == "keyword"
-        assert (await evaluate_condition(ws, company, KeywordCondition(terms=["référencement"]), pages)).passed
-        both = await evaluate_condition(ws, company, KeywordCondition(type="keyword_all", terms=["SEO", "TikTok"]), pages)
+        assert (
+            await evaluate_condition(ws, company, KeywordCondition(terms=["référencement"]), pages)
+        ).passed
+        both = await evaluate_condition(
+            ws, company, KeywordCondition(type="keyword_all", terms=["SEO", "TikTok"]), pages
+        )
         assert both.passed is False and "TikTok" in both.evidence
         rx = await evaluate_condition(ws, company, RegexCondition(pattern=r"RCS\s+\w+\s+\d{3}"), pages)
         assert rx.passed is True and rx.source_url.endswith("/mentions-legales")
-        cached = await evaluate_condition(ws, company, KeywordCondition(terms=["référencement", "SEO"]), pages)
+        cached = await evaluate_condition(
+            ws, company, KeywordCondition(terms=["référencement", "SEO"]), pages
+        )
         assert cached.cached
         none = await evaluate_condition(ws, company, KeywordCondition(terms=["SEO"]), [])
         assert none.passed is None
@@ -109,7 +119,9 @@ async def test_offline_heuristic_condition(workspace):
         ids = await seed_agencies(ws)
         ruche, ruche_pages = await _company_and_pages(ids["ruche"])
         lum, lum_pages = await _company_and_pages(ids["lumiere"])
-        cond = SemanticCondition(concept="offers Instagram management", keywords=["Instagram"], min_confidence=0.6)
+        cond = SemanticCondition(
+            concept="offers Instagram management", keywords=["Instagram"], min_confidence=0.6
+        )
         assert (await evaluate_condition(ws, ruche, cond, ruche_pages)).passed is True
         lum_res = await evaluate_condition(ws, lum, cond, lum_pages)
         assert lum_res.passed is False and lum_res.resolver == "heuristic_semantic"
@@ -122,8 +134,17 @@ async def test_technology_condition(workspace, monkeypatch):
     ids = await seed_agencies(ws)
 
     async def detect_technologies(workspace_id, company_id, *, force=False, max_age_days=30):
-        return [Technology(workspace_id=workspace_id, company_id=company_id, name="Shopify", category="Ecommerce",
-                           confidence=1.0, detector="scripts", source_url="https://larushesociale.fr/")]
+        return [
+            Technology(
+                workspace_id=workspace_id,
+                company_id=company_id,
+                name="Shopify",
+                category="Ecommerce",
+                confidence=1.0,
+                detector="scripts",
+                source_url="https://larushesociale.fr/",
+            )
+        ]
 
     mod = types.ModuleType("scout.tech.detector")
     mod.detect_technologies = detect_technologies  # type: ignore[attr-defined]
@@ -131,7 +152,9 @@ async def test_technology_condition(workspace, monkeypatch):
     set_ai(LocalProvider())
     try:
         company, pages = await _company_and_pages(ids["ruche"])
-        assert (await evaluate_condition(ws, company, TechnologyCondition(technologies=["shopify"]), pages)).passed
+        assert (
+            await evaluate_condition(ws, company, TechnologyCondition(technologies=["shopify"]), pages)
+        ).passed
         both = TechnologyCondition(technologies=["Shopify", "WordPress"], match="all")
         assert (await evaluate_condition(ws, company, both, pages)).passed is False
     finally:

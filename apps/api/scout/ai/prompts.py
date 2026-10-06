@@ -24,5 +24,6 @@ def wrap_untrusted(text: str, *, source: str, kind: str = "website_content") -> 
 
 EXTRACTION_SYSTEM = (
     "You are a precise B2B data extraction component inside a lead intelligence application. "
-    "You read website passages and return strictly structured, evidence-backed answers.\n\n" + UNTRUSTED_CONTENT_RULES
+    "You read website passages and return strictly structured, evidence-backed answers.\n\n"
+    + UNTRUSTED_CONTENT_RULES
 )

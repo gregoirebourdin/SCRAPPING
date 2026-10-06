@@ -9,7 +9,10 @@ from tests.unit.extract.helpers import agence_pages, page_from_html
 
 
 def _people():
-    return {p.full_name: p for p in extract_people(agence_pages(), company_name="Agence Lumière", domain="agence-lumiere.fr")}
+    return {
+        p.full_name: p
+        for p in extract_people(agence_pages(), company_name="Agence Lumière", domain="agence-lumiere.fr")
+    }
 
 
 def test_team_page_and_legal_notice_people():
@@ -61,7 +64,9 @@ def test_inline_patterns_and_title_above_layout():
     <p>Élodie Martin</p>
     </main></body></html>"""
     page = page_from_html(html, "https://studio-nova.fr/equipe")
-    people = {p.full_name: p for p in extract_people([page], company_name="Studio Nova", domain="studio-nova.fr")}
+    people = {
+        p.full_name: p for p in extract_people([page], company_name="Studio Nova", domain="studio-nova.fr")
+    }
     assert people["Camille Roux"].title == "Directrice générale"
     assert people["Hugo Lambert"].title == "Responsable marketing"
     assert people["Nicolas Fabre"].title == "Directeur commercial"
@@ -77,7 +82,9 @@ def test_text_patterns_and_other_company_guard():
     <p>Marc Dubois, CEO de Boulangerie Dubois, nous a confié sa refonte.</p>
     </main></body></html>"""
     page = page_from_html(html, "https://studio-nova.fr/a-propos")
-    people = {p.full_name: p for p in extract_people([page], company_name="Studio Nova", domain="studio-nova.fr")}
+    people = {
+        p.full_name: p for p in extract_people([page], company_name="Studio Nova", domain="studio-nova.fr")
+    }
     assert set(people) == {"Antoine Lefort", "Julie Bernard"}
     assert people["Antoine Lefort"].method == "text_pattern" and people["Antoine Lefort"].confidence == 0.75
     assert people["Julie Bernard"].confidence == 0.75  # same page & method: no corroboration bonus
@@ -96,8 +103,13 @@ def test_jsonld_people_and_blog_author_rule():
         <body><p>Article</p></body></html>""",
         "https://studio-nova.fr/blog",
     )
-    people = {p.full_name: p for p in extract_people([about, blog], company_name="Studio Nova", domain="studio-nova.fr")}
-    assert people["Nadia Haddad"].method == "jsonld" and people["Nadia Haddad"].email == "nadia@studio-nova.fr"
+    people = {
+        p.full_name: p
+        for p in extract_people([about, blog], company_name="Studio Nova", domain="studio-nova.fr")
+    }
+    assert (
+        people["Nadia Haddad"].method == "jsonld" and people["Nadia Haddad"].email == "nadia@studio-nova.fr"
+    )
     assert "Sami Kaci" in people  # blog page person kept only because the title says so
     assert "Kevin Durand" not in people
 
@@ -146,7 +158,9 @@ def test_name_without_title_never_steals_neighbour_title():
     <p>Paul Durand</p><p>Directeur commercial</p>
     </main></body></html>"""
     page = page_from_html(html, "https://studio-nova.fr/equipe")
-    people = {p.full_name: p for p in extract_people([page], company_name="Studio Nova", domain="studio-nova.fr")}
+    people = {
+        p.full_name: p for p in extract_people([page], company_name="Studio Nova", domain="studio-nova.fr")
+    }
     assert people["Jean Dupont"].title == "CEO"
     assert people["Paul Durand"].title == "Directeur commercial"
     assert people["Marie Martin"].title is None and people["Marie Martin"].confidence == 0.6

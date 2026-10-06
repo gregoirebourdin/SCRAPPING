@@ -40,9 +40,17 @@ async def site(db, monkeypatch):
         await reset_crawl_state()
 
 
-async def _company(ws: uuid.UUID, *, website: str | None, name: str = "Agence Lumière", domain: str | None = None) -> uuid.UUID:
+async def _company(
+    ws: uuid.UUID, *, website: str | None, name: str = "Agence Lumière", domain: str | None = None
+) -> uuid.UUID:
     async with session_scope() as s:
-        c = Company(workspace_id=ws, name=name, normalized_name=name.lower(), website_url=website, normalized_domain=domain)
+        c = Company(
+            workspace_id=ws,
+            name=name,
+            normalized_name=name.lower(),
+            website_url=website,
+            normalized_domain=domain,
+        )
         s.add(c)
         await s.flush()
         return c.id
@@ -56,7 +64,13 @@ async def _get_company(cid: uuid.UUID) -> Company:
 async def _runs(cid: uuid.UUID) -> list[WebsiteCrawlRun]:
     async with session_scope() as s:
         return list(
-            (await s.scalars(sa.select(WebsiteCrawlRun).where(WebsiteCrawlRun.company_id == cid).order_by(WebsiteCrawlRun.started_at))).all()
+            (
+                await s.scalars(
+                    sa.select(WebsiteCrawlRun)
+                    .where(WebsiteCrawlRun.company_id == cid)
+                    .order_by(WebsiteCrawlRun.started_at)
+                )
+            ).all()
         )
 
 
@@ -118,7 +132,9 @@ async def test_stale_cache_is_recrawled(site, workspace):
     await ensure_crawled(ws, cid)
     async with session_scope() as s:
         await s.execute(
-            sa.update(WebsitePage).where(WebsitePage.company_id == cid).values(fetched_at=datetime.now(UTC) - timedelta(days=45))
+            sa.update(WebsitePage)
+            .where(WebsitePage.company_id == cid)
+            .values(fetched_at=datetime.now(UTC) - timedelta(days=45))
         )
     before = site.count()
     await ensure_crawled(ws, cid, max_age_days=30)
@@ -143,8 +159,12 @@ async def test_unreachable_and_parked_are_recorded_not_raised(site, workspace, m
     site.add("domaine-parque.fr", "/", "<html><body><p>This domain may be for sale!</p></body></html>")
     configure_overrides(
         monkeypatch,
-        {SITE: site.target(), "domaine-parque.fr": site.target(), "agence-fermee.fr": f"127.0.0.1:{dead_port}",
-         "www.agence-fermee.fr": f"127.0.0.1:{dead_port}"},
+        {
+            SITE: site.target(),
+            "domaine-parque.fr": site.target(),
+            "agence-fermee.fr": f"127.0.0.1:{dead_port}",
+            "www.agence-fermee.fr": f"127.0.0.1:{dead_port}",
+        },
     )
     dead = await _company(ws, website="agence-fermee.fr", name="Agence Fermée")
     assert await ensure_crawled(ws, dead) == []

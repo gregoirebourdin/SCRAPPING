@@ -43,8 +43,13 @@ pytestmark = pytest.mark.integration
 async def make_company(ws, domain, *, employee_max=20, country="FR"):
     async with session_scope() as s:
         c = Company(
-            workspace_id=ws, name=domain, normalized_name=domain, domain=domain, normalized_domain=domain,
-            employee_max=employee_max, country=country,
+            workspace_id=ws,
+            name=domain,
+            normalized_name=domain,
+            domain=domain,
+            normalized_domain=domain,
+            employee_max=employee_max,
+            country=country,
         )
         s.add(c)
         await s.flush()
@@ -54,8 +59,12 @@ async def make_company(ws, domain, *, employee_max=20, country="FR"):
 async def make_person(ws, company_id, first, last):
     async with session_scope() as s:
         p = Person(
-            workspace_id=ws, company_id=company_id, first_name=first, last_name=last,
-            full_name=f"{first} {last}", normalized_name=f"{first} {last}".lower(),
+            workspace_id=ws,
+            company_id=company_id,
+            first_name=first,
+            last_name=last,
+            full_name=f"{first} {last}",
+            normalized_name=f"{first} {last}".lower(),
         )
         s.add(p)
         await s.flush()
@@ -64,8 +73,16 @@ async def make_person(ws, company_id, first, last):
 
 async def add_page(ws, company_id, url, emails):
     async with session_scope() as s:
-        s.add(WebsitePage(workspace_id=ws, company_id=company_id, url=url, canonical_url=url, content_hash=url,
-                          emails=emails))
+        s.add(
+            WebsitePage(
+                workspace_id=ws,
+                company_id=company_id,
+                url=url,
+                canonical_url=url,
+                content_hash=url,
+                emails=emails,
+            )
+        )
 
 
 async def checks_for(email_id):
@@ -86,14 +103,21 @@ async def get_person(pid):
 async def pattern_row(domain, pattern):
     async with session_scope() as s:
         return await s.scalar(
-            sa.select(DomainEmailPattern).where(DomainEmailPattern.domain == domain, DomainEmailPattern.pattern == pattern)
+            sa.select(DomainEmailPattern).where(
+                DomainEmailPattern.domain == domain, DomainEmailPattern.pattern == pattern
+            )
         )
 
 
 def finding(address, status=S.SAFE, conf=0.95, *, method=M.permutation, smtp=R.accepted, catch_all=False):
     return EmailFinding(
-        address=address, status=status, overall_confidence=conf, method=method, pattern="{first}.{last}",
-        pattern_confidence=0.4, verification=vr(address, smtp=smtp, catch_all=catch_all),
+        address=address,
+        status=status,
+        overall_confidence=conf,
+        method=method,
+        pattern="{first}.{last}",
+        pattern_confidence=0.4,
+        verification=vr(address, smtp=smtp, catch_all=catch_all),
     )
 
 
@@ -111,11 +135,18 @@ def verifier():
 async def test_learn_and_load_patterns(db):
     counts = await store.learn_patterns(
         "Agence-X.fr",
-        [("Marie", "Dupont", "marie.dupont"), ("Jean", "Martin", "jean.martin"), ("Paul", "Durand", "pdurand"),
-         ("Zoé", "Roux", "contact")],
+        [
+            ("Marie", "Dupont", "marie.dupont"),
+            ("Jean", "Martin", "jean.martin"),
+            ("Paul", "Durand", "pdurand"),
+            ("Zoé", "Roux", "contact"),
+        ],
     )
     assert counts == {"{first}.{last}": 2, "{f}{last}": 1}
-    assert await store.load_domain_patterns("agence-x.fr") == [("{first}.{last}", 0.85, 2), ("{f}{last}", 0.7, 1)]
+    assert await store.load_domain_patterns("agence-x.fr") == [
+        ("{first}.{last}", 0.85, 2),
+        ("{f}{last}", 0.7, 1),
+    ]
     await store.learn_patterns("agence-x.fr", [("Léa", "Petit", "lea.petit")])
     row = await pattern_row("agence-x.fr", "{first}.{last}")
     assert row.supporting_samples == 3 and row.confidence == 0.925
@@ -146,14 +177,18 @@ async def test_save_finding_upserts_and_appends_checks(workspace):
     cid = await make_company(ws, "agence-x.fr")
     pid = await make_person(ws, cid, "Marie", "Dupont")
 
-    row = await store.save_finding(ws, person_id=pid, company_id=cid, finding=finding("Marie.Dupont@agence-x.fr"))
+    row = await store.save_finding(
+        ws, person_id=pid, company_id=cid, finding=finding("Marie.Dupont@agence-x.fr")
+    )
     assert row.address == "marie.dupont@agence-x.fr" and row.local_part == "marie.dupont"
     assert row.kind == EmailKind.person and row.status == S.SAFE and row.smtp_result == R.accepted
     assert row.catch_all is False and row.is_primary and row.last_checked_at is not None
     assert (await get_person(pid)).primary_email_id == row.id
 
     again = await store.save_finding(
-        ws, person_id=pid, company_id=cid,
+        ws,
+        person_id=pid,
+        company_id=cid,
         finding=finding("marie.dupont@agence-x.fr", S.CATCH_ALL, 0.4, smtp=R.accepted, catch_all=True),
     )
     assert again.id == row.id and again.status == S.CATCH_ALL and again.catch_all is True
@@ -167,12 +202,16 @@ async def test_user_confirmed_rows_are_not_overwritten(workspace):
     ws, _ = workspace
     cid = await make_company(ws, "agence-x.fr")
     pid = await make_person(ws, cid, "Marie", "Dupont")
-    row = await store.save_finding(ws, person_id=pid, company_id=cid, finding=finding("marie.dupont@agence-x.fr"))
+    row = await store.save_finding(
+        ws, person_id=pid, company_id=cid, finding=finding("marie.dupont@agence-x.fr")
+    )
     async with session_scope() as s:
         await s.execute(sa.update(Email).where(Email.id == row.id).values(is_user_confirmed=True))
 
     kept = await store.save_finding(
-        ws, person_id=pid, company_id=cid,
+        ws,
+        person_id=pid,
+        company_id=cid,
         finding=finding("marie.dupont@agence-x.fr", S.INVALID, 0.02, smtp=R.rejected),
     )
     assert kept.status == S.SAFE and kept.smtp_result == R.accepted and kept.is_primary
@@ -183,9 +222,13 @@ async def test_primary_is_not_replaced_by_a_worse_finding(workspace):
     ws, _ = workspace
     cid = await make_company(ws, "agence-x.fr")
     pid = await make_person(ws, cid, "Marie", "Dupont")
-    safe = await store.save_finding(ws, person_id=pid, company_id=cid, finding=finding("marie.dupont@agence-x.fr"))
+    safe = await store.save_finding(
+        ws, person_id=pid, company_id=cid, finding=finding("marie.dupont@agence-x.fr")
+    )
     worse = await store.save_finding(
-        ws, person_id=pid, company_id=cid,
+        ws,
+        person_id=pid,
+        company_id=cid,
         finding=finding("marie@agence-x.fr", S.UNKNOWN, 0.38, smtp=R.not_attempted, catch_all=None),
     )
     assert not worse.is_primary
@@ -198,9 +241,19 @@ async def test_address_owned_by_another_person(workspace):
     marie = await make_person(ws, cid, "Marie", "Dupont")
     other = await make_person(ws, cid, "Mario", "Dupont")
     await store.save_finding(ws, person_id=marie, company_id=cid, finding=finding("m.dupont@agence-x.fr"))
-    assert await store.save_finding(ws, person_id=other, company_id=cid, finding=finding("m.dupont@agence-x.fr")) is None
-    assert await store.save_finding(ws, person_id=other, company_id=cid, finding=EmailFinding(
-        None, S.UNKNOWN, 0.0, None, None, None, None)) is None
+    assert (
+        await store.save_finding(ws, person_id=other, company_id=cid, finding=finding("m.dupont@agence-x.fr"))
+        is None
+    )
+    assert (
+        await store.save_finding(
+            ws,
+            person_id=other,
+            company_id=cid,
+            finding=EmailFinding(None, S.UNKNOWN, 0.0, None, None, None, None),
+        )
+        is None
+    )
 
 
 async def test_save_company_email(workspace):
@@ -268,11 +321,26 @@ async def test_mx_cache_reused_without_dns_call(db, monkeypatch):
     assert len(resolver.calls) == n  # served from domain_dns_cache
 
     async with session_scope() as s:
-        await s.execute(
-            sa.update(DomainDnsCache).values(checked_at=datetime.now(UTC) - timedelta(days=31))
-        )
+        await s.execute(sa.update(DomainDnsCache).values(checked_at=datetime.now(UTC) - timedelta(days=31)))
     third = await edns.mx_lookup("agence-x.fr")
     assert not third.cached and len(resolver.calls) > n  # expired → resolved again
+
+
+async def test_null_mx_is_cached_in_its_own_column(db, monkeypatch):
+    class NullMxResolver:
+        async def resolve(self, qname, rdtype):
+            if rdtype == "MX":
+                return [SimpleNamespace(preference=0, exchange=dns.name.from_text("."))]
+            return ["192.0.2.1"]
+
+    monkeypatch.setattr(edns, "resolver_factory", lambda: NullMxResolver())
+    first = await edns.mx_lookup("nomail.fr")
+    assert first.null_mx and not first.accepts_mail
+    async with session_scope() as s:
+        row = await s.get(DomainDnsCache, "nomail.fr")
+        assert row is not None and row.null_mx is True
+    cached = await edns.mx_lookup("nomail.fr")
+    assert cached.cached and cached.null_mx and not cached.accepts_mail
 
 
 async def test_catch_all_cache(db):
@@ -297,8 +365,12 @@ async def test_find_and_save_published_learns_once(workspace, verifier):
     cid = await make_company(ws, "agence-x.fr")
     marie = await make_person(ws, cid, "Marie", "Dupont")
     await make_person(ws, cid, "Jean", "Martin")
-    await add_page(ws, cid, "https://agence-x.fr/equipe",
-                   ["marie.dupont@agence-x.fr", "contact@agence-x.fr", {"address": "jean.martin@agence-x.fr"}])
+    await add_page(
+        ws,
+        cid,
+        "https://agence-x.fr/equipe",
+        ["marie.dupont@agence-x.fr", "contact@agence-x.fr", {"address": "jean.martin@agence-x.fr"}],
+    )
 
     f = await store.find_and_save_for_person(ws, marie)
     assert f.status == S.SAFE and f.method == M.published and f.address == "marie.dupont@agence-x.fr"
@@ -335,7 +407,9 @@ async def test_find_and_save_keeps_user_confirmed_email(workspace, verifier):
     ws, _ = workspace
     cid = await make_company(ws, "agence-x.fr")
     pid = await make_person(ws, cid, "Marie", "Dupont")
-    row = await store.save_finding(ws, person_id=pid, company_id=cid, finding=finding("md@agence-x.fr", S.RISKY, 0.6))
+    row = await store.save_finding(
+        ws, person_id=pid, company_id=cid, finding=finding("md@agence-x.fr", S.RISKY, 0.6)
+    )
     async with session_scope() as s:
         await s.execute(sa.update(Email).where(Email.id == row.id).values(is_user_confirmed=True))
     f = await store.find_and_save_for_person(ws, pid)
@@ -357,8 +431,15 @@ async def test_find_and_save_without_domain_or_unknown_person(workspace, verifie
 
 
 def ctx(ws, type_, payload):
-    return JobContext(job_id=uuid.uuid4(), workspace_id=ws, campaign_id=None, type=type_, payload=payload,
-                      attempt=1, worker_id="test")
+    return JobContext(
+        job_id=uuid.uuid4(),
+        workspace_id=ws,
+        campaign_id=None,
+        type=type_,
+        payload=payload,
+        attempt=1,
+        worker_id="test",
+    )
 
 
 async def test_email_jobs(workspace, verifier):
@@ -375,7 +456,10 @@ async def test_email_jobs(workspace, verifier):
     assert events[0].payload["value"] == "jean.martin@agence-x.fr"
 
     row = await get_email(ws, "jean.martin@agence-x.fr")
-    assert await email_verify(ctx(ws, "email.verify", {"email_ids": [str(row.id)]})) == {"requested": 1, "updated": 1}
+    assert await email_verify(ctx(ws, "email.verify", {"email_ids": [str(row.id)]})) == {
+        "requested": 1,
+        "updated": 1,
+    }
 
     from scout.errors import PermanentError
 

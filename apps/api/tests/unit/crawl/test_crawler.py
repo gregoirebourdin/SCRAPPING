@@ -29,7 +29,14 @@ async def test_crawl_fr_agency_site(fixture_server, monkeypatch):
     assert result.domain == SITE
     assert result.home_url == "http://agence-lumiere.fr/"
     by_type = {p.page_type: p for p in result.pages}
-    for pt in (PageType.home, PageType.about, PageType.team, PageType.services, PageType.contact, PageType.legal):
+    for pt in (
+        PageType.home,
+        PageType.about,
+        PageType.team,
+        PageType.services,
+        PageType.contact,
+        PageType.legal,
+    ):
         assert pt in by_type, pt
     home = result.pages[0]
     assert home.page_type == PageType.home
@@ -61,12 +68,17 @@ async def test_conditional_recrawl_marks_unchanged_pages(fixture_server, monkeyp
 
 
 async def test_robots_disallow_is_respected(fixture_server, monkeypatch):
-    fixture_server.add("private-site.fr", "/robots.txt", "User-agent: *\nDisallow: /\n", content_type="text/plain")
+    fixture_server.add(
+        "private-site.fr", "/robots.txt", "User-agent: *\nDisallow: /\n", content_type="text/plain"
+    )
     fixture_server.add("private-site.fr", "/", "<html><body>secret</body></html>")
     configure_overrides(monkeypatch, {"private-site.fr": fixture_server.target()})
     result = await crawl_site("http://private-site.fr/")
     assert result.status == WebsiteStatus.blocked and result.robots_blocked
-    assert ("private-site.fr", "/", ) not in {(h, p) for h, p, _ in fixture_server.requests}
+    assert (
+        "private-site.fr",
+        "/",
+    ) not in {(h, p) for h, p, _ in fixture_server.requests}
 
 
 async def test_parked_domain(fixture_server, monkeypatch):
@@ -82,7 +94,9 @@ async def test_unreachable_site(monkeypatch):
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
     sock.close()
-    configure_overrides(monkeypatch, {"dead-agency.fr": f"127.0.0.1:{port}", "www.dead-agency.fr": f"127.0.0.1:{port}"})
+    configure_overrides(
+        monkeypatch, {"dead-agency.fr": f"127.0.0.1:{port}", "www.dead-agency.fr": f"127.0.0.1:{port}"}
+    )
     result = await crawl_site("dead-agency.fr")
     assert result.status == WebsiteStatus.unreachable
     assert result.error_category in (ErrorCategory.network, ErrorCategory.timeout)

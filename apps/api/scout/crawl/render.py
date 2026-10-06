@@ -79,7 +79,9 @@ async def render_crawl4ai(url: str) -> str | None:
     try:
         validate_url(url)
         parts = urlsplit(url)
-        await resolve_safe((parts.hostname or "").lower(), parts.port or (443 if parts.scheme == "https" else 80))
+        await resolve_safe(
+            (parts.hostname or "").lower(), parts.port or (443 if parts.scheme == "https" else 80)
+        )
     except Exception as exc:
         log.info("render_crawl4ai_refused", url=url, error=str(exc))
         return None
@@ -91,10 +93,14 @@ async def render_crawl4ai(url: str) -> str | None:
     async with pool("browser"):
         await record_usage(UsageCategory.browser_request, cost_usd=settings.cost_browser_request_usd)
         try:
-            browser_cfg = crawl4ai.BrowserConfig(headless=True, user_agent=settings.crawler_user_agent, verbose=False)
+            browser_cfg = crawl4ai.BrowserConfig(
+                headless=True, user_agent=settings.crawler_user_agent, verbose=False
+            )
             run_cfg = crawl4ai.CrawlerRunConfig(page_timeout=int(RENDER_TIMEOUT_S * 1000), verbose=False)
             async with crawl4ai.AsyncWebCrawler(config=browser_cfg) as crawler:
-                result = await asyncio.wait_for(crawler.arun(url=url, config=run_cfg), timeout=RENDER_TIMEOUT_S + 5)
+                result = await asyncio.wait_for(
+                    crawler.arun(url=url, config=run_cfg), timeout=RENDER_TIMEOUT_S + 5
+                )
             if not getattr(result, "success", False):
                 return None
             final = getattr(result, "url", None) or url
@@ -140,7 +146,9 @@ async def render_playwright(url: str) -> str | None:
             async with async_playwright() as pw:
                 browser = await pw.chromium.launch(headless=True, executable_path=executable)
                 try:
-                    context = await browser.new_context(user_agent=settings.crawler_user_agent, java_script_enabled=True)
+                    context = await browser.new_context(
+                        user_agent=settings.crawler_user_agent, java_script_enabled=True
+                    )
                     await context.route("**/*", _route)
                     page = await context.new_page()
                     await page.goto(url, wait_until="networkidle", timeout=RENDER_TIMEOUT_S * 1000)

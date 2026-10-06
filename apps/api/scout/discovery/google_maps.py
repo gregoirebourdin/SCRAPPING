@@ -33,8 +33,14 @@ log = structlog.get_logger(__name__)
 
 STATUS_PENDING = {"pending", "working"}
 _CLOSED_MARKERS = (
-    "permanently closed", "définitivement fermé", "definitivement ferme", "dauerhaft geschlossen",
-    "cerrado permanentemente", "chiuso definitivamente", "permanentemente chiuso", "fechado permanentemente",
+    "permanently closed",
+    "définitivement fermé",
+    "definitivement ferme",
+    "dauerhaft geschlossen",
+    "cerrado permanentemente",
+    "chiuso definitivamente",
+    "permanentemente chiuso",
+    "fechado permanentemente",
 )
 
 
@@ -80,7 +86,9 @@ def parse_csv(text: str, *, query: DiscoveryQuery | None = None) -> list[RawCand
         website_raw = (row.get("website") or "").strip() or None
         website = normalize_website(website_raw) if candidate_domain(website_raw) else None
         emails = [e.strip().lower() for e in (row.get("emails") or "").split(",") if "@" in e]
-        entity_id = next((row.get(k) for k in ("place_id", "cid", "data_id") if row.get(k)), None) or row.get("link")
+        entity_id = next((row.get(k) for k in ("place_id", "cid", "data_id") if row.get(k)), None) or row.get(
+            "link"
+        )
         location = {
             "country": country,
             "city": addr.get("city") or params.get("city"),
@@ -204,7 +212,9 @@ class GoogleMapsSource:
             "proxies": [],
         }
         async with pool("maps"):
-            resp = await http_request("POST", f"{self._base()}/api/v1/jobs", source=self.key, json=body, timeout_s=30.0)
+            resp = await http_request(
+                "POST", f"{self._base()}/api/v1/jobs", source=self.key, json=body, timeout_s=30.0
+            )
         await record_usage(UsageCategory.maps_request, source_key=self.key, resolver="discovery")
         job_id = (resp.json() or {}).get("id")
         if not job_id:
@@ -213,7 +223,9 @@ class GoogleMapsSource:
         return str(job_id)
 
     async def _status(self, job_id: str) -> str | None:
-        resp = await http_request("GET", f"{self._base()}/api/v1/jobs/{job_id}", source=self.key, allow=(404,))
+        resp = await http_request(
+            "GET", f"{self._base()}/api/v1/jobs/{job_id}", source=self.key, allow=(404,)
+        )
         if resp.status_code == 404:
             return None
         data = resp.json() or {}
@@ -236,13 +248,19 @@ class GoogleMapsSource:
 
     async def _download(self, job_id: str) -> str:
         resp = await http_request(
-            "GET", f"{self._base()}/api/v1/jobs/{job_id}/download", source=self.key, allow=(404,), timeout_s=60.0
+            "GET",
+            f"{self._base()}/api/v1/jobs/{job_id}/download",
+            source=self.key,
+            allow=(404,),
+            timeout_s=60.0,
         )
         return "" if resp.status_code == 404 else resp.text
 
     async def _delete(self, job_id: str) -> None:
         with contextlib.suppress(Exception):  # best effort: the scraper's data folder is ephemeral anyway
-            await http_request("DELETE", f"{self._base()}/api/v1/jobs/{job_id}", source=self.key, allow=(404,))
+            await http_request(
+                "DELETE", f"{self._base()}/api/v1/jobs/{job_id}", source=self.key, allow=(404,)
+            )
 
     async def discover(self, query: DiscoveryQuery, cursor: dict[str, Any] | None) -> DiscoveryPage:
         cur = dict(cursor or {})

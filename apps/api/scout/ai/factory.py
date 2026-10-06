@@ -42,7 +42,9 @@ class LocalProvider:
     def available(self) -> bool:
         return False
 
-    async def structured(self, *, role: ModelRole, system: str, prompt: str, schema: type[T], temperature: float = 0.0) -> AIResult[T]:
+    async def structured(
+        self, *, role: ModelRole, system: str, prompt: str, schema: type[T], temperature: float = 0.0
+    ) -> AIResult[T]:
         raise AIUnavailable("AI provider not configured (set GEMINI_API_KEY)")
 
     async def chat_stream(
@@ -53,7 +55,9 @@ class LocalProvider:
         async for ev in _local_chat_handler(system, turns, tools):
             yield ev
 
-    async def grounded_search(self, *, query: str, instructions: str, schema: type[T] | None = None) -> GroundedResult[T]:
+    async def grounded_search(
+        self, *, query: str, instructions: str, schema: type[T] | None = None
+    ) -> GroundedResult[T]:
         raise AIUnavailable("Grounded search requires GEMINI_API_KEY")
 
 
@@ -74,7 +78,9 @@ class FakeProvider:
     def on(self, schema_name: str, handler: Callable[[str], Any]) -> None:
         self.structured_handlers[schema_name] = handler
 
-    async def structured(self, *, role: ModelRole, system: str, prompt: str, schema: type[T], temperature: float = 0.0) -> AIResult[T]:
+    async def structured(
+        self, *, role: ModelRole, system: str, prompt: str, schema: type[T], temperature: float = 0.0
+    ) -> AIResult[T]:
         self.calls.append((schema.__name__, prompt))
         handler = self.structured_handlers.get(schema.__name__)
         if handler is None:
@@ -92,7 +98,9 @@ class FakeProvider:
         async for ev in _local_chat_handler(system, turns, tools):
             yield ev
 
-    async def grounded_search(self, *, query: str, instructions: str, schema: type[T] | None = None) -> GroundedResult[T]:
+    async def grounded_search(
+        self, *, query: str, instructions: str, schema: type[T] | None = None
+    ) -> GroundedResult[T]:
         if self.grounded_handler is None:
             raise AIUnavailable("FakeProvider has no grounded handler")
         return self.grounded_handler(query, schema)

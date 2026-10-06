@@ -41,9 +41,27 @@ log = structlog.get_logger(__name__)
 
 _throttle = Throttle(2.0)  # be gentle with the free endpoint
 
-_ANOMALY_MARKERS = ("anomaly-modal", "anomaly_modal", "challenge-form", "bots use DuckDuckGo too", "/anomaly.js")
+_ANOMALY_MARKERS = (
+    "anomaly-modal",
+    "anomaly_modal",
+    "challenge-form",
+    "bots use DuckDuckGo too",
+    "/anomaly.js",
+)
 _SEPARATORS = re.compile(r"\s+[|\-–—:·•»]\s+")
-_GENERIC_SEGMENTS = {"accueil", "home", "homepage", "site officiel", "official site", "official website", "welcome", "bienvenue", "startseite", "inicio", "home page"}
+_GENERIC_SEGMENTS = {
+    "accueil",
+    "home",
+    "homepage",
+    "site officiel",
+    "official site",
+    "official website",
+    "welcome",
+    "bienvenue",
+    "startseite",
+    "inicio",
+    "home page",
+}
 LISTICLE_RE = re.compile(
     r"(\btop\s*\d+|\b\d+\s+(meilleur|best|top|agences|agencies|entreprises|companies|startups|soci[ée]t[ée]s|firms|cabinets)"
     r"|\bmeilleur(e|es|s)?\b|\bbest\b|\bclassement\b|\bpalmar[eè]s\b|\branking\b|\bliste des\b|\blist of\b|\bannuaire\b"
@@ -129,7 +147,10 @@ def company_name_from_title(title: str, domain: str | None) -> str:
         return (domain or "").split(".")[0].capitalize()
     if domain and len(segments) > 1:
         label = domain.split(".")[0].replace("-", "")
-        scored = [(fuzz.partial_ratio(normalize_key(s).replace(" ", ""), label), -i, s) for i, s in enumerate(segments)]
+        scored = [
+            (fuzz.partial_ratio(normalize_key(s).replace(" ", ""), label), -i, s)
+            for i, s in enumerate(segments)
+        ]
         best = max(scored)
         if best[0] >= 70:
             return best[2]
@@ -174,8 +195,11 @@ class WebSearchSource:
             key = f"ddg:{kl}:{q.lower()}"
             if all(x.key != key for x in queries):
                 queries.append(
-                    DiscoveryQuery(key=key, params={"q": q, "kl": kl, "max_pages": max_pages,
-                                                    "expand_listicles": expansion >= 1}, weight=weight)
+                    DiscoveryQuery(
+                        key=key,
+                        params={"q": q, "kl": kl, "max_pages": max_pages, "expand_listicles": expansion >= 1},
+                        weight=weight,
+                    )
                 )
 
         for cc in countries:
@@ -183,8 +207,11 @@ class WebSearchSource:
             kl = geo.ddg_region(cc)
             terms = [kw for prof in profiles for kw in prof.keywords(lang)[:2]] or list(cf.keywords[:3])
             cities = (
-                geo.cities_for(cc, regions=cf.regions, cities=cf.cities, expansion=expansion)[: 8 + 12 * expansion]
-                if cc else []
+                geo.cities_for(cc, regions=cf.regions, cities=cf.cities, expansion=expansion)[
+                    : 8 + 12 * expansion
+                ]
+                if cc
+                else []
             )
             for kw in dict.fromkeys(terms):
                 if cities:
@@ -206,7 +233,10 @@ class WebSearchSource:
         async with pool("search"):
             await self.throttle.wait()
             resp = await http_request(
-                "POST", get_settings().ddg_html_url, source=self.key, data=form,
+                "POST",
+                get_settings().ddg_html_url,
+                source=self.key,
+                data=form,
                 headers={"Referer": "https://html.duckduckgo.com/", "Accept": "text/html"},
             )
         await record_usage(UsageCategory.web_search, source_key=self.key, resolver="discovery")
@@ -235,8 +265,14 @@ class WebSearchSource:
                     website=normalize_website(r.url),
                     domain=dom,
                     source_url=r.url,
-                    raw_data={"title": r.title, "snippet": r.snippet, "rank": r.rank, "page": page,
-                              "query": query.params["q"], "kl": form.get("kl")},
+                    raw_data={
+                        "title": r.title,
+                        "snippet": r.snippet,
+                        "rank": r.rank,
+                        "page": page,
+                        "query": query.params["q"],
+                        "kl": form.get("kl"),
+                    },
                 )
             )
         requests = 1

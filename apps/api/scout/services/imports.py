@@ -60,7 +60,16 @@ _SYNONYMS: dict[str, list[str]] = {
     "last_name": ["last name", "lastname", "surname", "nom", "family name", "nom de famille"],
     "email": ["email", "e mail", "mail", "email address", "adresse email", "courriel", "work email"],
     "title": ["title", "job title", "poste", "fonction", "role", "position", "titre"],
-    "company": ["company", "company name", "entreprise", "societe", "organization", "organisation", "account", "raison sociale"],
+    "company": [
+        "company",
+        "company name",
+        "entreprise",
+        "societe",
+        "organization",
+        "organisation",
+        "account",
+        "raison sociale",
+    ],
     "website": ["website", "site", "site web", "url", "company website", "web"],
     "domain": ["domain", "company domain", "domaine"],
     "profile_url": ["linkedin", "linkedin url", "profile", "profile url", "linkedin profile"],
@@ -146,7 +155,9 @@ async def start_import(
     unknown = [t for t in mapping.values() if t not in TARGET_FIELDS]
     if unknown:
         raise ValidationFailed(f"Unknown mapping targets: {unknown}")
-    if not any(t in mapping.values() for t in ("full_name", "first_name", "email", "company", "website", "domain")):
+    if not any(
+        t in mapping.values() for t in ("full_name", "first_name", "email", "company", "website", "domain")
+    ):
         raise ValidationFailed("Map at least a name, email, company or website column")
     idx = {h: i for i, h in enumerate(headers)}
     records: list[dict[str, str]] = []
@@ -161,14 +172,23 @@ async def start_import(
         if rec:
             records.append(rec)
     imp = Import(
-        workspace_id=workspace_id, list_id=list_id, filename=filename[:200], status=ImportStatus.running,
-        column_mapping=mapping, mark_as_known=mark_as_known, row_count=len(records), created_by=user_id,
+        workspace_id=workspace_id,
+        list_id=list_id,
+        filename=filename[:200],
+        status=ImportStatus.running,
+        column_mapping=mapping,
+        mark_as_known=mark_as_known,
+        row_count=len(records),
+        created_by=user_id,
     )
     s.add(imp)
     await s.flush()
     for start in range(0, len(records), CHUNK):
         await queue.enqueue(
-            s, workspace_id=workspace_id, type="import.chunk", priority=5,
+            s,
+            workspace_id=workspace_id,
+            type="import.chunk",
+            priority=5,
             payload={"import_id": str(imp.id), "offset": start, "rows": records[start : start + CHUNK]},
             dedupe_key=f"import:{imp.id}:{start}",
         )
@@ -180,7 +200,9 @@ async def start_import(
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-async def _import_record(s: AsyncSession, imp: Import, rec: dict[str, str], row_no: int) -> tuple[str, uuid.UUID | None, uuid.UUID | None]:
+async def _import_record(
+    s: AsyncSession, imp: Import, rec: dict[str, str], row_no: int
+) -> tuple[str, uuid.UUID | None, uuid.UUID | None]:
     """Returns (outcome, person_id, company_id); outcome ∈ imported|merged|skipped."""
     ws = imp.workspace_id
     email = (rec.get("email") or "").lower().strip()
@@ -195,7 +217,9 @@ async def _import_record(s: AsyncSession, imp: Import, rec: dict[str, str], row_
         domain = None if d in FREE_PROVIDERS else registrable_domain(d)
     company_name = rec.get("company") or (domain.split(".")[0].replace("-", " ").title() if domain else None)
     ev = registry.Evidence(
-        source_type=SourceType.import_, confidence=0.8, source_key="import",
+        source_type=SourceType.import_,
+        confidence=0.8,
+        source_key="import",
         evidence=f"Imported from {imp.filename} (row {row_no})",
     )
     company_id = None
@@ -206,17 +230,26 @@ async def _import_record(s: AsyncSession, imp: Import, rec: dict[str, str], row_
             if sup_domains:
                 return "skipped", None, None
         company, created_company = await registry.upsert_company(
-            s, ws,
-            registry.CompanyInput(name=company_name, website=website, domain=domain, city=rec.get("city"),
-                                  country=(rec.get("country") or "")[:2].upper() or None, industry=rec.get("industry"),
-                                  phone=None if rec.get("full_name") or rec.get("first_name") else rec.get("phone")),
+            s,
+            ws,
+            registry.CompanyInput(
+                name=company_name,
+                website=website,
+                domain=domain,
+                city=rec.get("city"),
+                country=(rec.get("country") or "")[:2].upper() or None,
+                industry=rec.get("industry"),
+                phone=None if rec.get("full_name") or rec.get("first_name") else rec.get("phone"),
+            ),
             ev,
         )
         company_id = company.id
         sup_ids, _ = await suppressed_companies(s, ws, company_ids=[company.id])
         if sup_ids:
             return "skipped", None, None
-    full_name = rec.get("full_name") or " ".join(x for x in (rec.get("first_name"), rec.get("last_name")) if x)
+    full_name = rec.get("full_name") or " ".join(
+        x for x in (rec.get("first_name"), rec.get("last_name")) if x
+    )
     if not full_name:
         return ("imported" if created_company else "merged"), None, company_id
     if email:
@@ -227,9 +260,17 @@ async def _import_record(s: AsyncSession, imp: Import, rec: dict[str, str], row_
 
     title = rec.get("title")
     person, created = await registry.upsert_person(
-        s, ws, company_id=company_id, full_name=full_name, evidence=ev, first_name=rec.get("first_name"),
-        last_name=rec.get("last_name"), job_title=title, title_info=normalize_title(title) if title else None,
-        profile_url=rec.get("profile_url"), email=email or None,
+        s,
+        ws,
+        company_id=company_id,
+        full_name=full_name,
+        evidence=ev,
+        first_name=rec.get("first_name"),
+        last_name=rec.get("last_name"),
+        job_title=title,
+        title_info=normalize_title(title) if title else None,
+        profile_url=rec.get("profile_url"),
+        email=email or None,
     )
     sup_ids, _ = await suppressed_people(s, ws, person_ids=[person.id])
     if sup_ids:
@@ -241,9 +282,17 @@ async def _import_record(s: AsyncSession, imp: Import, rec: dict[str, str], row_
         if existing is None:
             local, dom = email.split("@", 1)
             e = Email(
-                workspace_id=ws, person_id=person.id, company_id=company_id, address=email, local_part=local, domain=dom,
-                kind=EmailKind.person, discovery_method=EmailDiscoveryMethod.import_, status=EmailStatus.UNKNOWN,
-                overall_confidence=0.5, is_primary=person.primary_email_id is None,
+                workspace_id=ws,
+                person_id=person.id,
+                company_id=company_id,
+                address=email,
+                local_part=local,
+                domain=dom,
+                kind=EmailKind.person,
+                discovery_method=EmailDiscoveryMethod.import_,
+                status=EmailStatus.UNKNOWN,
+                overall_confidence=0.5,
+                is_primary=person.primary_email_id is None,
             )
             s.add(e)
             await s.flush()
@@ -285,24 +334,49 @@ async def import_chunk(ctx: JobContext) -> dict[str, Any]:
                 company_only.append(cid)
         if imp.mark_as_known and (person_ids or company_only):
             await registry.record_exposures(
-                s, imp.workspace_id, ExposureType.IMPORTED, person_ids=person_ids, company_ids=company_only, import_id=imp.id
+                s,
+                imp.workspace_id,
+                ExposureType.IMPORTED,
+                person_ids=person_ids,
+                company_ids=company_only,
+                import_id=imp.id,
             )
         if imp.list_id:
             if person_ids:
-                await add_to_list(s, imp.workspace_id, imp.list_id, EntityType.person, person_ids, user_id=imp.created_by, added_via="import")
+                await add_to_list(
+                    s,
+                    imp.workspace_id,
+                    imp.list_id,
+                    EntityType.person,
+                    person_ids,
+                    user_id=imp.created_by,
+                    added_via="import",
+                )
             if company_only:
                 from scout.db.models import List
 
                 lst = await s.get(List, imp.list_id)
                 if lst and lst.entity_type == EntityType.company:
-                    await add_to_list(s, imp.workspace_id, imp.list_id, EntityType.company, company_only, user_id=imp.created_by, added_via="import")
+                    await add_to_list(
+                        s,
+                        imp.workspace_id,
+                        imp.list_id,
+                        EntityType.company,
+                        company_only,
+                        user_id=imp.created_by,
+                        added_via="import",
+                    )
         await s.execute(
-            sa.update(Import).where(Import.id == import_id).values(
+            sa.update(Import)
+            .where(Import.id == import_id)
+            .values(
                 imported_count=Import.imported_count + imported,
                 merged_count=Import.merged_count + merged,
                 skipped_count=Import.skipped_count + skipped,
                 error_count=Import.error_count + errors,
-                errors=Import.errors.op("||")(sa.literal(error_rows, type_=JSONB)) if error_rows else Import.errors,
+                errors=Import.errors.op("||")(sa.literal(error_rows, type_=JSONB))
+                if error_rows
+                else Import.errors,
             )
         )
         await s.flush()
@@ -311,11 +385,21 @@ async def import_chunk(ctx: JobContext) -> dict[str, Any]:
         if done >= imp.row_count and imp.status != ImportStatus.completed:
             imp.status = ImportStatus.completed
             imp.finished_at = sa.func.now()
-        await emit(imp.workspace_id, "import.progress", {
-            "import_id": str(imp.id), "done": done, "total": imp.row_count, "imported": imp.imported_count,
-            "merged": imp.merged_count, "skipped": imp.skipped_count, "errors": imp.error_count,
-            "status": imp.status.value if hasattr(imp.status, "value") else str(imp.status),
-        }, session=s)
+        await emit(
+            imp.workspace_id,
+            "import.progress",
+            {
+                "import_id": str(imp.id),
+                "done": done,
+                "total": imp.row_count,
+                "imported": imp.imported_count,
+                "merged": imp.merged_count,
+                "skipped": imp.skipped_count,
+                "errors": imp.error_count,
+                "status": imp.status.value if hasattr(imp.status, "value") else str(imp.status),
+            },
+            session=s,
+        )
     return {"imported": imported, "merged": merged, "skipped": skipped, "errors": errors}
 
 
@@ -326,10 +410,19 @@ async def get_import(s: AsyncSession, workspace_id: uuid.UUID, import_id: uuid.U
 
         raise NotFound("Import not found")
     return {
-        "id": imp.id, "filename": imp.filename, "status": imp.status.value, "row_count": imp.row_count,
-        "imported_count": imp.imported_count, "merged_count": imp.merged_count, "skipped_count": imp.skipped_count,
-        "error_count": imp.error_count, "errors": imp.errors, "list_id": imp.list_id, "mark_as_known": imp.mark_as_known,
-        "created_at": imp.created_at, "finished_at": imp.finished_at,
+        "id": imp.id,
+        "filename": imp.filename,
+        "status": imp.status.value,
+        "row_count": imp.row_count,
+        "imported_count": imp.imported_count,
+        "merged_count": imp.merged_count,
+        "skipped_count": imp.skipped_count,
+        "error_count": imp.error_count,
+        "errors": imp.errors,
+        "list_id": imp.list_id,
+        "mark_as_known": imp.mark_as_known,
+        "created_at": imp.created_at,
+        "finished_at": imp.finished_at,
     }
 
 

@@ -27,3 +27,4 @@ test-results/
 .DS_Store
 *.log
 /tmp/
+*.tsbuildinfo

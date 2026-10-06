@@ -36,8 +36,12 @@ T = TypeVar("T", bound=BaseModel)
 
 def _usage(model: str, resp: Any, grounded: int = 0) -> AIUsage:
     um = getattr(resp, "usage_metadata", None)
-    tin = int(getattr(um, "prompt_token_count", 0) or 0) + int(getattr(um, "tool_use_prompt_token_count", 0) or 0)
-    tout = int(getattr(um, "candidates_token_count", 0) or 0) + int(getattr(um, "thoughts_token_count", 0) or 0)
+    tin = int(getattr(um, "prompt_token_count", 0) or 0) + int(
+        getattr(um, "tool_use_prompt_token_count", 0) or 0
+    )
+    tout = int(getattr(um, "candidates_token_count", 0) or 0) + int(
+        getattr(um, "thoughts_token_count", 0) or 0
+    )
     cost = estimate_cost(model, tin, tout) + grounded * get_settings().cost_grounded_search_usd
     return AIUsage(model=model, tokens_in=tin, tokens_out=tout, cost_usd=cost, grounded_queries=grounded)
 
@@ -102,7 +106,9 @@ class GeminiProvider:
         )
         async with pool("gemini"):
             try:
-                resp = await self._client.aio.models.generate_content(model=model, contents=prompt, config=config)
+                resp = await self._client.aio.models.generate_content(
+                    model=model, contents=prompt, config=config
+                )
             except Exception as exc:  # SDK raises APIError subclasses
                 raise RetryableError(f"Gemini request failed: {exc}") from exc
         usage = _usage(model, resp)
@@ -139,14 +145,18 @@ class GeminiProvider:
                         role="user",
                         parts=[
                             types.Part(
-                                function_response=types.FunctionResponse(id=c.id, name=c.name, response=result)
+                                function_response=types.FunctionResponse(
+                                    id=c.id, name=c.name, response=result
+                                )
                             )
                             for c, result in t.tool_results
                         ],
                     )
                 )
         decls = [
-            types.FunctionDeclaration(name=t.name, description=t.description, parameters_json_schema=t.parameters)
+            types.FunctionDeclaration(
+                name=t.name, description=t.description, parameters_json_schema=t.parameters
+            )
             for t in tools
         ]
         config = types.GenerateContentConfig(
@@ -166,7 +176,7 @@ class GeminiProvider:
                 )
                 async for chunk in stream:
                     last_resp = chunk
-                    cand = (chunk.candidates or [None])[0]
+                    cand = chunk.candidates[0] if chunk.candidates else None
                     if cand is None or cand.content is None:
                         continue
                     for part in cand.content.parts or []:
@@ -209,10 +219,12 @@ class GeminiProvider:
         )
         async with pool("search"):
             try:
-                resp = await self._client.aio.models.generate_content(model=model, contents=prompt, config=config)
+                resp = await self._client.aio.models.generate_content(
+                    model=model, contents=prompt, config=config
+                )
             except Exception as exc:
                 raise RetryableError(f"Gemini grounded search failed: {exc}") from exc
-        cand = (resp.candidates or [None])[0]
+        cand = resp.candidates[0] if resp.candidates else None
         gm = getattr(cand, "grounding_metadata", None) if cand else None
         sources: list[GroundingSource] = []
         supports: list[GroundingSupport] = []
@@ -225,7 +237,9 @@ class GeminiProvider:
             for sp in gm.grounding_supports or []:
                 if sp.segment and sp.segment.text:
                     supports.append(
-                        GroundingSupport(text=sp.segment.text, source_indices=list(sp.grounding_chunk_indices or []))
+                        GroundingSupport(
+                            text=sp.segment.text, source_indices=list(sp.grounding_chunk_indices or [])
+                        )
                     )
         usage = _usage(model, resp, grounded=max(1, len(queries)) if gm is not None else 0)
         await self._record(usage, resolver="grounded_search")

@@ -49,7 +49,9 @@ def test_expand_terms_synonyms_and_stopwords():
     assert "instagram management" in lowered and "instagram" in lowered
     assert "insta" in lowered and "reseaux sociaux" in lowered and "community management" in lowered
     assert "offers" not in lowered
-    strict = [t.lower() for t in expand_terms("offers Instagram management", ["Instagram management"], strict=True)]
+    strict = [
+        t.lower() for t in expand_terms("offers Instagram management", ["Instagram management"], strict=True)
+    ]
     assert "insta" in strict and "reels" not in strict
 
 
@@ -63,7 +65,9 @@ def test_rank_passages_prefers_service_passages_and_dedupes_footers():
     pages = _pages("agency_instagram")
     passages = passages_for_pages(pages, max_chars=300)
     terms = expand_terms("offers Instagram management", ["Instagram management", "Instagram"])
-    ranked = rank_passages(passages, terms, page_priors=page_priors_for("Instagram management", ["services"]), k=4)
+    ranked = rank_passages(
+        passages, terms, page_priors=page_priors_for("Instagram management", ["services"]), k=4
+    )
     assert ranked and ranked[0].page_type in {"services", "home"}
     assert any(p.page_type == "services" and "gérons vos comptes Instagram" in p.text for p in ranked[:3])
     assert all(p.page_type != "contact" for p in ranked)
@@ -75,7 +79,9 @@ def test_rank_passages_prefers_service_passages_and_dedupes_footers():
 def test_rank_passages_max_chars_and_unmatched_fill():
     passages = [Passage(None, f"https://x.test/{i}", "other", "lorem ipsum " * 40, i) for i in range(10)]
     assert rank_passages(passages, ["instagram"]) == []
-    filled = rank_passages(passages, ["instagram"], include_unmatched=True, k=10, max_chars=1000, max_per_page=1)
+    filled = rank_passages(
+        passages, ["instagram"], include_unmatched=True, k=10, max_chars=1000, max_per_page=1
+    )
     assert filled and sum(len(p.text) for p in filled) <= 1000
 
 

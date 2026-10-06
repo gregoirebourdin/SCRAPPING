@@ -95,7 +95,8 @@ async def test_connection_refused_is_blocked_and_tries_next_mx():
 
 async def test_second_mx_used_when_first_unreachable():
     server = FakeSmtpServer(
-        mailboxes={TARGET}, connect_errors={"mx1.agence-x.fr": aiosmtplib.SMTPConnectTimeoutError("timed out")}
+        mailboxes={TARGET},
+        connect_errors={"mx1.agence-x.fr": aiosmtplib.SMTPConnectTimeoutError("timed out")},
     )
     res = await make(server).verify(TARGET)
     assert res.smtp_result == R.accepted and res.raw["smtp"]["host"] == "mx2.agence-x.fr"

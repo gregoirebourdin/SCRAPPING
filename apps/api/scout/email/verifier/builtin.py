@@ -36,13 +36,39 @@ MEMORY_TTL_S = 3600.0
 _ACCEPT_CODES = {250, 251}
 _REJECT_CODES = {550, 551, 553, 554}
 _USER_UNKNOWN_HINTS = (
-    "5.1.1", "5.1.0", "5.1.10", "user unknown", "unknown user", "no such user", "does not exist",
-    "doesn't exist", "mailbox unavailable", "mailbox not found", "recipient rejected", "address rejected",
-    "invalid recipient", "recipient invalid", "no mailbox", "undeliverable", "not found", "unknown recipient",
+    "5.1.1",
+    "5.1.0",
+    "5.1.10",
+    "user unknown",
+    "unknown user",
+    "no such user",
+    "does not exist",
+    "doesn't exist",
+    "mailbox unavailable",
+    "mailbox not found",
+    "recipient rejected",
+    "address rejected",
+    "invalid recipient",
+    "recipient invalid",
+    "no mailbox",
+    "undeliverable",
+    "not found",
+    "unknown recipient",
 )
 _BLOCK_HINTS = (
-    "5.7.", "spamhaus", "blocked", "blacklist", "blocklist", "block list", "banned", "denied", "reputation",
-    "rbl", "dnsbl", "policy", "spam",
+    "5.7.",
+    "spamhaus",
+    "blocked",
+    "blacklist",
+    "blocklist",
+    "block list",
+    "banned",
+    "denied",
+    "reputation",
+    "rbl",
+    "dnsbl",
+    "policy",
+    "spam",
 )
 
 MxLookup = Callable[[str], Awaitable[dns.MxInfo]]
@@ -176,8 +202,12 @@ class BuiltinVerifier:
         await self._record_usage()
         mx = await self._mx_lookup(domain)
         res.raw["mx"] = {
-            "has_mx": mx.has_mx, "mx_hosts": mx.mx_hosts, "has_a": mx.has_a, "null_mx": mx.null_mx,
-            "cached": mx.cached, "error": mx.error,
+            "has_mx": mx.has_mx,
+            "mx_hosts": mx.mx_hosts,
+            "has_a": mx.has_a,
+            "null_mx": mx.null_mx,
+            "cached": mx.cached,
+            "error": mx.error,
         }
         if mx.transient:
             res.error = mx.error
@@ -219,8 +249,10 @@ class BuiltinVerifier:
             probe = await self._probe(hosts, rcpts)
         res.raw["smtp"] = {
             "host": probe.host,
-            "rcpt": [{"address": r.address, "code": r.code, "message": r.message[:300], "result": r.result}
-                     for r in probe.rcpts],
+            "rcpt": [
+                {"address": r.address, "code": r.code, "message": r.message[:300], "result": r.result}
+                for r in probe.rcpts
+            ],
             "error": probe.error,
         }
         res.catch_all = known
@@ -313,6 +345,8 @@ class BuiltinVerifier:
     @staticmethod
     async def _record_usage() -> None:
         try:
-            await record_usage(UsageCategory.verification_request, cost_usd=get_settings().cost_verification_usd)
+            await record_usage(
+                UsageCategory.verification_request, cost_usd=get_settings().cost_verification_usd
+            )
         except Exception as exc:  # usage accounting must never break verification
             log.warning("email.usage_record_failed", error=str(exc))

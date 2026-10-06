@@ -94,13 +94,27 @@ async def resolve(rc: ResolveContext) -> CellResult:
     found = find_profile(rc.pages, network) if rc.pages else None
     if found:
         url, page = found
-        return ok(plan, True if boolean else url, resolver=RESOLVER, confidence=0.95,
-                  evidence=f"{label} profile linked from {page.url}" + (f": {url}" if boolean else ""),
-                  source_url=page.url)
+        return ok(
+            plan,
+            True if boolean else url,
+            resolver=RESOLVER,
+            confidence=0.95,
+            evidence=f"{label} profile linked from {page.url}" + (f": {url}" if boolean else ""),
+            source_url=page.url,
+        )
     if network == "linkedin" and rc.company is not None and rc.company.linkedin_url:
         url = rc.company.linkedin_url
-        return ok(plan, True if boolean else url, resolver="company_record", confidence=0.85,
-                  evidence="LinkedIn URL from the company record", source_url=url, source_id="company_record")
+        return ok(
+            plan,
+            True if boolean else url,
+            resolver="company_record",
+            confidence=0.85,
+            evidence="LinkedIn URL from the company record",
+            source_url=url,
+            source_id="company_record",
+        )
     if not rc.pages:
         return unknown(plan, resolver=RESOLVER, error=NOT_CRAWLED)
-    return unknown(plan, resolver=RESOLVER, evidence=f"No {label} link found on crawled pages", source_id="website")
+    return unknown(
+        plan, resolver=RESOLVER, evidence=f"No {label} link found on crawled pages", source_id="website"
+    )

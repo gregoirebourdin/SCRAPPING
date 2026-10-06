@@ -86,11 +86,15 @@ def test_parse_sitemap_urlset_and_index():
       <sitemap><loc>https://x.fr/page-sitemap.xml</loc></sitemap>
     </sitemapindex>"""
     entries = parse_sitemap_entries(index)
-    assert entries.is_index and entries.sitemaps == ["https://x.fr/post-sitemap.xml", "https://x.fr/page-sitemap.xml"]
+    assert entries.is_index and entries.sitemaps == [
+        "https://x.fr/post-sitemap.xml",
+        "https://x.fr/page-sitemap.xml",
+    ]
     assert parse_sitemap(index) == entries.sitemaps
     # broken XML still yields locs; entities are never resolved (XXE-safe)
     assert parse_sitemap("<urlset><url><loc>https://x.fr/a</loc></url><url><loc>https://x.fr/b</loc>") == [
-        "https://x.fr/a", "https://x.fr/b",
+        "https://x.fr/a",
+        "https://x.fr/b",
     ]
     xxe = '<?xml version="1.0"?><!DOCTYPE r [<!ENTITY e SYSTEM "file:///etc/passwd">]><urlset><url><loc>&e;</loc></url></urlset>'
     assert all("root:" not in u for u in parse_sitemap(xxe))
@@ -107,7 +111,9 @@ def test_select_pages_fr_site():
     for expected in (PageType.team, PageType.about, PageType.legal, PageType.contact, PageType.services):
         assert expected in types
     assert len(plan) <= 10
-    assert not any(u.endswith(".pdf") or "/tag/" in u or "/blog/" in u or "confidentialite" in u for u in urls)
+    assert not any(
+        u.endswith(".pdf") or "/tag/" in u or "/blog/" in u or "confidentialite" in u for u in urls
+    )
     assert len(urls) == len(set(urls))
     assert types.index(PageType.team) < types.index(PageType.services)
 
@@ -157,12 +163,21 @@ def test_select_pages_en_site():
 
 def test_parked_detection():
     html = (FIX / "parked.html").read_text()
-    assert detect_parked(html, parse_html(html, "http://boulangerie-dupont.fr/"), "http://boulangerie-dupont.fr/")
-    assert detect_parked("<html><body>x</body></html>", parse_html("<html><body>x</body></html>", "https://a.fr/"), "https://sedo.com/x")
+    assert detect_parked(
+        html, parse_html(html, "http://boulangerie-dupont.fr/"), "http://boulangerie-dupont.fr/"
+    )
+    assert detect_parked(
+        "<html><body>x</body></html>",
+        parse_html("<html><body>x</body></html>", "https://a.fr/"),
+        "https://sedo.com/x",
+    )
     construction = "<html><body><h1>Site en construction</h1><p>Boulangerie Dupont – ouverture prochaine !</p></body></html>"
     assert detect_parked(construction, parse_html(construction, "https://a.fr/"), "https://a.fr/") is None
     real = (FIX / "agence_lumiere/home.html").read_text()
-    assert detect_parked(real, parse_html(real, "http://agence-lumiere.fr/"), "http://agence-lumiere.fr/") is None
+    assert (
+        detect_parked(real, parse_html(real, "http://agence-lumiere.fr/"), "http://agence-lumiere.fr/")
+        is None
+    )
 
 
 def test_select_pages_stays_on_home_origin():

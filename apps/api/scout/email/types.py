@@ -18,7 +18,7 @@ class VerificationResult:
     disposable: bool
     role_address: bool
     free_provider: bool
-    verifier: str                    # "aftership" | "builtin" | "fixture"
+    verifier: str  # "aftership" | "builtin" | "fixture"
     raw: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
     duration_ms: int | None = None
@@ -28,10 +28,10 @@ class VerificationResult:
 class EmailCandidate:
     address: str
     method: EmailDiscoveryMethod
-    pattern: str | None              # e.g. "{first}.{last}"
-    pattern_confidence: float        # prior that this address is right before verification (0–1)
+    pattern: str | None  # e.g. "{first}.{last}"
+    pattern_confidence: float  # prior that this address is right before verification (0–1)
     source_url: str | None = None
-    supporting_samples: int = 0      # named samples backing `pattern` at this domain (known/inferred)
+    supporting_samples: int = 0  # named samples backing `pattern` at this domain (known/inferred)
 
 
 @dataclass
@@ -50,12 +50,12 @@ class EmailFinding:
 
     address: str | None
     status: EmailStatus
-    overall_confidence: float        # 0–1
+    overall_confidence: float  # 0–1
     method: EmailDiscoveryMethod | None
     pattern: str | None
     pattern_confidence: float | None
     verification: VerificationResult | None
     candidates_tried: list[str] = field(default_factory=list)
-    reason: str | None = None        # when address is None or status not acceptable
+    reason: str | None = None  # when address is None or status not acceptable
     source_url: str | None = None
     attempts: list[EmailAttempt] = field(default_factory=list)

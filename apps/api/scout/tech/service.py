@@ -44,8 +44,14 @@ def _parse(payload: Any) -> list[DetectedTech] | None:
             continue
         seen.add(name)
         cats = item.get("categories") or []
-        category = cats[0] if isinstance(cats, list) and cats and isinstance(cats[0], str) else CATEGORIES.get(name, "Other")
-        version = item.get("version") if isinstance(item.get("version"), str) and item.get("version") else None
+        category = (
+            cats[0]
+            if isinstance(cats, list) and cats and isinstance(cats[0], str)
+            else CATEGORIES.get(name, "Other")
+        )
+        version = (
+            item.get("version") if isinstance(item.get("version"), str) and item.get("version") else None
+        )
         out.append(
             DetectedTech(
                 name=name,
@@ -58,7 +64,9 @@ def _parse(payload: Any) -> list[DetectedTech] | None:
     return out
 
 
-async def detect_via_service(url: str, headers: dict[str, Any] | None, html: str | None) -> list[DetectedTech] | None:
+async def detect_via_service(
+    url: str, headers: dict[str, Any] | None, html: str | None
+) -> list[DetectedTech] | None:
     """Technologies from the Go service, or None when it is not configured / fails."""
     base = service_url()
     if not base:

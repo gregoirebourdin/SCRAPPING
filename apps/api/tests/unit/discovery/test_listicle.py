@@ -18,9 +18,9 @@ PAGE = "https://www.lafabrique-du-web.fr/blog/top-10-agences-marketing-lyon"
 def test_extract_company_links() -> None:
     cands = extract_listicle_links(fixture_text("listicle_agences_lyon.html"), PAGE)
     assert [(c.domain, c.name) for c in cands] == [
-        ("agence-boreal.fr", "Boréal"),            # "Voir le site" → preceding heading, ordinal stripped
+        ("agence-boreal.fr", "Boréal"),  # "Voir le site" → preceding heading, ordinal stripped
         ("pixel-studio-lyon.fr", "Pixel Studio"),
-        ("kreacom.fr", "Kréa Com"),                # facebook link skipped, "leur site" → heading
+        ("kreacom.fr", "Kréa Com"),  # facebook link skipped, "leur site" → heading
         ("atelier-nord.studio", "Atelier Nord"),
         ("mediapilote-lyon.fr", "Médiapilote Lyon"),
         ("okidoki-agence.fr", "Okidoki"),
@@ -29,7 +29,9 @@ def test_extract_company_links() -> None:
     assert c.source == "web_search" and c.website == "https://agence-boreal.fr/" and c.source_url == PAGE
     assert c.raw_data["listicle_url"] == PAGE
     # nav / footer / directory / same-site links never become candidates
-    assert not {"partner-network.io", "footer-sponsor.fr", "sortlist.fr", "lafabrique-du-web.fr"} & {x.domain for x in cands}
+    assert not {"partner-network.io", "footer-sponsor.fr", "sortlist.fr", "lafabrique-du-web.fr"} & {
+        x.domain for x in cands
+    }
 
 
 @dataclass

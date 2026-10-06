@@ -38,7 +38,15 @@ _HREF_RE = re.compile(r'href="([^"]+)"', re.I)
 _TAG_RE = re.compile(r"<[^>]+>")
 _URL_RE = re.compile(r"https?://[^\s|<>\"')]+", re.I)
 _LOCATION_HINT = re.compile(r"\b(remote|onsite|on-site|hybrid|in-office|relocation)\b", re.I)
-_TECH_TAGS = {"software_saas", "ai_company", "fintech", "healthtech", "it_services", "cybersecurity", "ecommerce_brand"}
+_TECH_TAGS = {
+    "software_saas",
+    "ai_company",
+    "fintech",
+    "healthtech",
+    "it_services",
+    "cybersecurity",
+    "ecommerce_brand",
+}
 
 
 def _to_text(fragment: str) -> str:
@@ -57,12 +65,18 @@ def parse_comment(comment_html: str) -> dict[str, Any] | None:
     if len(parts) < 2:
         return None
     company = re.sub(r"\s*\((YC|W|S)[^)]*\)\s*$", "", parts[0]).strip()
-    if not company or len(company) > 80 or company.lower().startswith(("http", "we ", "hiring", "senior ", "remote")):
+    if (
+        not company
+        or len(company) > 80
+        or company.lower().startswith(("http", "we ", "hiring", "senior ", "remote"))
+    ):
         return None
     hrefs = [html_lib.unescape(h) for h in _HREF_RE.findall(comment_html)]
     urls = hrefs + _URL_RE.findall(_to_text(comment_html))
     website = next((u for u in urls if candidate_domain(u)), None)
-    location = next((p for p in parts[1:] if _LOCATION_HINT.search(p) or geo.find_city(p.split(",")[0])), None)
+    location = next(
+        (p for p in parts[1:] if _LOCATION_HINT.search(p) or geo.find_city(p.split(",")[0])), None
+    )
     roles = [p for p in parts[1:] if p != location and not _URL_RE.match(p)]
     return {
         "company": company,
@@ -118,7 +132,9 @@ class HNHiringSource:
             return []
         params = {"countries": target_countries(defn), "cities": list(defn.company_filters.cities)}
         return [
-            DiscoveryQuery(key=f"hn:who_is_hiring:{m}", params={**params, "months_back": m}, weight=1.0 / (1 + m))
+            DiscoveryQuery(
+                key=f"hn:who_is_hiring:{m}", params={**params, "months_back": m}, weight=1.0 / (1 + m)
+            )
             for m in range(0, 2 + 2 * expansion)
         ]
 
@@ -145,7 +161,9 @@ class HNHiringSource:
                 return DiscoveryPage([], next_cursor=None)
             story_id, title = str(story["objectID"]), story.get("title")
         page = int(cur.get("page", 0))
-        body = await self._get("/search", {"tags": f"comment,story_{story_id}", "hitsPerPage": HITS_PER_PAGE, "page": page})
+        body = await self._get(
+            "/search", {"tags": f"comment,story_{story_id}", "hitsPerPage": HITS_PER_PAGE, "page": page}
+        )
         countries, cities = query.params.get("countries") or [], query.params.get("cities") or []
         candidates: list[RawCandidate] = []
         for hit in body.get("hits") or []:
@@ -155,7 +173,11 @@ class HNHiringSource:
             if not info or not info["url"] or not _location_ok(info, countries, cities):
                 continue
             dom = candidate_domain(info["url"])
-            city = geo.find_city((info.get("location") or "").split(",")[0].strip()) if info.get("location") else None
+            city = (
+                geo.find_city((info.get("location") or "").split(",")[0].strip())
+                if info.get("location")
+                else None
+            )
             candidates.append(
                 RawCandidate(
                     source=self.key,

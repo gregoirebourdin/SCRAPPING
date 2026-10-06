@@ -17,8 +17,19 @@ from scout.enrich.values import display_for
 
 # Order in which pages are scanned by deterministic resolvers (first match wins).
 PAGE_ORDER: dict[str, int] = {
-    "home": 0, "services": 1, "solutions": 2, "about": 3, "case_studies": 4, "pricing": 5, "contact": 6,
-    "team": 7, "careers": 8, "blog": 9, "news": 10, "other": 11, "legal": 12,
+    "home": 0,
+    "services": 1,
+    "solutions": 2,
+    "about": 3,
+    "case_studies": 4,
+    "pricing": 5,
+    "contact": 6,
+    "team": 7,
+    "careers": 8,
+    "blog": 9,
+    "news": 10,
+    "other": 11,
+    "legal": 12,
 }
 
 
@@ -31,7 +42,9 @@ def ordered_pages(pages: Iterable[Any], only: Sequence[PageType | str] = ()) -> 
     """Pages sorted home → services → … → legal; optionally restricted to `only` page types."""
     allowed = {str(getattr(t, "value", t)) for t in only}
     items = [p for p in pages if not allowed or page_type_of(p) in allowed]
-    return sorted(items, key=lambda p: (PAGE_ORDER.get(page_type_of(p), 11), len(getattr(p, "url", "") or "")))
+    return sorted(
+        items, key=lambda p: (PAGE_ORDER.get(page_type_of(p), 11), len(getattr(p, "url", "") or ""))
+    )
 
 
 async def load_technologies(
@@ -45,10 +58,14 @@ async def load_technologies(
     except ImportError:
         detect_technologies = None  # type: ignore[assignment]
     if detect_technologies is not None:
-        return list(await detect_technologies(workspace_id, company.id, force=force, max_age_days=max_age_days))
+        return list(
+            await detect_technologies(workspace_id, company.id, force=force, max_age_days=max_age_days)
+        )
     async with session_scope() as s:
         rows = await s.scalars(
-            sa.select(Technology).where(Technology.workspace_id == workspace_id, Technology.company_id == company.id)
+            sa.select(Technology).where(
+                Technology.workspace_id == workspace_id, Technology.company_id == company.id
+            )
         )
         return list(rows.all())
 
@@ -63,7 +80,9 @@ class ResolveContext:
     person: Person | None = None
     pages: list[WebsitePage] = field(default_factory=list)
     column_id: uuid.UUID | None = None
-    factual_values: dict[str, str] = field(default_factory=dict)  # other factual columns (generated text input)
+    factual_values: dict[str, str] = field(
+        default_factory=dict
+    )  # other factual columns (generated text input)
     dependency_values: dict[str, Any] = field(default_factory=dict)
     force: bool = False
     _technologies: list[Technology] | None = None
@@ -99,7 +118,9 @@ class ResolveContext:
                 return self._emails
             async with session_scope() as s:
                 rows = await s.scalars(
-                    sa.select(Email).where(*cond).order_by(Email.is_primary.desc(), Email.overall_confidence.desc().nulls_last())
+                    sa.select(Email)
+                    .where(*cond)
+                    .order_by(Email.is_primary.desc(), Email.overall_confidence.desc().nulls_last())
                 )
                 self._emails = list(rows.all())
         return self._emails
@@ -123,8 +144,15 @@ def ok(
 ) -> CellResult:
     """A successful cell. Invariant: success cells always carry a non-null value."""
     if value is None:
-        return unknown(plan, resolver=resolver, evidence=evidence, source_url=source_url, source_id=source_id,
-                       model=model, cost_usd=cost_usd)
+        return unknown(
+            plan,
+            resolver=resolver,
+            evidence=evidence,
+            source_url=source_url,
+            source_id=source_id,
+            model=model,
+            cost_usd=cost_usd,
+        )
     return CellResult(
         status=CellStatus.success,
         value=value,

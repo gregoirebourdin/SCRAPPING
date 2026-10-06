@@ -49,11 +49,15 @@ def classify_email(address: str) -> str:
     if tokens and tokens[0] in ROLE_LOCALS and (len(tokens) > 1 or folded.startswith(tokens[0])):
         if len(tokens) == 1 or not is_known_first_name(tokens[0]):
             return "role"  # contact-paris@, info.lyon@, jobs2024@
-    if re.fullmatch(r"[a-z]+\d*", folded) and any(folded.startswith(p) and folded[len(p):].isdigit() for p in _ROLE_PREFIXES):
+    if re.fullmatch(r"[a-z]+\d*", folded) and any(
+        folded.startswith(p) and folded[len(p) :].isdigit() for p in _ROLE_PREFIXES
+    ):
         return "role"
     label = (registrable_domain(domain) or domain).split(".", 1)[0]
     alpha = re.sub(r"[^a-z]", "", folded)
-    if label and (alpha == re.sub(r"[^a-z]", "", label) or (len(alpha) >= 4 and alpha in label.replace("-", ""))):
+    if label and (
+        alpha == re.sub(r"[^a-z]", "", label) or (len(alpha) >= 4 and alpha in label.replace("-", ""))
+    ):
         return "generic"  # lumiere@agence-lumiere.fr
     if len(tokens) == 2 and all(t.isalpha() for t in tokens) and any(len(t) >= 2 for t in tokens):
         return "person"  # jean.dupont / j.dupont / jean-dupont
@@ -82,7 +86,11 @@ def _last_variants(last: str) -> list[str]:
     if not parts:
         return []
     out = ["".join(parts), "-".join(parts)]
-    core = [p for p in parts if p not in ("de", "du", "des", "la", "le", "van", "von", "der", "den", "d", "di", "da")]
+    core = [
+        p
+        for p in parts
+        if p not in ("de", "du", "des", "la", "le", "van", "von", "der", "den", "d", "di", "da")
+    ]
     if core and core != parts:
         out.append("".join(core))
     out.append(parts[-1])

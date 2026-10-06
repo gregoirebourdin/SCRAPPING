@@ -26,7 +26,9 @@ class EmployeeRange(Strict):
 
 
 class CompanyFilters(Strict):
-    industries: list[str] = Field(default_factory=list, description="Free-text industries, e.g. 'marketing agency'")
+    industries: list[str] = Field(
+        default_factory=list, description="Free-text industries, e.g. 'marketing agency'"
+    )
     keywords: list[str] = Field(default_factory=list, description="Extra discovery keywords")
     countries: list[str] = Field(default_factory=list, description="ISO-3166 alpha-2 codes, e.g. FR")
     regions: list[str] = Field(default_factory=list)
@@ -123,7 +125,9 @@ class ScoreWeights(Strict):
 class EnrichmentRequest(Strict):
     name: str
     instruction: str
-    required_value: str | None = Field(default=None, description="If set, only leads whose value equals this qualify")
+    required_value: str | None = Field(
+        default=None, description="If set, only leads whose value equals this qualify"
+    )
 
 
 class SourcePrefs(Strict):
@@ -149,6 +153,10 @@ class Seed(Strict):
 RequiredField = Literal["company", "website", "person", "professional_email", "phone"]
 
 
+def _default_required_fields() -> list[RequiredField]:
+    return ["company", "person", "professional_email"]
+
+
 class CampaignDefinition(Strict):
     version: Literal[1] = 1
     name: str | None = None
@@ -157,7 +165,7 @@ class CampaignDefinition(Strict):
     company_filters: CompanyFilters = Field(default_factory=CompanyFilters)
     website_conditions: list[WebsiteCondition] = Field(default_factory=list)
     people_filters: PeopleFilters = Field(default_factory=PeopleFilters)
-    required_fields: list[RequiredField] = Field(default_factory=lambda: ["company", "person", "professional_email"])
+    required_fields: list[RequiredField] = Field(default_factory=_default_required_fields)
     minimum_email_confidence: int = Field(default=80, ge=0, le=100)
     minimum_person_confidence: int = Field(default=80, ge=0, le=100)
     minimum_company_fit: int = Field(default=60, ge=0, le=100)
@@ -174,7 +182,9 @@ class CampaignDefinition(Strict):
     @model_validator(mode="after")
     def _consistency(self) -> CampaignDefinition:
         if self.mode == CampaignMode.companies:
-            self.required_fields = [f for f in self.required_fields if f not in ("person", "professional_email")]
+            self.required_fields = [
+                f for f in self.required_fields if f not in ("person", "professional_email")
+            ]
         return self
 
     @property
@@ -191,23 +201,35 @@ class InterpretationItem(BaseModel):
     value: str
 
 
-def interpret(defn: CampaignDefinition, list_names: dict[uuid.UUID, str] | None = None) -> list[InterpretationItem]:
+def interpret(
+    defn: CampaignDefinition, list_names: dict[uuid.UUID, str] | None = None
+) -> list[InterpretationItem]:
     """Compact human-readable interpretation card (spec §127)."""
     list_names = list_names or {}
     items: list[InterpretationItem] = []
     noun = "leads" if defn.mode == CampaignMode.people else "companies"
     fresh = defn.exclusion.mode != ExclusionMode.NONE
-    items.append(InterpretationItem(label="Target", value=f"{defn.target_qualified_count:,} {'new ' if fresh else ''}{noun}"))
+    items.append(
+        InterpretationItem(
+            label="Target", value=f"{defn.target_qualified_count:,} {'new ' if fresh else ''}{noun}"
+        )
+    )
     cf = defn.company_filters
     if cf.industries:
-        items.append(InterpretationItem(label="Companies", value=", ".join(i.capitalize() for i in cf.industries)))
+        items.append(
+            InterpretationItem(label="Companies", value=", ".join(i.capitalize() for i in cf.industries))
+        )
     if cf.countries or cf.regions or cf.cities:
         loc = ", ".join([*cf.cities, *cf.regions, *[_country_name(c) for c in cf.countries]])
         items.append(InterpretationItem(label="Location", value=loc))
     if cf.employee_range and (cf.employee_range.min is not None or cf.employee_range.max is not None):
         lo = cf.employee_range.min if cf.employee_range.min is not None else 0
         hi = cf.employee_range.max
-        items.append(InterpretationItem(label="Size", value=f"{lo}–{hi} employees" if hi is not None else f"{lo}+ employees"))
+        items.append(
+            InterpretationItem(
+                label="Size", value=f"{lo}–{hi} employees" if hi is not None else f"{lo}+ employees"
+            )
+        )
     for c in defn.website_conditions:
         if isinstance(c, KeywordCondition):
             joiner = " or " if c.type == "keyword_any" else " and "
@@ -215,7 +237,11 @@ def interpret(defn: CampaignDefinition, list_names: dict[uuid.UUID, str] | None 
         elif isinstance(c, SemanticCondition):
             items.append(InterpretationItem(label="Website", value=c.label or f"Actually: {c.concept}"))
         elif isinstance(c, TechnologyCondition):
-            items.append(InterpretationItem(label="Technology", value=(" or " if c.match == "any" else " and ").join(c.technologies)))
+            items.append(
+                InterpretationItem(
+                    label="Technology", value=(" or " if c.match == "any" else " and ").join(c.technologies)
+                )
+            )
         elif isinstance(c, RegexCondition):
             items.append(InterpretationItem(label="Website", value=c.label or f"Matches /{c.pattern}/"))
     if defn.mode == CampaignMode.people:
@@ -226,7 +252,8 @@ def interpret(defn: CampaignDefinition, list_names: dict[uuid.UUID, str] | None 
         items.append(
             InterpretationItem(
                 label="Email",
-                value="Required · " + "/".join(s.value.replace("_", "-") for s in defn.accepted_email_statuses)
+                value="Required · "
+                + "/".join(s.value.replace("_", "-") for s in defn.accepted_email_statuses)
                 if defn.requires_email
                 else "Optional",
             )
@@ -236,11 +263,17 @@ def interpret(defn: CampaignDefinition, list_names: dict[uuid.UUID, str] | None 
         items.append(InterpretationItem(label="Previously seen", value="Allowed (existing data reused)"))
     else:
         label = {
-            ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE: "People excluded" + (" · new people at known companies allowed" if ex.allow_new_people_at_existing_companies else ""),
+            ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE: "People excluded"
+            + (
+                " · new people at known companies allowed"
+                if ex.allow_new_people_at_existing_companies
+                else ""
+            ),
             ExclusionMode.EXCLUDE_PREVIOUS_COMPANIES: "Companies excluded",
             ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE_AND_COMPANIES: "People and companies excluded",
             ExclusionMode.EXCLUDE_EXPORTED: "Previously exported excluded",
-            ExclusionMode.EXCLUDE_SPECIFIC_LISTS: "Excluded lists: " + ", ".join(list_names.get(i, "list") for i in ex.list_ids),
+            ExclusionMode.EXCLUDE_SPECIFIC_LISTS: "Excluded lists: "
+            + ", ".join(list_names.get(i, "list") for i in ex.list_ids),
             ExclusionMode.EXCLUDE_CURRENT_LIST: "Already in target list excluded",
             ExclusionMode.EXCLUDE_CONTACTED: "Contacted leads excluded",
             ExclusionMode.EXCLUDE_WITHIN_COOLDOWN: f"Seen in last {ex.cooldown_days or 90} days excluded",
@@ -253,10 +286,29 @@ def interpret(defn: CampaignDefinition, list_names: dict[uuid.UUID, str] | None 
 
 
 _COUNTRIES = {
-    "FR": "France", "BE": "Belgium", "CH": "Switzerland", "LU": "Luxembourg", "CA": "Canada", "US": "United States",
-    "GB": "United Kingdom", "DE": "Germany", "ES": "Spain", "IT": "Italy", "NL": "Netherlands", "PT": "Portugal",
-    "IE": "Ireland", "AT": "Austria", "SE": "Sweden", "DK": "Denmark", "NO": "Norway", "FI": "Finland", "PL": "Poland",
-    "AU": "Australia", "MA": "Morocco", "TN": "Tunisia", "SN": "Senegal",
+    "FR": "France",
+    "BE": "Belgium",
+    "CH": "Switzerland",
+    "LU": "Luxembourg",
+    "CA": "Canada",
+    "US": "United States",
+    "GB": "United Kingdom",
+    "DE": "Germany",
+    "ES": "Spain",
+    "IT": "Italy",
+    "NL": "Netherlands",
+    "PT": "Portugal",
+    "IE": "Ireland",
+    "AT": "Austria",
+    "SE": "Sweden",
+    "DK": "Denmark",
+    "NO": "Norway",
+    "FI": "Finland",
+    "PL": "Poland",
+    "AU": "Australia",
+    "MA": "Morocco",
+    "TN": "Tunisia",
+    "SN": "Senegal",
 }
 
 

@@ -19,8 +19,10 @@ OVERPASS = "https://overpass-api.de/api/interpreter"
 
 
 def query() -> DiscoveryQuery:
-    return DiscoveryQuery(key="osm:dentist:FR:Lyon", params={"tags": [["amenity", "dentist"], ["healthcare", "dentist"]],
-                                                             "city": "Lyon", "country": "FR"})
+    return DiscoveryQuery(
+        key="osm:dentist:FR:Lyon",
+        params={"tags": [["amenity", "dentist"], ["healthcare", "dentist"]], "city": "Lyon", "country": "FR"},
+    )
 
 
 @pytest.fixture
@@ -43,7 +45,10 @@ def test_parse_only_pois_with_company_websites() -> None:
     cands = parse_elements(fixture_json("overpass_dentists.json"), query=query())
     assert [c.name for c in cands] == ["Cabinet Dentaire des Terreaux", "Clinique Dentaire Jean Macé"]
     a, b = cands
-    assert a.source_entity_id == "node/4567890123" and a.source_url == "https://www.openstreetmap.org/node/4567890123"
+    assert (
+        a.source_entity_id == "node/4567890123"
+        and a.source_url == "https://www.openstreetmap.org/node/4567890123"
+    )
     assert a.website == "https://dentiste-terreaux.fr/" and a.phone == "+33 4 72 00 00 10"
     assert a.category == "amenity=dentist" and a.location["postal_code"] == "69001"
     assert a.location["address"] == "3 Place des Terreaux, 69001, Lyon" and a.location["country"] == "FR"
@@ -54,7 +59,9 @@ def test_parse_only_pois_with_company_websites() -> None:
 
 @respx.mock
 async def test_discover(src: OsmSource) -> None:
-    route = respx.post(OVERPASS).mock(return_value=httpx.Response(200, json=fixture_json("overpass_dentists.json")))
+    route = respx.post(OVERPASS).mock(
+        return_value=httpx.Response(200, json=fixture_json("overpass_dentists.json"))
+    )
     page = await src.discover(query(), None)
     assert len(page.candidates) == 2 and page.next_cursor is None
     body = parse_qs(route.calls.last.request.content.decode())
@@ -66,7 +73,9 @@ async def test_errors(src: OsmSource) -> None:
     respx.post(OVERPASS).mock(return_value=httpx.Response(429, text="rate_limited"))
     with pytest.raises(RateLimitedError):
         await src.discover(query(), None)
-    respx.post(OVERPASS).mock(return_value=httpx.Response(200, json={"elements": [], "remark": "runtime error: Query timed out"}))
+    respx.post(OVERPASS).mock(
+        return_value=httpx.Response(200, json={"elements": [], "remark": "runtime error: Query timed out"})
+    )
     with pytest.raises(FetchError):
         await src.discover(query(), None)
 

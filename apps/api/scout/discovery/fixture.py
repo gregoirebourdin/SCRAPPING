@@ -80,7 +80,9 @@ def to_candidate(c: dict[str, Any]) -> RawCandidate | None:
     country = geo.country_code(c.get("country")) if c.get("country") else None
     registry_id = str(c["registry_id"]) if c.get("registry_id") else None
     registry_source = c.get("registry_source") or (
-        "fr_sirene" if registry_id and country == "FR" and registry_id.isdigit() and len(registry_id) == 9 else None
+        "fr_sirene"
+        if registry_id and country == "FR" and registry_id.isdigit() and len(registry_id) == 9
+        else None
     )
     emp_min, emp_max = _employees(c.get("employees"))
     people = []
@@ -96,8 +98,23 @@ def to_candidate(c: dict[str, Any]) -> RawCandidate | None:
         "address": c.get("address"),
         "region": c.get("region"),
     }
-    known = {"name", "website", "city", "country", "category", "employees", "registry_id", "registry_source",
-             "people", "postal_code", "address", "region", "phone", "emails", "status"}
+    known = {
+        "name",
+        "website",
+        "city",
+        "country",
+        "category",
+        "employees",
+        "registry_id",
+        "registry_source",
+        "people",
+        "postal_code",
+        "address",
+        "region",
+        "phone",
+        "emails",
+        "status",
+    }
     return RawCandidate(
         source="fixture",
         source_entity_id=registry_id or domain or normalize_key(name),
@@ -153,12 +170,19 @@ class FixtureSource:
         companies = load_manifest(path)
         p = query.params
         matched = [
-            c for c in companies
-            if _matches(c, countries=p.get("countries") or [], profile_keys=set(p.get("profiles") or []),
-                        terms=p.get("terms") or [])
+            c
+            for c in companies
+            if _matches(
+                c,
+                countries=p.get("countries") or [],
+                profile_keys=set(p.get("profiles") or []),
+                terms=p.get("terms") or [],
+            )
         ]
         offset = int((cursor or {}).get("offset", 0))
         window = matched[offset : offset + PAGE_SIZE]
         candidates = [x for x in (to_candidate(c) for c in window) if x]
         nxt = offset + PAGE_SIZE
-        return DiscoveryPage(candidates=candidates, next_cursor={"offset": nxt} if nxt < len(matched) else None)
+        return DiscoveryPage(
+            candidates=candidates, next_cursor={"offset": nxt} if nxt < len(matched) else None
+        )

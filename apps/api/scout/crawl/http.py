@@ -172,7 +172,11 @@ def decode_body(body: bytes, content_type: str | None) -> str:
     """Decode bytes: BOM → Content-Type charset → <meta charset> → UTF-8 → cp1252."""
     if not body:
         return ""
-    for bom, enc in ((codecs.BOM_UTF8, "utf-8-sig"), (codecs.BOM_UTF16_LE, "utf-16"), (codecs.BOM_UTF16_BE, "utf-16")):
+    for bom, enc in (
+        (codecs.BOM_UTF8, "utf-8-sig"),
+        (codecs.BOM_UTF16_LE, "utf-16"),
+        (codecs.BOM_UTF16_BE, "utf-16"),
+    ):
         if body.startswith(bom):
             return body.decode(enc, errors="replace")
     declared = _valid_codec(_charset_from_content_type(content_type))
@@ -265,9 +269,13 @@ async def fetch(
                 request = client.build_request("GET", current, headers=headers)
                 resp = await client.send(request, stream=True)
             except httpx.TimeoutException as exc:
-                raise FetchError(f"timeout fetching {current}: {exc!r}", category=ErrorCategory.timeout) from exc
+                raise FetchError(
+                    f"timeout fetching {current}: {exc!r}", category=ErrorCategory.timeout
+                ) from exc
             except httpx.InvalidURL as exc:
-                raise PermanentError(f"invalid URL {current}: {exc}", category=ErrorCategory.validation) from exc
+                raise PermanentError(
+                    f"invalid URL {current}: {exc}", category=ErrorCategory.validation
+                ) from exc
             except (httpx.HTTPError, OSError) as exc:
                 raise FetchError(f"network error fetching {current}: {exc!r}") from exc
             finally:
@@ -298,7 +306,9 @@ async def fetch(
             elapsed_ms = int((time.monotonic() - started) * 1000)
             if status == 429:
                 raise HttpRateLimitedError(
-                    f"rate limited (429) by {current}", url=current, retry_after=_retry_after(resp_headers.get("retry-after"))
+                    f"rate limited (429) by {current}",
+                    url=current,
+                    retry_after=_retry_after(resp_headers.get("retry-after")),
                 )
             challenged = resp_headers.get("cf-mitigated", "").lower() == "challenge" or (
                 status in (401, 503) and _looks_like_challenge(resp_headers, text)

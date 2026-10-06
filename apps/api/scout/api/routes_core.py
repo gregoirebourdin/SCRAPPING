@@ -40,8 +40,15 @@ async def me(principal: Who, ctx: Ctx) -> MeOut:
         email=principal.email,
         name=principal.name,
         workspaces=[
-            WorkspaceOut(id=w.id, name=w.name, slug=w.slug, role=r.value, monthly_budget_usd=float(w.monthly_budget_usd),
-                         hard_budget_cap=w.hard_budget_cap, settings=w.settings or {})
+            WorkspaceOut(
+                id=w.id,
+                name=w.name,
+                slug=w.slug,
+                role=r.value,
+                monthly_budget_usd=float(w.monthly_budget_usd),
+                hard_budget_cap=w.hard_budget_cap,
+                settings=w.settings or {},
+            )
             for w, r in memberships
         ],
         current_workspace_id=ctx.workspace_id,
@@ -53,6 +60,7 @@ async def me(principal: Who, ctx: Ctx) -> MeOut:
             "verifier_service": bool(s.verifier_service_url),
             "grounded_search": s.resolved_ai_provider == "gemini",
             "browser_rendering": s.crawler_enable_browser or s.crawler_enable_crawl4ai,
+            "demo_data": not s.is_production,
         },
     )
 
@@ -74,21 +82,42 @@ async def update_workspace(body: WorkspaceUpdate, ctx: Ctx) -> WorkspaceOut:
         if body.settings is not None:
             ws.settings = {**(ws.settings or {}), **body.settings}
             changes["settings"] = body.settings
-        await audit.log(s, workspace_id=ctx.workspace_id, actor_id=ctx.user_id, action="workspace.update",
-                        summary="Updated workspace settings", payload=changes)
-        return WorkspaceOut(id=ws.id, name=ws.name, slug=ws.slug, role=ctx.role.value,
-                            monthly_budget_usd=float(ws.monthly_budget_usd), hard_budget_cap=ws.hard_budget_cap,
-                            settings=ws.settings or {})
+        await audit.log(
+            s,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            action="workspace.update",
+            summary="Updated workspace settings",
+            payload=changes,
+        )
+        return WorkspaceOut(
+            id=ws.id,
+            name=ws.name,
+            slug=ws.slug,
+            role=ctx.role.value,
+            monthly_budget_usd=float(ws.monthly_budget_usd),
+            hard_budget_cap=ws.hard_budget_cap,
+            settings=ws.settings or {},
+        )
 
 
 @router.get("/meta/fields", response_model=list[FieldMeta], tags=["meta"])
-async def fields(ctx: Ctx, entity_type: EntityType = EntityType.person, list_id: uuid.UUID | None = None) -> list[FieldMeta]:
+async def fields(
+    ctx: Ctx, entity_type: EntityType = EntityType.person, list_id: uuid.UUID | None = None
+) -> list[FieldMeta]:
     async with session_scope() as s:
         cols = await load_columns(s, ctx.workspace_id, list_id)
     reg = field_registry(entity_type, cols)
     return [
-        FieldMeta(key=f.key, label=f.label, type=f.type, enum_values=list(f.enum_values), sortable=f.sortable,
-                  filterable=f.filterable, custom_column_id=f.custom_column_id)
+        FieldMeta(
+            key=f.key,
+            label=f.label,
+            type=f.type,
+            enum_values=list(f.enum_values),
+            sortable=f.sortable,
+            filterable=f.filterable,
+            custom_column_id=f.custom_column_id,
+        )
         for f in reg.values()
     ]
 
@@ -98,10 +127,18 @@ async def enums() -> dict[str, list[str]]:
     return {
         name: [m.value for m in cls]
         for name, cls in {
-            "EmailStatus": E.EmailStatus, "ExposureType": E.ExposureType, "ExclusionMode": E.ExclusionMode,
-            "CampaignStatus": E.CampaignStatus, "CellStatus": E.CellStatus, "ResolverType": E.ResolverType,
-            "ColumnDataType": E.ColumnDataType, "SuppressionReason": E.SuppressionReason, "JobStatus": E.JobStatus,
-            "RoleFamily": E.RoleFamily, "Seniority": E.Seniority, "SignalType": E.SignalType,
+            "EmailStatus": E.EmailStatus,
+            "ExposureType": E.ExposureType,
+            "ExclusionMode": E.ExclusionMode,
+            "CampaignStatus": E.CampaignStatus,
+            "CellStatus": E.CellStatus,
+            "ResolverType": E.ResolverType,
+            "ColumnDataType": E.ColumnDataType,
+            "SuppressionReason": E.SuppressionReason,
+            "JobStatus": E.JobStatus,
+            "RoleFamily": E.RoleFamily,
+            "Seniority": E.Seniority,
+            "SignalType": E.SignalType,
         }.items()
     }
 
@@ -115,23 +152,55 @@ async def global_search(ctx: Ctx, q: str, limit: int = 8) -> dict[str, Any]:
     like = f"%{needle}%"
     limit = max(1, min(limit, 25))
     async with session_scope() as s:
-        companies = (await s.execute(
-            sa.select(Company.id, Company.name, Company.normalized_domain, Company.city)
-            .where(Company.workspace_id == ctx.workspace_id,
-                   sa.or_(Company.normalized_name.ilike(like), Company.normalized_domain.ilike(like), Company.name.ilike(like)))
-            .order_by(sa.func.similarity(Company.normalized_name, needle).desc()).limit(limit)
-        )).all()
-        people = (await s.execute(
-            sa.select(Person.id, Person.full_name, Person.job_title, Company.name, Email.address)
-            .outerjoin(Company, Company.id == Person.company_id)
-            .outerjoin(Email, Email.id == Person.primary_email_id)
-            .where(Person.workspace_id == ctx.workspace_id,
-                   sa.or_(Person.normalized_name.ilike(like), Email.address.ilike(like), Person.full_name.ilike(like)))
-            .order_by(sa.func.similarity(Person.normalized_name, needle).desc()).limit(limit)
-        )).all()
-        lists = (await s.execute(sa.select(List.id, List.name).where(List.workspace_id == ctx.workspace_id, List.name.ilike(like)).limit(limit))).all()
-        camps = (await s.execute(sa.select(Campaign.id, Campaign.name, Campaign.status).where(
-            Campaign.workspace_id == ctx.workspace_id, sa.or_(Campaign.name.ilike(like), Campaign.prompt.ilike(like))).limit(limit))).all()
+        companies = (
+            await s.execute(
+                sa.select(Company.id, Company.name, Company.normalized_domain, Company.city)
+                .where(
+                    Company.workspace_id == ctx.workspace_id,
+                    sa.or_(
+                        Company.normalized_name.ilike(like),
+                        Company.normalized_domain.ilike(like),
+                        Company.name.ilike(like),
+                    ),
+                )
+                .order_by(sa.func.similarity(Company.normalized_name, needle).desc())
+                .limit(limit)
+            )
+        ).all()
+        people = (
+            await s.execute(
+                sa.select(Person.id, Person.full_name, Person.job_title, Company.name, Email.address)
+                .outerjoin(Company, Company.id == Person.company_id)
+                .outerjoin(Email, Email.id == Person.primary_email_id)
+                .where(
+                    Person.workspace_id == ctx.workspace_id,
+                    sa.or_(
+                        Person.normalized_name.ilike(like),
+                        Email.address.ilike(like),
+                        Person.full_name.ilike(like),
+                    ),
+                )
+                .order_by(sa.func.similarity(Person.normalized_name, needle).desc())
+                .limit(limit)
+            )
+        ).all()
+        lists = (
+            await s.execute(
+                sa.select(List.id, List.name)
+                .where(List.workspace_id == ctx.workspace_id, List.name.ilike(like))
+                .limit(limit)
+            )
+        ).all()
+        camps = (
+            await s.execute(
+                sa.select(Campaign.id, Campaign.name, Campaign.status)
+                .where(
+                    Campaign.workspace_id == ctx.workspace_id,
+                    sa.or_(Campaign.name.ilike(like), Campaign.prompt.ilike(like)),
+                )
+                .limit(limit)
+            )
+        ).all()
     return {
         "companies": [{"id": i, "name": n, "domain": d, "city": c} for i, n, d, c in companies],
         "people": [{"id": i, "name": n, "title": t, "company": c, "email": e} for i, n, t, c, e in people],

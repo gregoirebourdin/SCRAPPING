@@ -28,7 +28,11 @@ async def emit(
     payload = payload or {}
 
     async def _do(s: AsyncSession) -> None:
-        s.add(JobEvent(workspace_id=workspace_id, type=type_, payload=payload, campaign_id=campaign_id, job_id=job_id))
+        s.add(
+            JobEvent(
+                workspace_id=workspace_id, type=type_, payload=payload, campaign_id=campaign_id, job_id=job_id
+            )
+        )
         await s.flush()
         await s.execute(
             sa.text("SELECT pg_notify(:ch, :msg)"),

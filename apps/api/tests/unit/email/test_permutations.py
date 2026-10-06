@@ -29,7 +29,12 @@ def test_priors_micro_french_agency_prefers_first_name():
 
 def test_known_pattern_first_with_stored_confidence():
     out = rank_candidates(
-        "Marie", "Dupont", DOMAIN, known_patterns=[("{f}{last}", 0.92, 3)], company_size_max=5000, country="FR"
+        "Marie",
+        "Dupont",
+        DOMAIN,
+        known_patterns=[("{f}{last}", 0.92, 3)],
+        company_size_max=5000,
+        country="FR",
     )
     assert out[0].address == "mdupont@agence-x.fr"
     assert out[0].method == M.known_pattern
@@ -42,9 +47,12 @@ def test_known_pattern_first_with_stored_confidence():
 
 def test_weak_known_pattern_competes_with_priors_and_unknown_patterns_ignored():
     out = rank_candidates(
-        "Marie", "Dupont", DOMAIN,
+        "Marie",
+        "Dupont",
+        DOMAIN,
         known_patterns=[("{last}{f}", 0.2, 1), ("{bogus}", 0.99, 9)],
-        company_size_max=5000, country="FR",
+        company_size_max=5000,
+        country="FR",
     )
     assert out[0].address == "marie.dupont@agence-x.fr"
     assert not any("bogus" in a for a in _addresses(out))
@@ -52,9 +60,12 @@ def test_weak_known_pattern_competes_with_priors_and_unknown_patterns_ignored():
 
 def test_inferred_from_named_samples_beats_priors():
     out = rank_candidates(
-        "Marie", "Dupont", DOMAIN,
+        "Marie",
+        "Dupont",
+        DOMAIN,
         observed_samples=[("Jean", "Martin", "martin.jean"), ("Paul", "Durand", "durand.paul")],
-        company_size_max=5000, country="FR",
+        company_size_max=5000,
+        country="FR",
     )
     assert out[0].address == "dupont.marie@agence-x.fr"
     assert out[0].method == M.inferred_pattern
@@ -63,7 +74,11 @@ def test_inferred_from_named_samples_beats_priors():
 
 def test_inferred_from_nameless_local_parts():
     out = rank_candidates(
-        "Marie", "Dupont", DOMAIN, observed_local_parts=["j.martin", "p.durand", "contact"], company_size_max=5000
+        "Marie",
+        "Dupont",
+        DOMAIN,
+        observed_local_parts=["j.martin", "p.durand", "contact"],
+        company_size_max=5000,
     )
     assert out[0].address == "m.dupont@agence-x.fr"
     assert out[0].method == M.inferred_pattern
@@ -72,7 +87,9 @@ def test_inferred_from_nameless_local_parts():
 
 def test_tier_order_known_then_inferred_then_priors():
     out = rank_candidates(
-        "Marie", "Dupont", DOMAIN,
+        "Marie",
+        "Dupont",
+        DOMAIN,
         known_patterns=[("{first}", 0.7, 1)],
         observed_samples=[("Jean", "Martin", "jmartin")],
         company_size_max=5000,

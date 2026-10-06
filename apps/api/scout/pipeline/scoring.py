@@ -26,7 +26,7 @@ class ConditionOutcome:
 @dataclass
 class ScoringInput:
     defn: CampaignDefinition
-    industry_fit: float | None          # 0–1 (None = unknown)
+    industry_fit: float | None  # 0–1 (None = unknown)
     size_fit: float | None
     location_fit: float | None
     company_confidence: float | None
@@ -35,7 +35,7 @@ class ScoringInput:
     person_identified: bool = False
     person_name: str | None = None
     person_title: str | None = None
-    title_match: float | None = None    # 0–1
+    title_match: float | None = None  # 0–1
     decision_power: int | None = None
     person_confidence: float | None = None
     person_source: str | None = None
@@ -118,8 +118,13 @@ def score(inp: ScoringInput) -> ScoreResult:
     contact_parts = []
     if people_mode:
         if inp.email_status is not None:
-            base = {EmailStatus.SAFE: 1.0, EmailStatus.RISKY: 0.6, EmailStatus.CATCH_ALL: 0.4,
-                    EmailStatus.UNKNOWN: 0.25, EmailStatus.INVALID: 0.0}[inp.email_status]
+            base = {
+                EmailStatus.SAFE: 1.0,
+                EmailStatus.RISKY: 0.6,
+                EmailStatus.CATCH_ALL: 0.4,
+                EmailStatus.UNKNOWN: 0.25,
+                EmailStatus.INVALID: 0.0,
+            }[inp.email_status]
             contact_parts.append(base * (0.5 + 0.5 * (inp.email_confidence or 0.0)))
         else:
             contact_parts.append(0.0)
@@ -130,9 +135,16 @@ def score(inp: ScoringInput) -> ScoreResult:
     if contact_parts:
         comp["contactability"] = min(1.0, max(contact_parts) + 0.1 * (len(contact_parts) - 1))
     if inp.evidence_sources:
-        comp["evidence"] = min(1.0, 0.5 * min(inp.evidence_sources, 3) / 3 + 0.5 * (inp.evidence_quality or 0.6))
-    weights = {"company_fit": W.company_fit, "person_fit": W.person_fit if people_mode else 0.0, "intent": W.intent,
-               "contactability": W.contactability, "evidence": W.evidence}
+        comp["evidence"] = min(
+            1.0, 0.5 * min(inp.evidence_sources, 3) / 3 + 0.5 * (inp.evidence_quality or 0.6)
+        )
+    weights = {
+        "company_fit": W.company_fit,
+        "person_fit": W.person_fit if people_mode else 0.0,
+        "intent": W.intent,
+        "contactability": W.contactability,
+        "evidence": W.evidence,
+    }
     num = den = 0.0
     used: dict[str, float] = {}
     for k, w in weights.items():
@@ -145,8 +157,14 @@ def score(inp: ScoringInput) -> ScoreResult:
     icp = round(100 * num / den) if den else 0
     email_conf = inp.email_confidence
     enrich_conf = _avg([c.confidence for c in inp.conditions if c.passed is not None])
-    overall = _avg([inp.company_confidence, inp.person_confidence if people_mode else None,
-                    email_conf if people_mode else None, enrich_conf])
+    overall = _avg(
+        [
+            inp.company_confidence,
+            inp.person_confidence if people_mode else None,
+            email_conf if people_mode else None,
+            enrich_conf,
+        ]
+    )
     # ---------------- gates ----------------
     gates: list[dict[str, Any]] = []
 
@@ -154,24 +172,45 @@ def score(inp: ScoringInput) -> ScoreResult:
         gates.append({"gate": name, "passed": ok, "reason": None if ok else reason})
 
     cf = comp["company_fit"]
-    gate("company_fit", cf is not None and cf * 100 >= d.minimum_company_fit,
-         f"Company fit {round((cf or 0) * 100)} < {d.minimum_company_fit}")
+    # No company criterion requested (e.g. a list-seeded campaign) or none could be evaluated: nothing to fail —
+    # consistent with the company_qualification stage, and never scored as a zero.
+    gate(
+        "company_fit",
+        cf is None or cf * 100 >= d.minimum_company_fit,
+        f"Company fit {round((cf or 0) * 100)} < {d.minimum_company_fit}",
+    )
     for c in inp.conditions:
         if c.required:
-            gate(f"condition:{c.label}", c.passed is True,
-                 f"{c.label}: " + ("not satisfied" if c.passed is False else "insufficient evidence"))
+            gate(
+                f"condition:{c.label}",
+                c.passed is True,
+                f"{c.label}: " + ("not satisfied" if c.passed is False else "insufficient evidence"),
+            )
     if people_mode and d.requires_person:
         gate("person_identified", inp.person_identified, "No decision maker identified")
         if d.people_filters.titles or d.people_filters.role_families:
-            gate("person_role", (inp.title_match or 0) >= 0.5, f"Role '{inp.person_title or 'unknown'}' does not match")
-        gate("person_confidence", (inp.person_confidence or 0) * 100 >= d.minimum_person_confidence,
-             f"Person confidence {round((inp.person_confidence or 0) * 100)} < {d.minimum_person_confidence}")
+            gate(
+                "person_role",
+                (inp.title_match or 0) >= 0.5,
+                f"Role '{inp.person_title or 'unknown'}' does not match",
+            )
+        gate(
+            "person_confidence",
+            (inp.person_confidence or 0) * 100 >= d.minimum_person_confidence,
+            f"Person confidence {round((inp.person_confidence or 0) * 100)} < {d.minimum_person_confidence}",
+        )
     if people_mode and d.requires_email:
         gate("email_exists", bool(inp.email), "No professional email found")
-        gate("email_status", inp.email_status in d.accepted_email_statuses,
-             f"Email status {inp.email_status.value if inp.email_status else 'none'} not accepted")
-        gate("email_confidence", (inp.email_confidence or 0) * 100 >= d.minimum_email_confidence,
-             f"Email confidence {round((inp.email_confidence or 0) * 100)} < {d.minimum_email_confidence}")
+        gate(
+            "email_status",
+            inp.email_status in d.accepted_email_statuses,
+            f"Email status {inp.email_status.value if inp.email_status else 'none'} not accepted",
+        )
+        gate(
+            "email_confidence",
+            (inp.email_confidence or 0) * 100 >= d.minimum_email_confidence,
+            f"Email confidence {round((inp.email_confidence or 0) * 100)} < {d.minimum_email_confidence}",
+        )
     gate("not_excluded", not inp.excluded, "Previously seen (exclusion active)")
     gate("not_suppressed", not inp.suppressed, "Suppressed")
     gate("icp_score", icp >= d.minimum_icp_score, f"ICP score {icp} < {d.minimum_icp_score}")
@@ -179,8 +218,13 @@ def score(inp: ScoringInput) -> ScoreResult:
     first_failure = next((g["reason"] for g in gates if not g["passed"]), None)
     # ---------------- explanation ----------------
     expl: list[str] = []
+    if cf is None:
+        expl.append("No company criteria requested (company fit not scored)")
     if inp.industry_fit is not None:
-        expl.append(("Correct industry" if inp.industry_fit >= 0.7 else "Partial industry match") + (f" ({inp.industry_label})" if inp.industry_label else ""))
+        expl.append(
+            ("Correct industry" if inp.industry_fit >= 0.7 else "Partial industry match")
+            + (f" ({inp.industry_label})" if inp.industry_label else "")
+        )
     if inp.size_fit is not None and inp.size_fit >= 0.7:
         expl.append("Company size in range")
     elif inp.size_fit is None and d.company_filters.employee_range:
@@ -189,7 +233,10 @@ def score(inp: ScoringInput) -> ScoreResult:
         if c.passed:
             expl.append(f"{c.label} confirmed" + (" on website" if c.source_url else ""))
     if people_mode and inp.person_identified:
-        expl.append(f"{inp.person_title or 'Decision maker'} identified" + (f" via {inp.person_source}" if inp.person_source else ""))
+        expl.append(
+            f"{inp.person_title or 'Decision maker'} identified"
+            + (f" via {inp.person_source}" if inp.person_source else "")
+        )
     if inp.email_status is not None:
         expl.append(f"{inp.email_status.value.replace('_', '-')} email")
     for sg in inp.signals[:3]:
@@ -197,11 +244,22 @@ def score(inp: ScoringInput) -> ScoreResult:
     if "intent" not in used:
         expl.append("No intent signals collected (excluded from score)")
     return ScoreResult(
-        icp_score=icp, company_fit=_r(cf), person_fit=_r(comp["person_fit"]), intent=_r(comp["intent"]),
-        contactability=_r(comp["contactability"]), evidence=_r(comp["evidence"]),
-        company_confidence=_r(inp.company_confidence), person_confidence=_r(inp.person_confidence),
-        email_confidence=_r(email_conf), enrichment_confidence=_r(enrich_conf), overall_confidence=_r(overall),
-        qualified=qualified, gates=gates, weights=used, explanation=expl, first_failure=first_failure,
+        icp_score=icp,
+        company_fit=_r(cf),
+        person_fit=_r(comp["person_fit"]),
+        intent=_r(comp["intent"]),
+        contactability=_r(comp["contactability"]),
+        evidence=_r(comp["evidence"]),
+        company_confidence=_r(inp.company_confidence),
+        person_confidence=_r(inp.person_confidence),
+        email_confidence=_r(email_conf),
+        enrichment_confidence=_r(enrich_conf),
+        overall_confidence=_r(overall),
+        qualified=qualified,
+        gates=gates,
+        weights=used,
+        explanation=expl,
+        first_failure=first_failure,
     )
 
 
@@ -227,7 +285,9 @@ def size_fit(defn: CampaignDefinition, emp_min: int | None, emp_max: int | None)
     return 1.0
 
 
-def location_fit(defn: CampaignDefinition, country: str | None, city: str | None, region: str | None) -> float | None:
+def location_fit(
+    defn: CampaignDefinition, country: str | None, city: str | None, region: str | None
+) -> float | None:
     cf = defn.company_filters
     if not (cf.countries or cf.cities or cf.regions):
         return None

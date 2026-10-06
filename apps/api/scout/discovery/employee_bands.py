@@ -83,9 +83,13 @@ def overlaps(rng: tuple[int | None, int | None], min_: int | None, max_: int | N
 _NUM = r"(\d[\d\s.,]*\s*[kK]?)"
 _RANGE_RE = re.compile(rf"^{_NUM}\s*(?:-|–|—|to|à|a|bis|al|~)\s*{_NUM}$")
 _BETWEEN_RE = re.compile(rf"^(?:between|entre|zwischen|tra|entre)\s+{_NUM}\s+(?:and|et|und|e|y)\s+{_NUM}$")
-_PLUS_RE = re.compile(rf"^(>=|≥|>|over|more than|plus de|mehr als|más de|piu di|più di)?\s*{_NUM}\s*(\+|or more|et plus|ou plus|and more|und mehr)?$")
+_PLUS_RE = re.compile(
+    rf"^(>=|≥|>|over|more than|plus de|mehr als|más de|piu di|più di)?\s*{_NUM}\s*(\+|or more|et plus|ou plus|and more|und mehr)?$"
+)
 _STRICT_GT = {">", "over", "more than", "plus de", "mehr als", "más de", "piu di", "più di"}
-_LESS_RE = re.compile(rf"^(<=|≤|<|under|less than|fewer than|moins de|up to|jusqu'à|jusqu a|bis zu|weniger als|menos de|meno di)\s*{_NUM}$")
+_LESS_RE = re.compile(
+    rf"^(<=|≤|<|under|less than|fewer than|moins de|up to|jusqu'à|jusqu a|bis zu|weniger als|menos de|meno di)\s*{_NUM}$"
+)
 
 
 def _num(s: str) -> int:
@@ -107,7 +111,15 @@ def parse_range(text: str | int | None) -> tuple[int | None, int | None]:
         return (None, None)
     if isinstance(text, int):
         return (text, text)
-    s = " ".join(str(text).strip().lower().replace("employees", "").replace("employés", "").replace("salariés", "").split())
+    s = " ".join(
+        str(text)
+        .strip()
+        .lower()
+        .replace("employees", "")
+        .replace("employés", "")
+        .replace("salariés", "")
+        .split()
+    )
     s = s.strip()
     if not s:
         return (None, None)
@@ -116,7 +128,16 @@ def parse_range(text: str | int | None) -> tuple[int | None, int | None]:
         return (min(a, b), max(a, b))
     if m := _LESS_RE.match(s):
         n = _num(m.group(2))
-        strict = m.group(1) in ("<", "under", "less than", "fewer than", "moins de", "weniger als", "menos de", "meno di")
+        strict = m.group(1) in (
+            "<",
+            "under",
+            "less than",
+            "fewer than",
+            "moins de",
+            "weniger als",
+            "menos de",
+            "meno di",
+        )
         return (None, n - 1 if strict else n)
     if m := _PLUS_RE.match(s):
         prefix, n, suffix = m.group(1), _num(m.group(2)), m.group(3)

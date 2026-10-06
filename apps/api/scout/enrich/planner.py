@@ -48,43 +48,119 @@ STRATEGY_COST: dict[str, CostClass] = {
     "composite": CostClass.FREE,
 }
 WEBSITE_STRATEGIES = frozenset(
-    {"keyword", "regex", "social_profile", "website_field", "semantic_classifier", "ai_extraction", "generated_text"}
+    {
+        "keyword",
+        "regex",
+        "social_profile",
+        "website_field",
+        "semantic_classifier",
+        "ai_extraction",
+        "generated_text",
+    }
 )
 
 NETWORK_LABELS = {
-    "instagram": "Instagram", "linkedin": "LinkedIn", "facebook": "Facebook", "tiktok": "TikTok",
-    "youtube": "YouTube", "twitter": "X (Twitter)", "pinterest": "Pinterest",
+    "instagram": "Instagram",
+    "linkedin": "LinkedIn",
+    "facebook": "Facebook",
+    "tiktok": "TikTok",
+    "youtube": "YouTube",
+    "twitter": "X (Twitter)",
+    "pinterest": "Pinterest",
 }
 WEBSITE_FIELD_LABELS = {
-    "phone": "phone number", "email": "contact email", "address": "postal address", "cta": "main call to action",
-    "testimonials": "testimonials", "pricing_page": "pricing page", "careers_page": "careers page", "blog": "blog",
-    "newsletter": "newsletter signup", "chat_widget": "chat widget", "booking_link": "booking link",
+    "phone": "phone number",
+    "email": "contact email",
+    "address": "postal address",
+    "cta": "main call to action",
+    "testimonials": "testimonials",
+    "pricing_page": "pricing page",
+    "careers_page": "careers page",
+    "blog": "blog",
+    "newsletter": "newsletter signup",
+    "chat_widget": "chat widget",
+    "booking_link": "booking link",
 }
-DETERMINISTIC_PERSON_FIELDS = frozenset({"email_status", "job_title", "seniority", "person_email", "full_name"})
+DETERMINISTIC_PERSON_FIELDS = frozenset(
+    {"email_status", "job_title", "seniority", "person_email", "full_name"}
+)
 
 # Platforms recognised from a bare column name ("Shopify"). Explicit "uses X" also consults the
 # technology registry (scout.tech.builtin.KNOWN_TECHNOLOGIES).
 _BARE_TECH: dict[str, str] = {
-    "shopify": "Shopify", "shopify plus": "Shopify Plus", "wordpress": "WordPress", "woocommerce": "WooCommerce",
-    "wix": "Wix", "webflow": "Webflow", "squarespace": "Squarespace", "magento": "Magento",
-    "prestashop": "PrestaShop", "bigcommerce": "BigCommerce", "drupal": "Drupal", "joomla": "Joomla",
-    "hubspot": "HubSpot", "salesforce": "Salesforce", "klaviyo": "Klaviyo", "google analytics": "Google Analytics",
-    "google tag manager": "Google Tag Manager", "hotjar": "Hotjar", "framer": "Framer", "ghost": "Ghost",
-    "elementor": "Elementor", "divi": "Divi", "next js": "Next.js", "nextjs": "Next.js",
+    "shopify": "Shopify",
+    "shopify plus": "Shopify Plus",
+    "wordpress": "WordPress",
+    "woocommerce": "WooCommerce",
+    "wix": "Wix",
+    "webflow": "Webflow",
+    "squarespace": "Squarespace",
+    "magento": "Magento",
+    "prestashop": "PrestaShop",
+    "bigcommerce": "BigCommerce",
+    "drupal": "Drupal",
+    "joomla": "Joomla",
+    "hubspot": "HubSpot",
+    "salesforce": "Salesforce",
+    "klaviyo": "Klaviyo",
+    "google analytics": "Google Analytics",
+    "google tag manager": "Google Tag Manager",
+    "hotjar": "Hotjar",
+    "framer": "Framer",
+    "ghost": "Ghost",
+    "elementor": "Elementor",
+    "divi": "Divi",
+    "next js": "Next.js",
+    "nextjs": "Next.js",
 }
 BUILTIN_TECHNOLOGIES: dict[str, str] = {
     **_BARE_TECH,
-    "mailchimp": "Mailchimp", "brevo": "Brevo", "sendinblue": "Brevo", "intercom": "Intercom", "drift": "Drift",
-    "crisp": "Crisp", "zendesk": "Zendesk", "tawk": "Tawk.to", "tawk to": "Tawk.to", "livechat": "LiveChat",
-    "tidio": "Tidio", "calendly": "Calendly", "stripe": "Stripe", "ga4": "Google Analytics",
-    "gtm": "Google Tag Manager", "matomo": "Matomo", "segment": "Segment", "mixpanel": "Mixpanel",
-    "meta pixel": "Meta Pixel", "facebook pixel": "Meta Pixel", "tiktok pixel": "TikTok Pixel",
-    "linkedin insight tag": "LinkedIn Insight Tag", "react": "React", "vue": "Vue.js", "vue js": "Vue.js",
-    "nuxt": "Nuxt.js", "angular": "Angular", "gatsby": "Gatsby", "cloudflare": "Cloudflare", "vercel": "Vercel",
-    "netlify": "Netlify", "jquery": "jQuery", "bootstrap": "Bootstrap", "tailwind": "Tailwind CSS",
-    "typeform": "Typeform", "pipedrive": "Pipedrive", "zoho": "Zoho", "axeptio": "Axeptio", "didomi": "Didomi",
-    "cookiebot": "Cookiebot", "onetrust": "OneTrust", "optimizely": "Optimizely", "manychat": "ManyChat",
-    "marketo": "Marketo", "pardot": "Pardot", "bubble": "Bubble",
+    "mailchimp": "Mailchimp",
+    "brevo": "Brevo",
+    "sendinblue": "Brevo",
+    "intercom": "Intercom",
+    "drift": "Drift",
+    "crisp": "Crisp",
+    "zendesk": "Zendesk",
+    "tawk": "Tawk.to",
+    "tawk to": "Tawk.to",
+    "livechat": "LiveChat",
+    "tidio": "Tidio",
+    "calendly": "Calendly",
+    "stripe": "Stripe",
+    "ga4": "Google Analytics",
+    "gtm": "Google Tag Manager",
+    "matomo": "Matomo",
+    "segment": "Segment",
+    "mixpanel": "Mixpanel",
+    "meta pixel": "Meta Pixel",
+    "facebook pixel": "Meta Pixel",
+    "tiktok pixel": "TikTok Pixel",
+    "linkedin insight tag": "LinkedIn Insight Tag",
+    "react": "React",
+    "vue": "Vue.js",
+    "vue js": "Vue.js",
+    "nuxt": "Nuxt.js",
+    "angular": "Angular",
+    "gatsby": "Gatsby",
+    "cloudflare": "Cloudflare",
+    "vercel": "Vercel",
+    "netlify": "Netlify",
+    "jquery": "jQuery",
+    "bootstrap": "Bootstrap",
+    "tailwind": "Tailwind CSS",
+    "typeform": "Typeform",
+    "pipedrive": "Pipedrive",
+    "zoho": "Zoho",
+    "axeptio": "Axeptio",
+    "didomi": "Didomi",
+    "cookiebot": "Cookiebot",
+    "onetrust": "OneTrust",
+    "optimizely": "Optimizely",
+    "manychat": "ManyChat",
+    "marketo": "Marketo",
+    "pardot": "Pardot",
+    "bubble": "Bubble",
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -173,73 +249,159 @@ _GENERIC_CONCEPT_WORDS = frozenset(
 )
 
 _WEBSITE_FIELDS: list[tuple[str, re.Pattern[str], ColumnDataType]] = [
-    ("testimonials", re.compile(
-        r"\b(?:testimonials?|temoignages?|avis (?:clients?|google)|customer reviews?|client reviews?|"
-        r"reviews? from (?:clients|customers)|what (?:our )?(?:clients|customers) say|social proof|preuve sociale)\b"),
-     ColumnDataType.boolean),
-    ("cta", re.compile(
-        r"\b(?:ctas?|call[- ]to[- ]actions?|calls[- ]to[- ]action|main button|primary button|appel a l'action|"
-        r"bouton principal)\b"), ColumnDataType.text),
-    ("pricing_page", re.compile(
-        r"\b(?:pricing|tarifs?|prix|price) page\b|\bpage (?:de |des )?(?:tarifs?|prix|pricing)\b|"
-        r"\b(?:public|published|transparent|displayed|listed) (?:pricing|prices)\b|"
-        r"\b(?:prices?|pricing|tarifs?) (?:are )?(?:public|published|displayed|listed|affiches?)\b"),
-     ColumnDataType.boolean),
-    ("careers_page", re.compile(
-        r"\b(?:careers?|jobs?|recrutement|carrieres?|join us|emplois?) (?:page|section)\b|"
-        r"\bpage (?:carrieres?|recrutement|emplois?|jobs?|careers?)\b"), ColumnDataType.boolean),
-    ("booking_link", re.compile(
-        r"\b(?:booking|scheduling|meeting|appointment|calendar|reservation|rendez-vous|rdv) (?:link|page|url|lien)\b|"
-        r"\blien (?:de )?(?:prise de )?(?:rendez-vous|rdv|reservation)\b|\bcalendly(?: link)?\b|"
-        r"\bhubspot meetings?\b|\bonline booking\b|\bbook (?:a|an) (?:call|meeting|demo|appointment)\b"),
-     ColumnDataType.url),
-    ("chat_widget", re.compile(
-        r"\b(?:chat widget|live ?chat|chat en (?:direct|ligne)|chatbox|chat box|website chat|widget (?:de )?chat|"
-        r"tchat|chat bubble|messenger widget|support chat)\b"), ColumnDataType.boolean),
+    (
+        "testimonials",
+        re.compile(
+            r"\b(?:testimonials?|temoignages?|avis (?:clients?|google)|customer reviews?|client reviews?|"
+            r"reviews? from (?:clients|customers)|what (?:our )?(?:clients|customers) say|social proof|preuve sociale)\b"
+        ),
+        ColumnDataType.boolean,
+    ),
+    (
+        "cta",
+        re.compile(
+            r"\b(?:ctas?|call[- ]to[- ]actions?|calls[- ]to[- ]action|main button|primary button|appel a l'action|"
+            r"bouton principal)\b"
+        ),
+        ColumnDataType.text,
+    ),
+    (
+        "pricing_page",
+        re.compile(
+            r"\b(?:pricing|tarifs?|prix|price) page\b|\bpage (?:de |des )?(?:tarifs?|prix|pricing)\b|"
+            r"\b(?:public|published|transparent|displayed|listed) (?:pricing|prices)\b|"
+            r"\b(?:prices?|pricing|tarifs?) (?:are )?(?:public|published|displayed|listed|affiches?)\b"
+        ),
+        ColumnDataType.boolean,
+    ),
+    (
+        "careers_page",
+        re.compile(
+            r"\b(?:careers?|jobs?|recrutement|carrieres?|join us|emplois?) (?:page|section)\b|"
+            r"\bpage (?:carrieres?|recrutement|emplois?|jobs?|careers?)\b"
+        ),
+        ColumnDataType.boolean,
+    ),
+    (
+        "booking_link",
+        re.compile(
+            r"\b(?:booking|scheduling|meeting|appointment|calendar|reservation|rendez-vous|rdv) (?:link|page|url|lien)\b|"
+            r"\blien (?:de )?(?:prise de )?(?:rendez-vous|rdv|reservation)\b|\bcalendly(?: link)?\b|"
+            r"\bhubspot meetings?\b|\bonline booking\b|\bbook (?:a|an) (?:call|meeting|demo|appointment)\b"
+        ),
+        ColumnDataType.url,
+    ),
+    (
+        "chat_widget",
+        re.compile(
+            r"\b(?:chat widget|live ?chat|chat en (?:direct|ligne)|chatbox|chat box|website chat|widget (?:de )?chat|"
+            r"tchat|chat bubble|messenger widget|support chat)\b"
+        ),
+        ColumnDataType.boolean,
+    ),
     ("newsletter", re.compile(r"\bnewsletters?\b"), ColumnDataType.boolean),
     ("blog", re.compile(r"\bblog\b(?!\s*(?:posts?|articles?))"), ColumnDataType.boolean),
-    ("email", re.compile(
-        r"\b(?:e-?mail(?: address)?|adresse (?:e-?mail|mail)|mail de contact|contact (?:e-?mail|address)|"
-        r"generic email|courriel)\b"), ColumnDataType.email),
-    ("phone", re.compile(
-        r"\b(?:phone(?: number)?|telephone|tel|numero de (?:telephone|tel)|landline|standard telephonique)\b"),
-     ColumnDataType.text),
-    ("address", re.compile(
-        r"\b(?:address|adresse(?: postale)?|postal address|street address|head ?office|headquarters|hq|"
-        r"siege(?: social)?|locaux)\b"), ColumnDataType.text),
+    (
+        "email",
+        re.compile(
+            r"\b(?:e-?mail(?: address)?|adresse (?:e-?mail|mail)|mail de contact|contact (?:e-?mail|address)|"
+            r"generic email|courriel)\b"
+        ),
+        ColumnDataType.email,
+    ),
+    (
+        "phone",
+        re.compile(
+            r"\b(?:phone(?: number)?|telephone|tel|numero de (?:telephone|tel)|landline|standard telephonique)\b"
+        ),
+        ColumnDataType.text,
+    ),
+    (
+        "address",
+        re.compile(
+            r"\b(?:address|adresse(?: postale)?|postal address|street address|head ?office|headquarters|hq|"
+            r"siege(?: social)?|locaux)\b"
+        ),
+        ColumnDataType.text,
+    ),
 ]
 
 _DETERMINISTIC_FIELDS: list[tuple[str, re.Pattern[str], ColumnDataType]] = [
-    ("email_status", re.compile(
-        r"\b(?:email status|e-?mail verification|verification status|statut (?:de l'|d')?e-?mail|email validity|"
-        r"deliverability|delivrabilite)\b"), ColumnDataType.text),
-    ("person_email", re.compile(
-        r"\b(?:work email|professional email|business email|email pro(?:fessionnel)?|person(?:al)? email)\b"),
-     ColumnDataType.email),
-    ("icp_score", re.compile(r"\b(?:icp score|lead score|score icp|fit score|score)\b"), ColumnDataType.number),
+    (
+        "email_status",
+        re.compile(
+            r"\b(?:email status|e-?mail verification|verification status|statut (?:de l'|d')?e-?mail|email validity|"
+            r"deliverability|delivrabilite)\b"
+        ),
+        ColumnDataType.text,
+    ),
+    (
+        "person_email",
+        re.compile(
+            r"\b(?:work email|professional email|business email|email pro(?:fessionnel)?|person(?:al)? email)\b"
+        ),
+        ColumnDataType.email,
+    ),
+    (
+        "icp_score",
+        re.compile(r"\b(?:icp score|lead score|score icp|fit score|score)\b"),
+        ColumnDataType.number,
+    ),
     ("seniority", re.compile(r"\b(?:seniority|niveau hierarchique|seniorite)\b"), ColumnDataType.text),
-    ("job_title", re.compile(r"\b(?:job title|title|poste|fonction|intitule(?: de poste)?|role)\b"), ColumnDataType.text),
+    (
+        "job_title",
+        re.compile(r"\b(?:job title|title|poste|fonction|intitule(?: de poste)?|role)\b"),
+        ColumnDataType.text,
+    ),
     ("city", re.compile(r"\b(?:city|ville|town|commune|localite)\b"), ColumnDataType.text),
     ("country", re.compile(r"\b(?:country|pays)\b"), ColumnDataType.text),
     ("region", re.compile(r"\b(?:region|departement|county|province)\b"), ColumnDataType.text),
-    ("postal_code", re.compile(r"\b(?:postal code|post ?code|zip(?: code)?|code postal)\b"), ColumnDataType.text),
-    ("employee_range", re.compile(
-        r"\b(?:company size|size|headcount|employees?|employee count|team size|staff|effectifs?|"
-        r"taille(?: de l'entreprise)?|salaries|nombre de salaries)\b"), ColumnDataType.text),
-    ("industry", re.compile(
-        r"\b(?:industry|sector|secteur(?: d'activite)?|vertical|code naf|naf|code ape|activity code)\b"),
-     ColumnDataType.text),
-    ("founded_year", re.compile(
-        r"\b(?:founded|founding year|year founded|creation year|date de creation|annee de creation|"
-        r"fondee? en|creee? en|year of creation)\b"), ColumnDataType.number),
-    ("company_name", re.compile(
-        r"^(?:(?:their|the|leur) )?(?:(?:company|legal) )?(?:name|nom(?: de l'entreprise| commercial)?|raison sociale)$"),
-     ColumnDataType.text),
-    ("domain", re.compile(
-        r"^(?:(?:their|the|leur) )?(?:domain|domaine|website|site web|site internet|website url|url)$"),
-     ColumnDataType.url),
+    (
+        "postal_code",
+        re.compile(r"\b(?:postal code|post ?code|zip(?: code)?|code postal)\b"),
+        ColumnDataType.text,
+    ),
+    (
+        "employee_range",
+        re.compile(
+            r"\b(?:company size|size|headcount|employees?|employee count|team size|staff|effectifs?|"
+            r"taille(?: de l'entreprise)?|salaries|nombre de salaries)\b"
+        ),
+        ColumnDataType.text,
+    ),
+    (
+        "industry",
+        re.compile(
+            r"\b(?:industry|sector|secteur(?: d'activite)?|vertical|code naf|naf|code ape|activity code)\b"
+        ),
+        ColumnDataType.text,
+    ),
+    (
+        "founded_year",
+        re.compile(
+            r"\b(?:founded|founding year|year founded|creation year|date de creation|annee de creation|"
+            r"fondee? en|creee? en|year of creation)\b"
+        ),
+        ColumnDataType.number,
+    ),
+    (
+        "company_name",
+        re.compile(
+            r"^(?:(?:their|the|leur) )?(?:(?:company|legal) )?(?:name|nom(?: de l'entreprise| commercial)?|raison sociale)$"
+        ),
+        ColumnDataType.text,
+    ),
+    (
+        "domain",
+        re.compile(
+            r"^(?:(?:their|the|leur) )?(?:domain|domaine|website|site web|site internet|website url|url)$"
+        ),
+        ColumnDataType.url,
+    ),
 ]
-_DET_BLOCKERS = re.compile(r"\b(?:instagram|tiktok|linkedin|facebook|youtube|audience|followers|abonnes|traffic|trafic)\b")
+_DET_BLOCKERS = re.compile(
+    r"\b(?:instagram|tiktok|linkedin|facebook|youtube|audience|followers|abonnes|traffic|trafic)\b"
+)
 
 _ROLE_WORDS = (
     r"ceo|founder|co-?founder|owner|president|managing director|cto|cmo|cfo|coo|head of [a-z]+|"
@@ -292,7 +454,9 @@ _EXTRACT = re.compile(
     r"languages?|langues?|founder(?:'s)? name|ceo(?:'s)? name|nom du (?:fondateur|dirigeant))\b"
 )
 _COUNT = re.compile(r"\b(?:number of|nombre de|how many|combien de|count of)\b")
-_REGEX_EXPLICIT = re.compile(r"\b(?:regex|regexp|regular expression|pattern|expression reguliere)\s*[:=]?\s*(?P<p>.+)$")
+_REGEX_EXPLICIT = re.compile(
+    r"\b(?:regex|regexp|regular expression|pattern|expression reguliere)\s*[:=]?\s*(?P<p>.+)$"
+)
 _SLASHED = re.compile(r"/(?P<p>.{2,200})/")
 
 IDENTIFIER_PATTERNS: dict[str, str] = {
@@ -420,7 +584,11 @@ def _lookup_tech(term: str) -> str | None:
 
 def _is_stop(word: str) -> bool:
     key = " ".join(tokens(word))
-    return not key or key in STOPWORDS or key in {"main", "latest", "derniere", "dernier", "principal", "principale"}
+    return (
+        not key
+        or key in STOPWORDS
+        or key in {"main", "latest", "derniere", "dernier", "principal", "principale"}
+    )
 
 
 def _content_keywords(concept: str) -> list[str]:
@@ -448,15 +616,26 @@ def _rule_regex(ask: _Ask) -> _Rule | None:
         raw = ask.orig(m.start("p"), m.end("p")).strip().strip("`")
         if raw.startswith("/") and raw.endswith("/") and len(raw) > 2:
             raw = raw[1:-1]
-        return _Rule("regex", data_type=ColumnDataType.text, pattern=raw, concept=f"Text matching /{raw}/",
-                     explanation="Pattern match on cached website text — no AI needed")
+        return _Rule(
+            "regex",
+            data_type=ColumnDataType.text,
+            pattern=raw,
+            concept=f"Text matching /{raw}/",
+            explanation="Pattern match on cached website text — no AI needed",
+        )
     m = _IDENTIFIER.search(core)
     if m:
         ident = m.group("id")
         key = "siret" if "siret" in ident else "siren" if "siren" in ident else "vat"
-        return _Rule("regex", data_type=ColumnDataType.text, pattern=IDENTIFIER_PATTERNS[key], field=key,
-                     concept=f"{key.upper()} number", input_sources=[PageType.legal, PageType.contact],
-                     explanation=f"{key.upper()} pattern on cached legal/contact pages — no AI needed")
+        return _Rule(
+            "regex",
+            data_type=ColumnDataType.text,
+            pattern=IDENTIFIER_PATTERNS[key],
+            field=key,
+            concept=f"{key.upper()} number",
+            input_sources=[PageType.legal, PageType.contact],
+            explanation=f"{key.upper()} pattern on cached legal/contact pages — no AI needed",
+        )
     return None
 
 
@@ -469,8 +648,14 @@ def _website_field_rule(name: str, dtype: ColumnDataType, ask: _Ask) -> _Rule:
     if name in {"pricing_page", "careers_page", "blog"} and re.search(r"\b(?:url|link|lien)\b", ask.core):
         dtype = ColumnDataType.url
     label = WEBSITE_FIELD_LABELS.get(name, name)
-    return _Rule("website_field", data_type=dtype, field=name, concept=label, input_sources=sources,
-                 explanation=f"Deterministic detection of the {label} on cached pages — no AI needed")
+    return _Rule(
+        "website_field",
+        data_type=dtype,
+        field=name,
+        concept=label,
+        input_sources=sources,
+        explanation=f"Deterministic detection of the {label} on cached pages — no AI needed",
+    )
 
 
 def _rule_keyword(ask: _Ask) -> _Rule | None:
@@ -494,9 +679,14 @@ def _rule_keyword(ask: _Ask) -> _Rule | None:
             return _website_field_rule(fname, dtype, ask)
     keywords = dedupe([v for t in terms for v in _variants(t)])
     label = " and ".join(terms) if match_all else " or ".join(terms)
-    return _Rule("keyword", data_type=ColumnDataType.boolean, keywords=keywords, concept=f"Website mentions {label}",
-                 field="all" if match_all and len(terms) > 1 else None,
-                 explanation="Website keyword detection on existing crawl — no AI needed")
+    return _Rule(
+        "keyword",
+        data_type=ColumnDataType.boolean,
+        keywords=keywords,
+        concept=f"Website mentions {label}",
+        field="all" if match_all and len(terms) > 1 else None,
+        explanation="Website keyword detection on existing crawl — no AI needed",
+    )
 
 
 def _rule_composite(ask: _Ask) -> _Rule | None:
@@ -506,9 +696,12 @@ def _rule_composite(ask: _Ask) -> _Rule | None:
     grp = "r1" if m.group("r1") else "r2"
     role = ask.orig(m.start(grp), m.end(grp))
     return _Rule(
-        "composite", data_type=ColumnDataType.email, field="email_of_role", concept=role,
+        "composite",
+        data_type=ColumnDataType.email,
+        field="email_of_role",
+        concept=role,
         explanation=f"Finds the {role} among known people at the company and returns their primary email "
-                    "with its verification status — no AI needed",
+        "with its verification status — no AI needed",
     )
 
 
@@ -524,14 +717,23 @@ def _rule_social(ask: _Ask) -> _Rule | None:
         return None
     if _SERVICE_VERB.search(core) or _SERVICE_NOUN.search(core):
         return None
-    rest = [t for t in tokens(core) if t not in STOPWORDS and t not in {"their", "leur", "leurs", "url", "link", "lien"}]
+    rest = [
+        t
+        for t in tokens(core)
+        if t not in STOPWORDS and t not in {"their", "leur", "leurs", "url", "link", "lien"}
+    ]
     bare = len(rest) <= 2
     if not (_SOCIAL_NOUN.search(core) or bare):
         return None
     dtype = ColumnDataType.boolean if _BOOL_LEAD.search(core) else ColumnDataType.url
     label = NETWORK_LABELS.get(network, network.title())
-    return _Rule("social_profile", data_type=dtype, field=network, concept=f"{label} profile",
-                 explanation=f"Reads the {label} link from the cached website — no AI needed")
+    return _Rule(
+        "social_profile",
+        data_type=dtype,
+        field=network,
+        concept=f"{label} profile",
+        explanation=f"Reads the {label} link from the cached website — no AI needed",
+    )
 
 
 def _rule_tech(ask: _Ask) -> _Rule | None:
@@ -553,14 +755,23 @@ def _rule_tech(ask: _Ask) -> _Rule | None:
             else:
                 return None
         if names:
-            return _Rule("tech_detection", data_type=ColumnDataType.boolean, technologies=dedupe(names),
-                         concept=f"Uses {' or '.join(names)}",
-                         explanation="Technology fingerprinting of the website (scripts, headers, HTML) — no AI needed")
+            return _Rule(
+                "tech_detection",
+                data_type=ColumnDataType.boolean,
+                technologies=dedupe(names),
+                concept=f"Uses {' or '.join(names)}",
+                explanation="Technology fingerprinting of the website (scripts, headers, HTML) — no AI needed",
+            )
     m2 = _STACK.search(core)
     if m2 and not _SERVICE_VERB.search(core):
         category = "cms" if re.search(r"\bcms\b", core) else None
-        return _Rule("tech_detection", data_type=ColumnDataType.text, field=category, concept="Technology stack",
-                     explanation="Technology fingerprinting of the website (scripts, headers, HTML) — no AI needed")
+        return _Rule(
+            "tech_detection",
+            data_type=ColumnDataType.text,
+            field=category,
+            concept="Technology stack",
+            explanation="Technology fingerprinting of the website (scripts, headers, HTML) — no AI needed",
+        )
     return None
 
 
@@ -587,15 +798,22 @@ def _rule_deterministic(ask: _Ask) -> _Rule | None:
     for fname, rx, dtype in _DETERMINISTIC_FIELDS:
         if rx.search(core):
             entity = EntityType.person if fname in DETERMINISTIC_PERSON_FIELDS else EntityType.company
-            return _Rule("deterministic_field", data_type=dtype, field=fname, entity_type=entity,
-                         concept=fname.replace("_", " "),
-                         explanation=f"Copied from the lead record ({fname.replace('_', ' ')}) — no AI needed")
+            return _Rule(
+                "deterministic_field",
+                data_type=dtype,
+                field=fname,
+                entity_type=entity,
+                concept=fname.replace("_", " "),
+                explanation=f"Copied from the lead record ({fname.replace('_', ' ')}) — no AI needed",
+            )
     return None
 
 
 def _rule_generated(ask: _Ask, *, summary: bool) -> _Rule | None:
     core = ask.core
-    checks = [("summary", _GEN_SUMMARY)] if summary else [("opener", _GEN_OPENER), ("outreach_angle", _GEN_ANGLE)]
+    checks = (
+        [("summary", _GEN_SUMMARY)] if summary else [("opener", _GEN_OPENER), ("outreach_angle", _GEN_ANGLE)]
+    )
     for fname, rx in checks:
         if rx.search(core):
             concept = {
@@ -603,11 +821,17 @@ def _rule_generated(ask: _Ask, *, summary: bool) -> _Rule | None:
                 "outreach_angle": "Personalized outreach angle grounded in the company's website",
                 "opener": "Personalized cold-email opening line",
             }[fname]
-            return _Rule("generated_text", data_type=ColumnDataType.text, kind=ColumnKind.generated, field=fname,
-                         concept=concept, confidence_threshold=0.0,
-                         input_sources=[PageType.home, PageType.about, PageType.services],
-                         explanation="AI-written text from cached website content and lead facts "
-                                     "(labeled generated, never used as evidence)")
+            return _Rule(
+                "generated_text",
+                data_type=ColumnDataType.text,
+                kind=ColumnKind.generated,
+                field=fname,
+                concept=concept,
+                confidence_threshold=0.0,
+                input_sources=[PageType.home, PageType.about, PageType.services],
+                explanation="AI-written text from cached website content and lead facts "
+                "(labeled generated, never used as evidence)",
+            )
     return None
 
 
@@ -615,9 +839,15 @@ def _rule_research(ask: _Ask) -> _Rule | None:
     if not _RESEARCH.search(ask.core):
         return None
     concept = ask.orig(0, len(ask.core)).strip(_STRIP)
-    return _Rule("web_research", data_type=ColumnDataType.text, concept=concept, confidence_threshold=0.6,
-                 refresh_days=14, keywords=_content_keywords(concept),
-                 explanation="Grounded web search with cited sources (results cached 14 days)")
+    return _Rule(
+        "web_research",
+        data_type=ColumnDataType.text,
+        concept=concept,
+        confidence_threshold=0.6,
+        refresh_days=14,
+        keywords=_content_keywords(concept),
+        explanation="Grounded web search with cited sources (results cached 14 days)",
+    )
 
 
 def _extraction_rule(ask: _Ask, *, strong: bool) -> _Rule:
@@ -625,13 +855,22 @@ def _extraction_rule(ask: _Ask, *, strong: bool) -> _Rule:
     concept = ask.orig(0, len(core)).strip(_STRIP)
     dtype = ColumnDataType.number if _COUNT.search(core) else ColumnDataType.text
     sources = [PageType.home, PageType.about, PageType.services, PageType.solutions]
-    if re.search(r"\b(?:pricing|prices?|tarifs?|prix|costs?|forfaits?|packages?|plans?|combien|how much)\b", core):
+    if re.search(
+        r"\b(?:pricing|prices?|tarifs?|prix|costs?|forfaits?|packages?|plans?|combien|how much)\b", core
+    ):
         sources = [PageType.pricing, PageType.services, PageType.home]
     elif re.search(r"\b(?:target|customers?|clients?|cible|clientele|niche|audiences?|persona|icp)\b", core):
         sources = [PageType.home, PageType.about, PageType.services, PageType.case_studies]
-    return _Rule("ai_extraction", strong=strong, data_type=dtype, concept=concept, confidence_threshold=0.7,
-                 keywords=_content_keywords(concept), input_sources=sources,
-                 explanation="AI extraction from the most relevant cached website passages, with a verbatim quote")
+    return _Rule(
+        "ai_extraction",
+        strong=strong,
+        data_type=dtype,
+        concept=concept,
+        confidence_threshold=0.7,
+        keywords=_content_keywords(concept),
+        input_sources=sources,
+        explanation="AI extraction from the most relevant cached website passages, with a verbatim quote",
+    )
 
 
 def _rule_extraction(ask: _Ask) -> _Rule | None:
@@ -651,14 +890,20 @@ def _semantic_rule(ask: _Ask, *, strong: bool) -> _Rule:
     lead = _SEM_VERB_LEAD.match(" ".join(tokens(concept)))
     if lead:  # drop the leading verb from the keyword phrase, keep original casing for the rest
         words = concept.split()
-        kw_src = " ".join(words[len(lead.group(0).split()):]) or concept
+        kw_src = " ".join(words[len(lead.group(0).split()) :]) or concept
     sources = [PageType.services, PageType.home, PageType.about, PageType.case_studies, PageType.solutions]
     if re.search(r"\b(?:hiring|recrut\w*)\b", core):
         sources = [PageType.careers, PageType.home, PageType.about]
-    return _Rule("semantic_classifier", strong=strong, data_type=ColumnDataType.boolean,
-                 concept=concept, keywords=_content_keywords(kw_src), input_sources=sources,
-                 explanation="AI classification on the most relevant cached website passages, "
-                             "with a verbatim evidence quote")
+    return _Rule(
+        "semantic_classifier",
+        strong=strong,
+        data_type=ColumnDataType.boolean,
+        concept=concept,
+        keywords=_content_keywords(kw_src),
+        input_sources=sources,
+        explanation="AI classification on the most relevant cached website passages, "
+        "with a verbatim evidence quote",
+    )
 
 
 def _rule_semantic(ask: _Ask) -> _Rule | None:
@@ -676,17 +921,30 @@ def _rule_bare(ask: _Ask) -> _Rule | None:
     key = " ".join(toks)
     if key in _BARE_TECH:
         tech = _BARE_TECH[key]
-        return _Rule("tech_detection", data_type=ColumnDataType.boolean, technologies=[tech], concept=f"Uses {tech}",
-                     explanation="Technology fingerprinting of the website (scripts, headers, HTML) — no AI needed")
+        return _Rule(
+            "tech_detection",
+            data_type=ColumnDataType.boolean,
+            technologies=[tech],
+            concept=f"Uses {tech}",
+            explanation="Technology fingerprinting of the website (scripts, headers, HTML) — no AI needed",
+        )
     term = ask.orig(0, len(ask.core)).strip(_STRIP)
     # Brand-like names (CamelCase, digits/dots, acronyms, known tech) are confident; plain words stay weak so
     # the AI planner may reinterpret them ("Offices"), with a keyword mention as the offline fallback.
     brandlike = bool(
-        re.search(r"[a-z][A-Z]", term) or re.search(r"[\d.]", term) or re.fullmatch(r"[A-Z]{2,6}", term)
+        re.search(r"[a-z][A-Z]", term)
+        or re.search(r"[\d.]", term)
+        or re.fullmatch(r"[A-Z]{2,6}", term)
         or known_technology_aliases().get("".join(toks))
     )
-    return _Rule("keyword", strong=brandlike, data_type=ColumnDataType.boolean, keywords=dedupe(_variants(term)),
-                 concept=f"Website mentions {term}", explanation="Website keyword detection on existing crawl — no AI needed")
+    return _Rule(
+        "keyword",
+        strong=brandlike,
+        data_type=ColumnDataType.boolean,
+        keywords=dedupe(_variants(term)),
+        concept=f"Website mentions {term}",
+        explanation="Website keyword detection on existing crawl — no AI needed",
+    )
 
 
 _ORDER = (
@@ -790,7 +1048,9 @@ async def _ai_plan(name: str, instruction: str | None, fallback: EnrichmentPlan)
         field=d.field,
         enum_values=d.enum_values if dtype == ColumnDataType.enum else [],
         input_sources=[PageType(s) for s in d.input_sources] or fallback.input_sources,
-        confidence_threshold={"web_research": 0.6, "ai_extraction": 0.7, "generated_text": 0.0}.get(strategy, 0.8),
+        confidence_threshold={"web_research": 0.6, "ai_extraction": 0.7, "generated_text": 0.0}.get(
+            strategy, 0.8
+        ),
         refresh_days=14 if strategy == "web_research" else 30,
         cost_class=STRATEGY_COST[strategy],
         explanation=(d.explanation or fallback.explanation)[:300],

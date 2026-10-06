@@ -15,7 +15,14 @@ from scout.discovery.yc import YCSource, filter_companies
 from .conftest import defn, fixture_json
 
 URL = "https://yc-oss.github.io/api/companies/all.json"
-SAAS_TAGS = ["B2B", "SaaS", "Enterprise Software", "Productivity", "Engineering, Product and Design", "Developer Tools"]
+SAAS_TAGS = [
+    "B2B",
+    "SaaS",
+    "Enterprise Software",
+    "Productivity",
+    "Engineering, Product and Design",
+    "Developer Tools",
+]
 
 
 @pytest.fixture(autouse=True)
@@ -30,9 +37,23 @@ def names(rows: list[dict]) -> list[str]:
 
 
 def test_filter_active_us_b2b_small_teams() -> None:
-    rows = filter_companies(fixture_json("yc_companies.json"), tags=SAAS_TAGS, keywords=[], countries=["US"],
-                            cities=[], bounds=(2, 30))
-    assert names(rows) == ["Screenleap", "Videopixie", "WorkFlowy", "Olark", "Volantio", "Dagger", "OpenReplay"]
+    rows = filter_companies(
+        fixture_json("yc_companies.json"),
+        tags=SAAS_TAGS,
+        keywords=[],
+        countries=["US"],
+        cities=[],
+        bounds=(2, 30),
+    )
+    assert names(rows) == [
+        "Screenleap",
+        "Videopixie",
+        "WorkFlowy",
+        "Olark",
+        "Volantio",
+        "Dagger",
+        "OpenReplay",
+    ]
     # Rescale/Gusto too big, WireOver inactive, SendHub acquired, consumer companies not tagged
 
 
@@ -40,9 +61,13 @@ def test_filter_by_country_city_and_keywords() -> None:
     data = fixture_json("yc_companies.json")
     fr = filter_companies(data, tags=SAAS_TAGS, keywords=[], countries=["FR"], cities=[], bounds=(None, None))
     assert names(fr) == ["Dagger", "OpenReplay"]
-    paris = filter_companies(data, tags=SAAS_TAGS, keywords=[], countries=[], cities=["Paris"], bounds=(None, None))
+    paris = filter_companies(
+        data, tags=SAAS_TAGS, keywords=[], countries=[], cities=["Paris"], bounds=(None, None)
+    )
     assert names(paris) == ["OpenReplay"]
-    kw = filter_companies(data, tags=[], keywords=["session replay"], countries=[], cities=[], bounds=(None, None))
+    kw = filter_companies(
+        data, tags=[], keywords=["session replay"], countries=[], cities=[], bounds=(None, None)
+    )
     assert names(kw) == ["OpenReplay"]
 
 
@@ -62,11 +87,17 @@ def test_suitability_and_plan() -> None:
 async def test_discover_paginates_locally_and_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     route = respx.get(URL).mock(return_value=httpx.Response(200, json=fixture_json("yc_companies.json")))
     monkeypatch.setattr(yc, "PAGE_SIZE", 3)
-    q = DiscoveryQuery(key="yc:software_saas", params={"tags": SAAS_TAGS, "keywords": [], "countries": ["US"],
-                                                       "cities": [], "min": 2, "max": 30})
+    q = DiscoveryQuery(
+        key="yc:software_saas",
+        params={"tags": SAAS_TAGS, "keywords": [], "countries": ["US"], "cities": [], "min": 2, "max": 30},
+    )
     src = YCSource()
     p1 = await src.discover(q, None)
-    assert [c.name for c in p1.candidates] == ["Screenleap", "Videopixie", "WorkFlowy"] and p1.next_cursor == {"offset": 3}
+    assert [c.name for c in p1.candidates] == [
+        "Screenleap",
+        "Videopixie",
+        "WorkFlowy",
+    ] and p1.next_cursor == {"offset": 3}
     p2 = await src.discover(q, p1.next_cursor)
     p3 = await src.discover(q, p2.next_cursor)
     assert [c.name for c in p3.candidates] == ["OpenReplay"] and p3.next_cursor is None

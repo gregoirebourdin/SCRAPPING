@@ -44,7 +44,9 @@ async def threads(ctx: Ctx, list_id: uuid.UUID | None = None, limit: int = 30) -
         if list_id:
             q = q.where(ChatThread.list_id == list_id)
         rows = (await s.scalars(q.order_by(ChatThread.updated_at.desc()).limit(min(limit, 100)))).all()
-        return [{"id": t.id, "title": t.title, "list_id": t.list_id, "updated_at": t.updated_at} for t in rows]
+        return [
+            {"id": t.id, "title": t.title, "list_id": t.list_id, "updated_at": t.updated_at} for t in rows
+        ]
 
 
 @router.get("/chat/threads/{thread_id}/messages")
@@ -53,8 +55,17 @@ async def messages(thread_id: uuid.UUID, ctx: Ctx) -> list[dict[str, Any]]:
         t = await s.get(ChatThread, thread_id)
         if t is None or t.workspace_id != ctx.workspace_id:
             raise NotFound("Thread not found")
-        rows = (await s.scalars(sa.select(ChatMessage).where(ChatMessage.thread_id == thread_id).order_by(ChatMessage.created_at))).all()
-        return [{"id": m.id, "role": m.role, "content": m.content, "parts": m.parts, "created_at": m.created_at} for m in rows]
+        rows = (
+            await s.scalars(
+                sa.select(ChatMessage)
+                .where(ChatMessage.thread_id == thread_id)
+                .order_by(ChatMessage.created_at)
+            )
+        ).all()
+        return [
+            {"id": m.id, "role": m.role, "content": m.content, "parts": m.parts, "created_at": m.created_at}
+            for m in rows
+        ]
 
 
 @router.post("/chat/messages")
@@ -65,7 +76,9 @@ async def send(body: MessageIn, ctx: Ctx) -> EventSourceResponse:
         async for event, data in operator.run_turn(ctx, thread, body.content, body.context):
             yield {"event": event, "data": orjson.dumps(data, default=str).decode()}
 
-    return EventSourceResponse(gen(), ping=10, headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+    return EventSourceResponse(
+        gen(), ping=10, headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"}
+    )
 
 
 @router.post("/chat/actions/{action_id}/confirm")
@@ -75,5 +88,13 @@ async def confirm(action_id: uuid.UUID, body: ConfirmIn, ctx: Ctx) -> dict[str, 
 
 @router.get("/meta/tools", tags=["meta"])
 async def tools() -> list[dict[str, Any]]:
-    return [{"name": t.name, "title": t.title, "description": t.description, "parameters": json_schema_for(t.args),
-             "requires_confirmation": t.needs_confirmation is not None} for t in TOOLS.values()]
+    return [
+        {
+            "name": t.name,
+            "title": t.title,
+            "description": t.description,
+            "parameters": json_schema_for(t.args),
+            "requires_confirmation": t.needs_confirmation is not None,
+        }
+        for t in TOOLS.values()
+    ]

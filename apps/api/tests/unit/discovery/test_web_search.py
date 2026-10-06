@@ -28,9 +28,15 @@ def src() -> WebSearchSource:
 
 
 def q(expand: bool = False, max_pages: int = 2) -> DiscoveryQuery:
-    return DiscoveryQuery(key="ddg:fr-fr:agence marketing lyon",
-                          params={"q": "agence marketing Lyon", "kl": "fr-fr", "max_pages": max_pages,
-                                  "expand_listicles": expand})
+    return DiscoveryQuery(
+        key="ddg:fr-fr:agence marketing lyon",
+        params={
+            "q": "agence marketing Lyon",
+            "kl": "fr-fr",
+            "max_pages": max_pages,
+            "expand_listicles": expand,
+        },
+    )
 
 
 def test_parse_results_skips_ads_and_unwraps_redirects() -> None:
@@ -70,14 +76,22 @@ def test_candidate_domain_filters(url: str, ok: bool) -> None:
 
 
 def test_name_from_title() -> None:
-    assert company_name_from_title("Agence Web Lyon - Pixel Studio | Création de sites", "pixel-studio-lyon.fr") == "Pixel Studio"
-    assert company_name_from_title("Lumière Digitale – Agence marketing digital à Lyon", "lumiere-digitale.fr") == "Lumière Digitale"
+    assert (
+        company_name_from_title("Agence Web Lyon - Pixel Studio | Création de sites", "pixel-studio-lyon.fr")
+        == "Pixel Studio"
+    )
+    assert (
+        company_name_from_title("Lumière Digitale – Agence marketing digital à Lyon", "lumiere-digitale.fr")
+        == "Lumière Digitale"
+    )
     assert company_name_from_title("Accueil - Atelier Nord", "atelier-nord.studio") == "Atelier Nord"
     assert company_name_from_title("", "acme.fr") == "Acme"
 
 
 def test_listicle_detection() -> None:
-    assert is_listicle(SearchResult("https://x.fr/blog/a", "Top 10 des meilleures agences marketing à Lyon", "", 1))
+    assert is_listicle(
+        SearchResult("https://x.fr/blog/a", "Top 10 des meilleures agences marketing à Lyon", "", 1)
+    )
     assert is_listicle(SearchResult("https://x.com/best-agencies-boston", "Agencies in Boston", "", 1))
     assert not is_listicle(SearchResult("https://pixel.fr/", "Pixel Studio - agence web", "", 1))
 
@@ -87,13 +101,20 @@ async def test_discover_one_candidate_per_company_domain(src: WebSearchSource) -
     route = respx.post(DDG).mock(return_value=httpx.Response(200, text=fixture_text("ddg_results.html")))
     page = await src.discover(q(), None)
     assert [c.domain for c in page.candidates] == [
-        "pixel-studio-lyon.fr", "lumiere-digitale.fr", "kreacom.fr", "atelier-nord.studio"
+        "pixel-studio-lyon.fr",
+        "lumiere-digitale.fr",
+        "kreacom.fr",
+        "atelier-nord.studio",
     ]
     names = {c.domain: c.name for c in page.candidates}
     assert names["pixel-studio-lyon.fr"] == "Pixel Studio" and names["atelier-nord.studio"] == "Atelier Nord"
     first = page.candidates[0]
     assert first.source == "web_search" and first.website == "https://pixel-studio-lyon.fr/"
-    assert first.raw_data["snippet"] and first.raw_data["rank"] == 1 and first.raw_data["query"] == "agence marketing Lyon"
+    assert (
+        first.raw_data["snippet"]
+        and first.raw_data["rank"] == 1
+        and first.raw_data["query"] == "agence marketing Lyon"
+    )
     form = dict(httpx.QueryParams(route.calls.last.request.content.decode()))
     assert form == {"q": "agence marketing Lyon", "kl": "fr-fr"}
     assert page.next_cursor is not None and page.next_cursor["page"] == 2
@@ -123,9 +144,17 @@ async def test_listicles_expanded_at_expansion(src: WebSearchSource, monkeypatch
     async def fake_expand(url: str, *, max_links: int = 60) -> list[RawCandidate]:
         expanded.append(url)
         return [
-            RawCandidate(source="web_search", source_entity_id="okidoki-agence.fr", name="Okidoki",
-                         website="https://okidoki-agence.fr/", domain="okidoki-agence.fr", source_url=url),
-            RawCandidate(source="web_search", source_entity_id="kreacom.fr", name="Kréa", domain="kreacom.fr"),
+            RawCandidate(
+                source="web_search",
+                source_entity_id="okidoki-agence.fr",
+                name="Okidoki",
+                website="https://okidoki-agence.fr/",
+                domain="okidoki-agence.fr",
+                source_url=url,
+            ),
+            RawCandidate(
+                source="web_search", source_entity_id="kreacom.fr", name="Kréa", domain="kreacom.fr"
+            ),
         ]
 
     monkeypatch.setattr("scout.discovery.listicle.expand_listicle", fake_expand)
@@ -138,8 +167,12 @@ async def test_listicles_expanded_at_expansion(src: WebSearchSource, monkeypatch
 
 
 def test_plan_and_suitability() -> None:
-    d = defn(industries=["agence marketing"], countries=["FR"], cities=["Lyon"],
-             _extra={"website_conditions": [{"type": "keyword_any", "terms": ["instagram", "manychat"]}]})
+    d = defn(
+        industries=["agence marketing"],
+        countries=["FR"],
+        cities=["Lyon"],
+        _extra={"website_conditions": [{"type": "keyword_any", "terms": ["instagram", "manychat"]}]},
+    )
     src = WebSearchSource()
     assert src.suitability(d) == 0.8
     plan = src.plan(d)

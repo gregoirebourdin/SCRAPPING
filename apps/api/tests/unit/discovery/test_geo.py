@@ -13,8 +13,28 @@ def test_reference_data_sizes() -> None:
     assert geo.DEPARTMENTS_BY_ECONOMIC_SIZE[:4] == ("75", "69", "13", "92")
     assert len(geo.FR_REGIONS) == 18
     assert len(geo.country_cities("FR")) >= 150
-    for cc in ("GB", "US", "DE", "ES", "IT", "BE", "CH", "NL", "CA", "PT", "IE", "LU", "AT", "SE", "DK", "NO", "FI",
-               "PL", "AU", "MA"):
+    for cc in (
+        "GB",
+        "US",
+        "DE",
+        "ES",
+        "IT",
+        "BE",
+        "CH",
+        "NL",
+        "CA",
+        "PT",
+        "IE",
+        "LU",
+        "AT",
+        "SE",
+        "DK",
+        "NO",
+        "FI",
+        "PL",
+        "AU",
+        "MA",
+    ):
         assert 25 <= len(geo.country_cities(cc)) <= 40, cc
 
 
@@ -61,9 +81,22 @@ def test_find_city_aliases_and_homonyms() -> None:
 
 @pytest.mark.parametrize(
     ("name", "code"),
-    [("France", "FR"), ("Belgique", "BE"), ("Suisse", "CH"), ("Allemagne", "DE"), ("Royaume-Uni", "GB"),
-     ("UK", "GB"), ("États-Unis", "US"), ("USA", "US"), ("Pays-Bas", "NL"), ("Espagne", "ES"), ("Maroc", "MA"),
-     ("fr", "FR"), ("deutschland", "DE"), ("Atlantis", None)],
+    [
+        ("France", "FR"),
+        ("Belgique", "BE"),
+        ("Suisse", "CH"),
+        ("Allemagne", "DE"),
+        ("Royaume-Uni", "GB"),
+        ("UK", "GB"),
+        ("États-Unis", "US"),
+        ("USA", "US"),
+        ("Pays-Bas", "NL"),
+        ("Espagne", "ES"),
+        ("Maroc", "MA"),
+        ("fr", "FR"),
+        ("deutschland", "DE"),
+        ("Atlantis", None),
+    ],
 )
 def test_country_code(name: str, code: str | None) -> None:
     assert geo.country_code(name) == code

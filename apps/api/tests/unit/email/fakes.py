@@ -33,8 +33,15 @@ def vr(
     free: bool = False,
 ) -> VerificationResult:
     return VerificationResult(
-        address=address, syntax_valid=syntax, mx_valid=mx, smtp_result=smtp, catch_all=catch_all,
-        disposable=disposable, role_address=role, free_provider=free, verifier="fake",
+        address=address,
+        syntax_valid=syntax,
+        mx_valid=mx,
+        smtp_result=smtp,
+        catch_all=catch_all,
+        disposable=disposable,
+        role_address=role,
+        free_provider=free,
+        verifier="fake",
     )
 
 
@@ -60,7 +67,9 @@ class FakeMxLookup:
 
     async def __call__(self, domain: str) -> MxInfo:
         self.calls.append(domain)
-        return self.infos.get(domain) or MxInfo(domain, has_mx=True, mx_hosts=[f"mx1.{domain}", f"mx2.{domain}"])
+        return self.infos.get(domain) or MxInfo(
+            domain, has_mx=True, mx_hosts=[f"mx1.{domain}", f"mx2.{domain}"]
+        )
 
 
 class FakeSMTP:

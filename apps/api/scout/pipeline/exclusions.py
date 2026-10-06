@@ -13,7 +13,9 @@ from scout.services.exclusion import ExclusionRule
 
 
 async def load_rules(s: AsyncSession, campaign_id: uuid.UUID) -> list[ExclusionRule]:
-    rows = (await s.scalars(sa.select(CampaignExclusion).where(CampaignExclusion.campaign_id == campaign_id))).all()
+    rows = (
+        await s.scalars(sa.select(CampaignExclusion).where(CampaignExclusion.campaign_id == campaign_id))
+    ).all()
     return [
         ExclusionRule(
             entity=r.entity,

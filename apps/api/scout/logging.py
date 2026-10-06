@@ -20,7 +20,9 @@ def _redact(_: Any, __: str, event_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 def configure_logging(level: str = "INFO", json: bool = False) -> None:
-    logging.basicConfig(format="%(message)s", stream=sys.stdout, level=getattr(logging, level.upper(), logging.INFO))
+    logging.basicConfig(
+        format="%(message)s", stream=sys.stdout, level=getattr(logging, level.upper(), logging.INFO)
+    )
     for noisy in ("httpx", "httpcore", "asyncio", "hpack"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     logging.getLogger("google_genai").setLevel(logging.ERROR)
@@ -32,7 +34,9 @@ def configure_logging(level: str = "INFO", json: bool = False) -> None:
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]
-    processors.append(structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer(colors=False))
+    processors.append(
+        structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer(colors=False)
+    )
     structlog.configure(
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(getattr(logging, level.upper(), logging.INFO)),

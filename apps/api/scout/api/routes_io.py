@@ -51,10 +51,24 @@ async def import_start(
         lid = uuid.UUID(list_id) if list_id else None
         if lid:
             await lists_svc.get_list(s, ctx.workspace_id, lid)
-        imp = await imports.start_import(s, ctx.workspace_id, raw=raw, filename=file.filename or "import.csv",
-                                         mapping=mapping_obj, list_id=lid, mark_as_known=mark_as_known, user_id=ctx.user_id)
-        await audit.log(s, workspace_id=ctx.workspace_id, actor_id=ctx.user_id, action="import.start",
-                        summary=f"Import of {imp.row_count} rows from {imp.filename}", payload={"import_id": str(imp.id)})
+        imp = await imports.start_import(
+            s,
+            ctx.workspace_id,
+            raw=raw,
+            filename=file.filename or "import.csv",
+            mapping=mapping_obj,
+            list_id=lid,
+            mark_as_known=mark_as_known,
+            user_id=ctx.user_id,
+        )
+        await audit.log(
+            s,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            action="import.start",
+            summary=f"Import of {imp.row_count} rows from {imp.filename}",
+            payload={"import_id": str(imp.id)},
+        )
         return {"id": imp.id, "row_count": imp.row_count, "status": imp.status.value}
 
 
@@ -74,17 +88,39 @@ async def export(body: ExportRequest, ctx: Ctx) -> Response:
             entity = lst.entity_type
             name = "".join(ch if ch.isalnum() else "-" for ch in lst.name.lower()).strip("-")[:40] or name
         res = await exports.export_rows(
-            s, ctx.workspace_id, user_id=ctx.user_id, entity_type=entity, scope=body.scope, list_id=body.list_id,
-            view_id=body.view_id, ids=body.ids, filters=body.filters, sort=body.sort, search=body.search,
-            columns=body.columns, columns_mode=body.columns_mode, fmt=body.format, filename_hint=name,
+            s,
+            ctx.workspace_id,
+            user_id=ctx.user_id,
+            entity_type=entity,
+            scope=body.scope,
+            list_id=body.list_id,
+            view_id=body.view_id,
+            ids=body.ids,
+            filters=body.filters,
+            sort=body.sort,
+            search=body.search,
+            columns=body.columns,
+            columns_mode=body.columns_mode,
+            fmt=body.format,
+            filename_hint=name,
         )
-        await audit.log(s, workspace_id=ctx.workspace_id, actor_id=ctx.user_id, action="export",
-                        entity_type=entity.value, summary=f"Exported {res.row_count} rows ({body.format.upper()})",
-                        payload={"export_id": str(res.export_id), "scope": body.scope.value})
+        await audit.log(
+            s,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            action="export",
+            entity_type=entity.value,
+            summary=f"Exported {res.row_count} rows ({body.format.upper()})",
+            payload={"export_id": str(res.export_id), "scope": body.scope.value},
+        )
     return Response(
-        content=res.body, media_type=res.content_type,
-        headers={"Content-Disposition": f'attachment; filename="{res.filename}"', "X-Row-Count": str(res.row_count),
-                 "X-Export-Id": str(res.export_id)},
+        content=res.body,
+        media_type=res.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{res.filename}"',
+            "X-Row-Count": str(res.row_count),
+            "X-Export-Id": str(res.export_id),
+        },
     )
 
 
@@ -102,10 +138,25 @@ async def suppress(body: SuppressRequest, ctx: Ctx) -> dict[str, Any]:
         if body.rows is not None:
             rows = await lists_svc.resolve_rows(s, ctx.workspace_id, body.rows)
             (person_ids if rows.entity_type == EntityType.person else company_ids).extend(rows.ids)
-        n = await suppression.suppress(s, ctx.workspace_id, reason=body.reason, user_id=ctx.user_id, person_ids=person_ids,
-                                       company_ids=company_ids, emails=body.emails, domains=body.domains, note=body.note)
-        await audit.log(s, workspace_id=ctx.workspace_id, actor_id=ctx.user_id, action="suppress",
-                        entity_ids=[*person_ids, *company_ids], summary=f"Suppressed {n} entries ({body.reason.value})")
+        n = await suppression.suppress(
+            s,
+            ctx.workspace_id,
+            reason=body.reason,
+            user_id=ctx.user_id,
+            person_ids=person_ids,
+            company_ids=company_ids,
+            emails=body.emails,
+            domains=body.domains,
+            note=body.note,
+        )
+        await audit.log(
+            s,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            action="suppress",
+            entity_ids=[*person_ids, *company_ids],
+            summary=f"Suppressed {n} entries ({body.reason.value})",
+        )
     return {"suppressed": n}
 
 
@@ -114,5 +165,11 @@ async def unsuppress(entry_id: uuid.UUID, ctx: Ctx) -> dict[str, Any]:
     ctx.require(MemberRole.admin)
     async with session_scope() as s:
         await suppression.unsuppress(s, ctx.workspace_id, entry_id)
-        await audit.log(s, workspace_id=ctx.workspace_id, actor_id=ctx.user_id, action="unsuppress", summary="Removed a suppression entry")
+        await audit.log(
+            s,
+            workspace_id=ctx.workspace_id,
+            actor_id=ctx.user_id,
+            action="unsuppress",
+            summary="Removed a suppression entry",
+        )
     return {"ok": True}

@@ -35,8 +35,33 @@ PATTERN_SET: frozenset[str] = frozenset(PATTERNS)
 
 # Name particles merged into / stripped from last names ("de la Fontaine" → delafontaine | fontaine).
 PARTICLES: frozenset[str] = frozenset(
-    {"de", "du", "des", "la", "le", "les", "d", "l", "van", "von", "der", "den", "di", "da", "del", "della",
-     "dos", "das", "do", "ten", "ter", "zu", "y", "mac", "st"}
+    {
+        "de",
+        "du",
+        "des",
+        "la",
+        "le",
+        "les",
+        "d",
+        "l",
+        "van",
+        "von",
+        "der",
+        "den",
+        "di",
+        "da",
+        "del",
+        "della",
+        "dos",
+        "das",
+        "do",
+        "ten",
+        "ter",
+        "zu",
+        "y",
+        "mac",
+        "st",
+    }
 )
 
 _FIELD = re.compile(r"\{(first|last|f|l)\}")
@@ -56,8 +81,8 @@ class NameParts:
 
     first: tuple[str, ...]
     last: tuple[str, ...]
-    f: tuple[str, ...]       # first-name initials ("j", "jp" for Jean-Pierre)
-    l: tuple[str, ...]       # noqa: E741 — last-name initials, one per last-name variant
+    f: tuple[str, ...]  # first-name initials ("j", "jp" for Jean-Pierre)
+    l: tuple[str, ...]  # noqa: E741 — last-name initials, one per last-name variant
 
     @property
     def is_empty(self) -> bool:
@@ -152,9 +177,7 @@ def render_parts(pattern: str, parts: NameParts) -> list[str]:
     )
     out: list[str] = []
     for (_, fv), (_, lv) in combos:
-        local = (
-            pattern.replace("{first}", fv).replace("{f}", fv).replace("{last}", lv).replace("{l}", lv)
-        )
+        local = pattern.replace("{first}", fv).replace("{f}", fv).replace("{last}", lv).replace("{l}", lv)
         if _is_valid_local(local) and local not in out:
             out.append(local)
     return out
@@ -326,7 +349,9 @@ def _normalized_priors(company_size_max: int | None, country: str | None) -> tup
     return tuple((p, round(v, 4)) for p, v in ranked)
 
 
-def ranked_priors(*, company_size_max: int | None = None, country: str | None = None) -> list[tuple[str, float]]:
+def ranked_priors(
+    *, company_size_max: int | None = None, country: str | None = None
+) -> list[tuple[str, float]]:
     """All vocabulary patterns with their context-adjusted prior, most likely first (sums to ~1)."""
     return list(_normalized_priors(company_size_max, (country or "").upper() or None))
 

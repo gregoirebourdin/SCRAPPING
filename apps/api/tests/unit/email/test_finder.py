@@ -17,10 +17,15 @@ LARGE = {"company_size_max": 5000, "country": "FR"}
 async def test_published_address_first_and_safe_without_smtp():
     v = fixture_verifier({"agence-x.fr": {"mx": True, "smtp": False}})
     f = await find_email(
-        first="Marie", last="Dupont", domain="agence-x.fr",
-        published=[("contact@agence-x.fr", "https://agence-x.fr/contact"),
-                   ("Marie.Dupont@agence-x.fr", "https://agence-x.fr/equipe")],
-        verifier=v, **LARGE,
+        first="Marie",
+        last="Dupont",
+        domain="agence-x.fr",
+        published=[
+            ("contact@agence-x.fr", "https://agence-x.fr/contact"),
+            ("Marie.Dupont@agence-x.fr", "https://agence-x.fr/equipe"),
+        ],
+        verifier=v,
+        **LARGE,
     )
     assert f.address == "marie.dupont@agence-x.fr" and f.status == S.SAFE and f.overall_confidence == 0.92
     assert f.method == M.published and f.pattern == "{first}.{last}"
@@ -31,16 +36,25 @@ async def test_published_address_first_and_safe_without_smtp():
 async def test_published_for_other_people_or_roles_is_ignored():
     v = fixture_verifier()
     f = await find_email(
-        first="Marie", last="Dupont", domain="agence-x.fr",
-        published=[("contact@agence-x.fr", None), ("jean.martin@agence-x.fr", None), ("md@agence-x.fr", None)],
-        verifier=v, **LARGE,
+        first="Marie",
+        last="Dupont",
+        domain="agence-x.fr",
+        published=[
+            ("contact@agence-x.fr", None),
+            ("jean.martin@agence-x.fr", None),
+            ("md@agence-x.fr", None),
+        ],
+        verifier=v,
+        **LARGE,
     )
     assert f.method == M.permutation and f.address == "marie.dupont@agence-x.fr" and f.status == S.SAFE
     assert v.calls == ["marie.dupont@agence-x.fr"]
 
 
 async def test_stops_at_first_safe():
-    v = fixture_verifier({"studio-y.fr": {"mx": True, "catch_all": False, "mailboxes": ["mdupont@studio-y.fr"]}})
+    v = fixture_verifier(
+        {"studio-y.fr": {"mx": True, "catch_all": False, "mailboxes": ["mdupont@studio-y.fr"]}}
+    )
     f = await find_email(first="Marie", last="Dupont", domain="studio-y.fr", verifier=v, **LARGE)
     assert f.status == S.SAFE and f.overall_confidence == 0.95 and f.address == "mdupont@studio-y.fr"
     assert v.calls[-1] == "mdupont@studio-y.fr" and len(v.calls) == 2
@@ -58,8 +72,12 @@ async def test_catch_all_probes_exactly_once():
 async def test_catch_all_with_strong_known_pattern_is_risky():
     v = fixture_verifier()
     f = await find_email(
-        first="Marie", last="Dupont", domain="catchall.fr", known_patterns=[("{f}{last}", 0.925, 3)],
-        verifier=v, **LARGE,
+        first="Marie",
+        last="Dupont",
+        domain="catchall.fr",
+        known_patterns=[("{f}{last}", 0.925, 3)],
+        verifier=v,
+        **LARGE,
     )
     assert v.calls == ["mdupont@catchall.fr"]
     assert f.status == S.RISKY and f.method == M.known_pattern and 0.6 <= f.overall_confidence <= 0.8
@@ -79,8 +97,12 @@ async def test_smtp_unavailable_returns_best_candidate_without_looping():
 async def test_smtp_unavailable_with_strong_pattern_is_risky():
     v = fixture_verifier({"nosmtp.fr": {"mx": True, "smtp": False}})
     f = await find_email(
-        first="Marie", last="Dupont", domain="nosmtp.fr", known_patterns=[("{first}", 0.9625, 4)],
-        verifier=v, **LARGE,
+        first="Marie",
+        last="Dupont",
+        domain="nosmtp.fr",
+        known_patterns=[("{first}", 0.9625, 4)],
+        verifier=v,
+        **LARGE,
     )
     assert v.calls == ["marie@nosmtp.fr"] and f.status == S.RISKY and f.reason is None
 
@@ -109,12 +131,14 @@ async def test_no_domain_and_no_names():
 
 
 async def test_published_free_provider_beats_unverifiable_guess():
-    v = fixture_verifier(
-        {"gmail.com": {"mx": True, "smtp": False}, "nosmtp.fr": {"mx": True, "smtp": False}}
-    )
+    v = fixture_verifier({"gmail.com": {"mx": True, "smtp": False}, "nosmtp.fr": {"mx": True, "smtp": False}})
     f = await find_email(
-        first="Marie", last="Dupont", domain="nosmtp.fr",
-        published=[("marie.dupont75@gmail.com", "https://nosmtp.fr/")], verifier=v, **LARGE,
+        first="Marie",
+        last="Dupont",
+        domain="nosmtp.fr",
+        published=[("marie.dupont75@gmail.com", "https://nosmtp.fr/")],
+        verifier=v,
+        **LARGE,
     )
     assert v.calls == ["marie.dupont75@gmail.com", "marie.dupont@nosmtp.fr"]
     assert f.address == "marie.dupont75@gmail.com" and f.status == S.RISKY and f.overall_confidence == 0.5
@@ -123,8 +147,13 @@ async def test_published_free_provider_beats_unverifiable_guess():
 async def test_accept_controls_reason():
     v = fixture_verifier()
     f = await find_email(
-        first="Marie", last="Dupont", domain="catchall.fr", known_patterns=[("{f}{last}", 0.925, 3)],
-        verifier=v, accept={S.SAFE}, **LARGE,
+        first="Marie",
+        last="Dupont",
+        domain="catchall.fr",
+        known_patterns=[("{f}{last}", 0.925, 3)],
+        verifier=v,
+        accept={S.SAFE},
+        **LARGE,
     )
     assert f.status == S.RISKY and f.reason == finder.REASON_RISKY
 
@@ -149,12 +178,21 @@ def test_matches_person_heuristics():
 
 def test_published_candidates_order_and_filters():
     out = published_candidates(
-        "Marie", "Dupont", "agence-x.fr",
-        [("marie.dupont@gmail.com", None), ("marie.dupont@agence-x.fr", "u1"), ("marie.dupont@other-co.fr", None),
-         ("marie@paris.agence-x.fr", "u2"), ("MARIE.DUPONT@agence-x.fr", "dup")],
+        "Marie",
+        "Dupont",
+        "agence-x.fr",
+        [
+            ("marie.dupont@gmail.com", None),
+            ("marie.dupont@agence-x.fr", "u1"),
+            ("marie.dupont@other-co.fr", None),
+            ("marie@paris.agence-x.fr", "u2"),
+            ("MARIE.DUPONT@agence-x.fr", "dup"),
+        ],
     )
     assert [c.address for c in out] == [
-        "marie.dupont@agence-x.fr", "marie@paris.agence-x.fr", "marie.dupont@gmail.com",
+        "marie.dupont@agence-x.fr",
+        "marie@paris.agence-x.fr",
+        "marie.dupont@gmail.com",
     ]
     assert out[0].pattern_confidence == finder.PUBLISHED_ON_DOMAIN_CONFIDENCE
     assert out[-1].pattern_confidence == finder.PUBLISHED_FREE_CONFIDENCE

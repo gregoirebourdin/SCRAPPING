@@ -30,20 +30,34 @@ def src() -> GoogleMapsSource:
 def query() -> DiscoveryQuery:
     return DiscoveryQuery(
         key="maps:dentist:FR:Lyon",
-        params={"keywords": ["dentiste Lyon", "cabinet dentaire Lyon"], "lang": "fr", "city": "Lyon",
-                "country": "FR", "depth": 1},
+        params={
+            "keywords": ["dentiste Lyon", "cabinet dentaire Lyon"],
+            "lang": "fr",
+            "city": "Lyon",
+            "country": "FR",
+            "depth": 1,
+        },
     )
 
 
 def test_parse_csv_rows() -> None:
     cands = parse_csv(fixture_text("gmaps_results.csv"), query=query())
-    assert [c.name for c in cands] == ["Cabinet Dentaire Bellecour", "Dr Sophie Martin - Chirurgien-dentiste",
-                                       "Centre Dentaire Part-Dieu"]  # row without title skipped
+    assert [c.name for c in cands] == [
+        "Cabinet Dentaire Bellecour",
+        "Dr Sophie Martin - Chirurgien-dentiste",
+        "Centre Dentaire Part-Dieu",
+    ]  # row without title skipped
     a, b, c = cands
     assert a.source == "google_maps" and a.source_entity_id == "ChIJLRybj1rq9EcRgXBv5dk8Kxo"
     assert a.website == "https://dentaire-bellecour.fr/" and a.phone == "+33 4 78 00 00 01"
-    assert a.location == {"country": "FR", "city": "Lyon", "postal_code": "69002",
-                          "address": "12 Pl. Bellecour, 69002 Lyon, France", "lat": 45.7578, "lng": 4.832}
+    assert a.location == {
+        "country": "FR",
+        "city": "Lyon",
+        "postal_code": "69002",
+        "address": "12 Pl. Bellecour, 69002 Lyon, France",
+        "lat": 45.7578,
+        "lng": 4.832,
+    }
     assert a.category == "Dentiste" and a.status == "active"
     assert a.raw_data["rating"] == 4.7 and a.raw_data["review_count"] == 214
     assert "user_reviews" not in a.raw_data  # reviewer data never kept
@@ -95,7 +109,9 @@ async def test_job_lifecycle(configured, src: GoogleMapsSource) -> None:
     # 2nd call: done → download CSV, delete job, query exhausted.
     status.mock(return_value=httpx.Response(200, json={"ID": "job-1", "Status": "ok"}))
     respx.get(f"{BASE}/api/v1/jobs/job-1/download").mock(
-        return_value=httpx.Response(200, text=fixture_text("gmaps_results.csv"), headers={"content-type": "text/csv"})
+        return_value=httpx.Response(
+            200, text=fixture_text("gmaps_results.csv"), headers={"content-type": "text/csv"}
+        )
     )
     delete = respx.delete(f"{BASE}/api/v1/jobs/job-1").mock(return_value=httpx.Response(200))
     done = await src.discover(query(), page.next_cursor)
@@ -133,9 +149,14 @@ async def test_bounded_polling_until_ok(configured) -> None:
     src = GoogleMapsSource(poll_budget_s=5)
     respx.post(f"{BASE}/api/v1/jobs").mock(return_value=httpx.Response(201, json={"id": "j"}))
     respx.get(f"{BASE}/api/v1/jobs/j").mock(
-        side_effect=[httpx.Response(200, json={"Status": "pending"}), httpx.Response(200, json={"Status": "ok"})]
+        side_effect=[
+            httpx.Response(200, json={"Status": "pending"}),
+            httpx.Response(200, json={"Status": "ok"}),
+        ]
     )
-    respx.get(f"{BASE}/api/v1/jobs/j/download").mock(return_value=httpx.Response(404, text="csv file not found"))
+    respx.get(f"{BASE}/api/v1/jobs/j/download").mock(
+        return_value=httpx.Response(404, text="csv file not found")
+    )
     respx.delete(f"{BASE}/api/v1/jobs/j").mock(return_value=httpx.Response(200))
     sleeps: list[float] = []
 

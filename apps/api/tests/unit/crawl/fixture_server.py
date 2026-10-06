@@ -36,9 +36,17 @@ class FixtureServer:
         self.port = 0
 
     # ---- routes ---------------------------------------------------------------------------
-    def add(self, host: str, path: str, body: str | bytes = b"", *, status: int = 200,
-            content_type: str = "text/html; charset=utf-8", headers: dict[str, str] | None = None,
-            etag: bool = True) -> None:
+    def add(
+        self,
+        host: str,
+        path: str,
+        body: str | bytes = b"",
+        *,
+        status: int = 200,
+        content_type: str = "text/html; charset=utf-8",
+        headers: dict[str, str] | None = None,
+        etag: bool = True,
+    ) -> None:
         data = body.encode("utf-8") if isinstance(body, str) else body
         self.routes[(host.lower(), path)] = Route(status, data, headers or {}, content_type, etag)
 
@@ -93,7 +101,12 @@ class FixtureServer:
             self.requests.append((host, path, headers))
             route = self.routes.get((host, path)) or self.routes.get((host, path.rstrip("/") or "/"))
             if route is None:
-                status, body, extra, ctype = 404, b"<html><body><h1>Not found</h1></body></html>", {}, "text/html"
+                status, body, extra, ctype = (
+                    404,
+                    b"<html><body><h1>Not found</h1></body></html>",
+                    {},
+                    "text/html",
+                )
             else:
                 status, body, extra, ctype = route.status, route.body, dict(route.headers), route.content_type
                 if route.etag and status == 200:
@@ -101,8 +114,16 @@ class FixtureServer:
                     extra["ETag"] = etag
                     if headers.get("if-none-match") == etag:
                         status, body = 304, b""
-            reason = {200: "OK", 301: "Moved Permanently", 302: "Found", 304: "Not Modified", 403: "Forbidden",
-                      404: "Not Found", 429: "Too Many Requests", 503: "Service Unavailable"}.get(status, "OK")
+            reason = {
+                200: "OK",
+                301: "Moved Permanently",
+                302: "Found",
+                304: "Not Modified",
+                403: "Forbidden",
+                404: "Not Found",
+                429: "Too Many Requests",
+                503: "Service Unavailable",
+            }.get(status, "OK")
             lines = [f"HTTP/1.1 {status} {reason}", f"Content-Length: {len(body)}", "Connection: close"]
             if status != 304:
                 lines.append(f"Content-Type: {ctype}")
@@ -129,7 +150,9 @@ AGENCE_LUMIERE_PAGES = {
 }
 
 
-def configure_overrides(monkeypatch, hosts: dict[str, str], *, allow_private: list[str] | None = None) -> None:
+def configure_overrides(
+    monkeypatch, hosts: dict[str, str], *, allow_private: list[str] | None = None
+) -> None:
     """Point hosts at local targets and reset cached settings / robots / HTTP client."""
     from scout.config import get_settings
     from scout.crawl import robots

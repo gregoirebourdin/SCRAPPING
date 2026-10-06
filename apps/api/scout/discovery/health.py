@@ -67,7 +67,8 @@ async def record_request(
     t = Source.__table__
     streak = t.c.consecutive_failures + 1
     cooldown_min = sa.cast(
-        sa.func.least(MAX_COOLDOWN_MIN, BASE_COOLDOWN_MIN * sa.func.power(2, streak - FAILURE_THRESHOLD)), sa.Integer
+        sa.func.least(MAX_COOLDOWN_MIN, BASE_COOLDOWN_MIN * sa.func.power(2, streak - FAILURE_THRESHOLD)),
+        sa.Integer,
     )
     err = (error or ("blocked" if blocked else "error"))[:500] if not ok else None
     stmt = pg_insert(Source).values(
@@ -105,7 +106,10 @@ async def record_request(
             "consecutive_failures": streak,
             "last_error": err,
             "unhealthy_until": sa.case(
-                (streak >= FAILURE_THRESHOLD, sa.func.now() + sa.func.make_interval(0, 0, 0, 0, 0, cooldown_min)),
+                (
+                    streak >= FAILURE_THRESHOLD,
+                    sa.func.now() + sa.func.make_interval(0, 0, 0, 0, 0, cooldown_min),
+                ),
                 else_=t.c.unhealthy_until,
             ),
         }
@@ -115,8 +119,13 @@ async def record_request(
     async with session_scope() as s:
         row = (await s.execute(upsert)).one()
     if not ok and row.consecutive_failures >= FAILURE_THRESHOLD:
-        log.warning("source.unhealthy", source=key, streak=row.consecutive_failures, until=str(row.unhealthy_until),
-                    error=err)
+        log.warning(
+            "source.unhealthy",
+            source=key,
+            streak=row.consecutive_failures,
+            until=str(row.unhealthy_until),
+            error=err,
+        )
 
 
 async def record_outcomes(key: str, *, duplicates: int = 0, qualified: int = 0) -> None:
@@ -124,7 +133,9 @@ async def record_outcomes(key: str, *, duplicates: int = 0, qualified: int = 0) 
     if not duplicates and not qualified:
         return
     t = Source.__table__
-    stmt = pg_insert(Source).values(**_insert_defaults(key), duplicates=max(0, duplicates), qualified=max(0, qualified))
+    stmt = pg_insert(Source).values(
+        **_insert_defaults(key), duplicates=max(0, duplicates), qualified=max(0, qualified)
+    )
     stmt = stmt.on_conflict_do_update(
         index_elements=[Source.key],
         set_={

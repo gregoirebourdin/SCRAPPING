@@ -54,16 +54,88 @@ _TLDS_BY_COUNTRY: dict[str, tuple[str, ...]] = {
     "US": ("com", "io", "co", "net", "us", "org"),
 }
 _DEFAULT_TLDS = ("com", "io", "co", "net", "org", "eu")
-_EXTRA_GENERIC = {"cabinet", "atelier", "maison", "societe", "ste", "ets", "etablissements", "entreprise", "les", "le",
-                  "la", "l", "de", "des", "du", "d", "of", "sarl", "sas", "the", "agency", "agence", "studio", "group",
-                  "groupe", "and", "et"}
+_EXTRA_GENERIC = {
+    "cabinet",
+    "atelier",
+    "maison",
+    "societe",
+    "ste",
+    "ets",
+    "etablissements",
+    "entreprise",
+    "les",
+    "le",
+    "la",
+    "l",
+    "de",
+    "des",
+    "du",
+    "d",
+    "of",
+    "sarl",
+    "sas",
+    "the",
+    "agency",
+    "agence",
+    "studio",
+    "group",
+    "groupe",
+    "and",
+    "et",
+}
 # A lone generic word would match someone else's domain (marketing.fr, conseil.com …).
 _TOO_GENERIC = {
-    "contact", "services", "service", "digital", "marketing", "conseil", "consulting", "design", "web", "communication",
-    "france", "paris", "lyon", "media", "studio", "agence", "agency", "creation", "creative", "solutions", "group",
-    "groupe", "immobilier", "construction", "batiment", "transport", "formation", "sante", "beaute", "restaurant",
-    "boulangerie", "garage", "auto", "info", "net", "online", "shop", "boutique", "store", "home", "art", "photo",
-    "video", "event", "events", "travaux", "renovation", "nettoyage", "plomberie", "electricite", "coiffure",
+    "contact",
+    "services",
+    "service",
+    "digital",
+    "marketing",
+    "conseil",
+    "consulting",
+    "design",
+    "web",
+    "communication",
+    "france",
+    "paris",
+    "lyon",
+    "media",
+    "studio",
+    "agence",
+    "agency",
+    "creation",
+    "creative",
+    "solutions",
+    "group",
+    "groupe",
+    "immobilier",
+    "construction",
+    "batiment",
+    "transport",
+    "formation",
+    "sante",
+    "beaute",
+    "restaurant",
+    "boulangerie",
+    "garage",
+    "auto",
+    "info",
+    "net",
+    "online",
+    "shop",
+    "boutique",
+    "store",
+    "home",
+    "art",
+    "photo",
+    "video",
+    "event",
+    "events",
+    "travaux",
+    "renovation",
+    "nettoyage",
+    "plomberie",
+    "electricite",
+    "coiffure",
 }
 
 
@@ -93,7 +165,11 @@ def _labels(name: str) -> list[str]:
             continue
         joined, hyphen = "".join(toks), "-".join(toks)
         for label in (joined, hyphen):
-            if 3 <= len(label) <= 63 and re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label) and label not in labels:
+            if (
+                3 <= len(label) <= 63
+                and re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+                and label not in labels
+            ):
                 labels.append(label)
     return labels
 
@@ -255,7 +331,12 @@ async def resolve_website(
                 if lresp is not None and lresp.ok:
                     lparsed = parse_html(lresp.text, lresp.final_url)
                     lconf, lev, lmethod = _verify(
-                        lparsed, name=name, city=city, postal_code=postal_code, registry_id=registry_id, phone=phone
+                        lparsed,
+                        name=name,
+                        city=city,
+                        postal_code=postal_code,
+                        registry_id=registry_id,
+                        phone=phone,
                     )
                     if lconf > conf:
                         conf, evidence, method, source = lconf, lev, lmethod, lresp.final_url

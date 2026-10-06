@@ -49,7 +49,11 @@ def compile_rules(spec: ExclusionSpec, *, target_list_id: uuid.UUID | None = Non
     P, C = EntityType.person, EntityType.company
     m = spec.mode
     rules: list[ExclusionRule] = []
-    want_company = spec.previous_companies or spec.include_company_scope or not spec.allow_new_people_at_existing_companies
+    want_company = (
+        spec.previous_companies
+        or spec.include_company_scope
+        or not spec.allow_new_people_at_existing_companies
+    )
     if m == ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE:
         rules.append(ExclusionRule(P, mode=m))
         if want_company:
@@ -177,10 +181,17 @@ async def _rule_matches(
             (
                 await s.execute(
                     sa.text(sql),
-                    {"ws": workspace_id, "etype": rule.entity.value, "ids": ids, "lists": rule.list_ids,
-                     "current": current_campaign_id},
+                    {
+                        "ws": workspace_id,
+                        "etype": rule.entity.value,
+                        "ids": ids,
+                        "lists": rule.list_ids,
+                        "current": current_campaign_id,
+                    },
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
     return hits
 
@@ -212,22 +223,25 @@ async def excluded_entities(
 
 
 async def suppressed_companies(
-    s: AsyncSession, workspace_id: uuid.UUID, *, company_ids: Sequence[uuid.UUID] = (), domains: Sequence[str] = ()
+    s: AsyncSession,
+    workspace_id: uuid.UUID,
+    *,
+    company_ids: Sequence[uuid.UUID] = (),
+    domains: Sequence[str] = (),
 ) -> tuple[set[uuid.UUID], set[str]]:
     ids_hit: set[uuid.UUID] = set()
     domains_hit: set[str] = set()
     if company_ids:
-        ids_hit = set(
-            (
-                await s.scalars(
-                    sa.select(SuppressionEntry.entity_id).where(
-                        SuppressionEntry.workspace_id == workspace_id,
-                        SuppressionEntry.entity_type == SuppressionEntity.company,
-                        SuppressionEntry.entity_id.in_(list(company_ids)),
-                    )
+        rows = (
+            await s.scalars(
+                sa.select(SuppressionEntry.entity_id).where(
+                    SuppressionEntry.workspace_id == workspace_id,
+                    SuppressionEntry.entity_type == SuppressionEntity.company,
+                    SuppressionEntry.entity_id.in_(list(company_ids)),
                 )
-            ).all()
-        )
+            )
+        ).all()
+        ids_hit = {r for r in rows if r is not None}
     doms = [d.lower() for d in domains if d]
     if doms:
         domains_hit = set(
@@ -245,22 +259,25 @@ async def suppressed_companies(
 
 
 async def suppressed_people(
-    s: AsyncSession, workspace_id: uuid.UUID, *, person_ids: Sequence[uuid.UUID] = (), emails: Sequence[str] = ()
+    s: AsyncSession,
+    workspace_id: uuid.UUID,
+    *,
+    person_ids: Sequence[uuid.UUID] = (),
+    emails: Sequence[str] = (),
 ) -> tuple[set[uuid.UUID], set[str]]:
     ids_hit: set[uuid.UUID] = set()
     emails_hit: set[str] = set()
     if person_ids:
-        ids_hit = set(
-            (
-                await s.scalars(
-                    sa.select(SuppressionEntry.entity_id).where(
-                        SuppressionEntry.workspace_id == workspace_id,
-                        SuppressionEntry.entity_type == SuppressionEntity.person,
-                        SuppressionEntry.entity_id.in_(list(person_ids)),
-                    )
+        rows = (
+            await s.scalars(
+                sa.select(SuppressionEntry.entity_id).where(
+                    SuppressionEntry.workspace_id == workspace_id,
+                    SuppressionEntry.entity_type == SuppressionEntity.person,
+                    SuppressionEntry.entity_id.in_(list(person_ids)),
                 )
-            ).all()
-        )
+            )
+        ).all()
+        ids_hit = {r for r in rows if r is not None}
     addrs = [e.lower() for e in emails if e]
     if addrs:
         emails_hit = set(
@@ -281,11 +298,43 @@ def default_exclusion_for_prompt(text: str) -> ExclusionMode | None:
     """Spec §21 default: 'new / fresh / not already scraped / never seen' → EXCLUDE_PREVIOUS_PEOPLE."""
     t = text.lower()
     triggers = (
-        "new lead", "new leads", "new people", "new contacts", "fresh", "not already", "never seen", "never scraped",
-        "haven't seen", "have not seen", "already seen", "already scraped", "previously scraped", "don't repeat",
-        "do not repeat", "don't give me anyone", "do not include leads", "nouveaux", "nouvelles", "jamais vu",
-        "déjà vu", "deja vu", "déjà scrap", "deja scrap", "pas déjà", "sans doublon", "only new", "seen before",
-        "i have seen", "i've seen", "ive seen", "scraped before", "already have", "don't repeat anyone", "no duplicates",
-        "jamais scrap", "déjà eu", "deja eu",
+        "new lead",
+        "new leads",
+        "new people",
+        "new contacts",
+        "fresh",
+        "not already",
+        "never seen",
+        "never scraped",
+        "haven't seen",
+        "have not seen",
+        "already seen",
+        "already scraped",
+        "previously scraped",
+        "don't repeat",
+        "do not repeat",
+        "don't give me anyone",
+        "do not include leads",
+        "nouveaux",
+        "nouvelles",
+        "jamais vu",
+        "déjà vu",
+        "deja vu",
+        "déjà scrap",
+        "deja scrap",
+        "pas déjà",
+        "sans doublon",
+        "only new",
+        "seen before",
+        "i have seen",
+        "i've seen",
+        "ive seen",
+        "scraped before",
+        "already have",
+        "don't repeat anyone",
+        "no duplicates",
+        "jamais scrap",
+        "déjà eu",
+        "deja eu",
     )
     return ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE if any(k in t for k in triggers) else None

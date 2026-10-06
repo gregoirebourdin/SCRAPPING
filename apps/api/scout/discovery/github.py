@@ -32,13 +32,27 @@ from scout.util.urls import normalize_website
 
 log = structlog.get_logger(__name__)
 
-MAX_RESULTS = 300       # search API serves ≤ 1,000 results; we never need that deep
+MAX_RESULTS = 300  # search API serves ≤ 1,000 results; we never need that deep
 _throttle = Throttle(2.0)
-_TECH = {"software_saas", "ai_company", "fintech", "healthtech", "it_services", "cybersecurity", "web_agency", "digital_agency"}
+_TECH = {
+    "software_saas",
+    "ai_company",
+    "fintech",
+    "healthtech",
+    "it_services",
+    "cybersecurity",
+    "web_agency",
+    "digital_agency",
+}
 _GH_KEYWORDS = {
-    "software_saas": ["saas", "software"], "ai_company": ["ai", "machine learning"], "fintech": ["fintech"],
-    "healthtech": ["health"], "it_services": ["consulting", "devops"], "cybersecurity": ["security"],
-    "web_agency": ["web agency", "agency"], "digital_agency": ["digital agency", "agency"],
+    "software_saas": ["saas", "software"],
+    "ai_company": ["ai", "machine learning"],
+    "fintech": ["fintech"],
+    "healthtech": ["health"],
+    "it_services": ["consulting", "devops"],
+    "cybersecurity": ["security"],
+    "web_agency": ["web agency", "agency"],
+    "digital_agency": ["digital agency", "agency"],
 }
 
 
@@ -72,21 +86,28 @@ class GitHubSource:
             return []
         cf = defn.company_filters
         profiles = [p for p in profiles_for(defn) if p.key in _TECH][:2]
-        keywords = list(dict.fromkeys(k for p in profiles for k in _GH_KEYWORDS.get(p.key, [])))[: 1 + expansion]
+        keywords = list(dict.fromkeys(k for p in profiles for k in _GH_KEYWORDS.get(p.key, [])))[
+            : 1 + expansion
+        ]
         locations: list[str] = []
         for cc in target_countries(defn)[:2]:
             if cf.cities:
                 locations.extend(cf.cities)
             else:
-                locations.extend(c.name for c in geo.cities_for(cc, regions=cf.regions, expansion=expansion)[: 3 + 3 * expansion])
+                locations.extend(
+                    c.name
+                    for c in geo.cities_for(cc, regions=cf.regions, expansion=expansion)[: 3 + 3 * expansion]
+                )
                 locations.append(geo.country_name(cc))
         if not locations:
             locations = list(cf.cities) or [""]
         queries = []
         for kw in keywords:
             for rank, loc in enumerate(dict.fromkeys(locations)):
-                q = f'{kw} type:org' + (f' location:"{loc}"' if loc else "")
-                queries.append(DiscoveryQuery(key=f"gh:{q.lower()}", params={"q": q}, weight=1.0 / (1 + 0.1 * rank)))
+                q = f"{kw} type:org" + (f' location:"{loc}"' if loc else "")
+                queries.append(
+                    DiscoveryQuery(key=f"gh:{q.lower()}", params={"q": q}, weight=1.0 / (1 + 0.1 * rank))
+                )
         return queries
 
     def _headers(self) -> dict[str, str]:
@@ -100,13 +121,16 @@ class GitHubSource:
         url = get_settings().github_api_url.rstrip("/") + path
         async with pool("public_api"):
             await self.throttle.wait()
-            resp = await http_request("GET", url, source=self.key, params=params, headers=self._headers(),
-                                      allow=(403, 404, 429))
+            resp = await http_request(
+                "GET", url, source=self.key, params=params, headers=self._headers(), allow=(403, 404, 429)
+            )
         await record_usage(UsageCategory.registry_request, source_key=self.key, resolver="discovery")
         if _rate_limited(resp):
             reset = resp.headers.get("x-ratelimit-reset")
             wait = max(0, int(reset) - int(time.time())) if reset and reset.isdigit() else None
-            raise RateLimitedError(f"github: rate limited{f' (resets in {wait}s)' if wait is not None else ''}")
+            raise RateLimitedError(
+                f"github: rate limited{f' (resets in {wait}s)' if wait is not None else ''}"
+            )
         if resp.status_code == 404:
             return {}
         check_status(resp, self.key)
@@ -114,7 +138,9 @@ class GitHubSource:
 
     async def discover(self, query: DiscoveryQuery, cursor: dict[str, Any] | None) -> DiscoveryPage:
         page = int((cursor or {}).get("page", 1))
-        body = await self._get("/search/users", {"q": query.params["q"], "per_page": self.per_page, "page": page})
+        body = await self._get(
+            "/search/users", {"q": query.params["q"], "per_page": self.per_page, "page": page}
+        )
         items = [i for i in body.get("items") or [] if (i.get("type") or "").lower() == "organization"]
         candidates: list[RawCandidate] = []
         requests = 1
@@ -128,7 +154,11 @@ class GitHubSource:
             dom = candidate_domain(blog)
             if not dom:
                 continue
-            city = geo.find_city((org.get("location") or "").split(",")[0].strip()) if org.get("location") else None
+            city = (
+                geo.find_city((org.get("location") or "").split(",")[0].strip())
+                if org.get("location")
+                else None
+            )
             candidates.append(
                 RawCandidate(
                     source=self.key,
@@ -152,4 +182,6 @@ class GitHubSource:
             )
         total = int(body.get("total_count") or 0)
         more = bool(body.get("items")) and page * self.per_page < min(total, MAX_RESULTS)
-        return DiscoveryPage(candidates=candidates, next_cursor={"page": page + 1} if more else None, requests=requests)
+        return DiscoveryPage(
+            candidates=candidates, next_cursor={"page": page + 1} if more else None, requests=requests
+        )

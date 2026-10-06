@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any
 
 from rapidfuzz import fuzz
@@ -50,9 +50,23 @@ _TESTIMONIAL_RE = re.compile(
 )
 _QUOTE_LINE_RE = re.compile(r"^\s*[«“\"„‘']|[»”\"’]\s*$|«|»|“|”")
 _ORG_TYPES = (
-    "organization", "corporation", "localbusiness", "professionalservice", "store", "company", "ngo",
-    "educationalorganization", "medicalorganization", "sportsorganization", "governmentorganization",
-    "onlinebusiness", "onlinestore", "restaurant", "legalservice", "accountingservice", "financialservice",
+    "organization",
+    "corporation",
+    "localbusiness",
+    "professionalservice",
+    "store",
+    "company",
+    "ngo",
+    "educationalorganization",
+    "medicalorganization",
+    "sportsorganization",
+    "governmentorganization",
+    "onlinebusiness",
+    "onlinestore",
+    "restaurant",
+    "legalservice",
+    "accountingservice",
+    "financialservice",
 )
 _SELF_ORG_RE = re.compile(
     r"^(?:l['’]\s*|la\s+|le\s+|notre\s+|our\s+|this\s+|cette\s+)?(?:agence|entreprise|soci[ée]t[ée]|studio|cabinet|"
@@ -139,7 +153,11 @@ def _org_matches(org: str | None, company_name: str) -> bool:
 
 def _title_mentions_other_org(title_line: str, company_name: str) -> bool:
     """'CEO, Boulangerie Martin' / 'Fondatrice chez X' → the person works elsewhere (a client)."""
-    m = re.search(r"(?:,|\bchez\b|\bat\b|\b@\s*|\bde la soci[ée]t[ée]\b|\bfor\b|\bbei\b)\s*(?P<org>[^,]{2,60})$", title_line, re.IGNORECASE)
+    m = re.search(
+        r"(?:,|\bchez\b|\bat\b|\b@\s*|\bde la soci[ée]t[ée]\b|\bfor\b|\bbei\b)\s*(?P<org>[^,]{2,60})$",
+        title_line,
+        re.IGNORECASE,
+    )
     if not m:
         return False
     org = m.group("org").strip()
@@ -217,7 +235,9 @@ def _jsonld_name(obj: Any) -> str | None:
 
 def _jsonld_evidence(obj: Any, extra: dict[str, Any] | None = None) -> str:
     if isinstance(obj, dict):
-        keep = {k: obj[k] for k in ("@type", "name", "givenName", "familyName", "jobTitle", "email") if k in obj}
+        keep = {
+            k: obj[k] for k in ("@type", "name", "givenName", "familyName", "jobTitle", "email") if k in obj
+        }
         works = obj.get("worksFor")
         if isinstance(works, dict) and works.get("name"):
             keep["worksFor"] = works.get("name")
@@ -240,8 +260,14 @@ def _from_jsonld(page: PageLike, company_name: str) -> list[PersonCandidate]:
             org_name = _jsonld_name(obj)
             if org_name and company_name and not _org_matches(org_name, company_name) and pt != PageType.home:
                 continue
-            for key, default_title in (("founder", "Founder"), ("founders", "Founder"), ("employee", None),
-                                       ("employees", None), ("member", None), ("members", None)):
+            for key, default_title in (
+                ("founder", "Founder"),
+                ("founders", "Founder"),
+                ("employee", None),
+                ("employees", None),
+                ("member", None),
+                ("members", None),
+            ):
                 vals = obj.get(key)
                 for person in vals if isinstance(vals, list) else [vals] if vals else []:
                     name = _jsonld_name(person)
@@ -250,7 +276,9 @@ def _from_jsonld(page: PageLike, company_name: str) -> list[PersonCandidate]:
                     title = person.get("jobTitle") if isinstance(person, dict) else None
                     title = title if isinstance(title, str) and title.strip() else default_title
                     ev = _jsonld_evidence(person, {"@type": types[0] if types else "Organization", key: name})
-                    out.append(_candidate(name, title, page, method="jsonld", evidence=ev, confidence=CONF_JSONLD))
+                    out.append(
+                        _candidate(name, title, page, method="jsonld", evidence=ev, confidence=CONF_JSONLD)
+                    )
         elif "person" in types:
             name = _jsonld_name(obj)
             if not name or not is_plausible_person_name(name):
@@ -263,7 +291,9 @@ def _from_jsonld(page: PageLike, company_name: str) -> list[PersonCandidate]:
             if not staff_page and not (title and is_job_title(title)):
                 continue  # blog/article authors are not staff unless their title says so
             out.append(
-                _candidate(name, title, page, method="jsonld", evidence=_jsonld_evidence(obj), confidence=CONF_JSONLD)
+                _candidate(
+                    name, title, page, method="jsonld", evidence=_jsonld_evidence(obj), confidence=CONF_JSONLD
+                )
             )
             email = obj.get("email")
             if isinstance(email, str) and "@" in email:
@@ -295,8 +325,15 @@ def _inline_name_title(line: str, company_name: str) -> tuple[str, str] | None:
     return None
 
 
-def _from_cards(page: PageLike, company_name: str, *, method: str, confidence: float,
-                allow_name_only: bool, strict_quotes: bool) -> list[PersonCandidate]:
+def _from_cards(
+    page: PageLike,
+    company_name: str,
+    *,
+    method: str,
+    confidence: float,
+    allow_name_only: bool,
+    strict_quotes: bool,
+) -> list[PersonCandidate]:
     """Name line + adjacent (±2) title line. ``strict_quotes`` also rejects cards next to quotes
     (home pages, where client testimonials live); team pages often show a quote per member."""
     lines = _lines(page)
@@ -304,7 +341,9 @@ def _from_cards(page: PageLike, company_name: str, *, method: str, confidence: f
     n = len(lines)
     is_name = [False] * n
     is_title = [False] * n
-    inline: list[tuple[str, str] | None] = [_inline_name_title(line, company_name) if line else None for line in lines]
+    inline: list[tuple[str, str] | None] = [
+        _inline_name_title(line, company_name) if line else None for line in lines
+    ]
     for i, line in enumerate(lines):
         if not line or inline[i] is not None:
             continue  # "Name – Title" lines are complete cards, never a neighbour's title
@@ -352,7 +391,9 @@ def _from_cards(page: PageLike, company_name: str, *, method: str, confidence: f
             evidence = "\n".join(lines[a : b + 1])
             out.append(_candidate(line, title, page, method=method, evidence=evidence, confidence=confidence))
         elif allow_name_only and not quoted and is_plausible_person_name(line, require_known_first_name=True):
-            out.append(_candidate(line, None, page, method="name_only", evidence=line, confidence=CONF_NAME_ONLY))
+            out.append(
+                _candidate(line, None, page, method="name_only", evidence=line, confidence=CONF_NAME_ONLY)
+            )
     return out
 
 
@@ -375,19 +416,43 @@ def _from_text(page: PageLike, company_name: str) -> list[PersonCandidate]:
             for raw in re.split(r"\s*(?:,|\bet\b|\band\b|\bund\b|\by\b|&)\s*", m.group("names")):
                 name = _best_name(raw)
                 if name and not _is_company_name(name, company_name):
-                    out.append(_candidate(name, "Founder", page, method="text_pattern",
-                                          evidence=_snippet(line, m.start(), m.end()), confidence=CONF_TEXT))
+                    out.append(
+                        _candidate(
+                            name,
+                            "Founder",
+                            page,
+                            method="text_pattern",
+                            evidence=_snippet(line, m.start(), m.end()),
+                            confidence=CONF_TEXT,
+                        )
+                    )
         for m in _NAME_COMMA_TITLE_RE.finditer(line):
             name = _best_name(m.group("name"))
             if not name or not _org_matches(m.group("org"), company_name):
                 continue
-            out.append(_candidate(name, m.group("title"), page, method="text_pattern",
-                                  evidence=_snippet(line, m.start(), m.end()), confidence=CONF_TEXT))
+            out.append(
+                _candidate(
+                    name,
+                    m.group("title"),
+                    page,
+                    method="text_pattern",
+                    evidence=_snippet(line, m.start(), m.end()),
+                    confidence=CONF_TEXT,
+                )
+            )
         for m in _OUR_TITLE_NAME_RE.finditer(line):
             name = _best_name(m.group("name"))
             if name:
-                out.append(_candidate(name, m.group("title"), page, method="text_pattern",
-                                      evidence=_snippet(line, m.start(), m.end()), confidence=CONF_TEXT))
+                out.append(
+                    _candidate(
+                        name,
+                        m.group("title"),
+                        page,
+                        method="text_pattern",
+                        evidence=_snippet(line, m.start(), m.end()),
+                        confidence=CONF_TEXT,
+                    )
+                )
     return out
 
 
@@ -424,7 +489,12 @@ def _merge(cands: list[PersonCandidate]) -> list[PersonCandidate]:
         title_choice = None
         if titled:
             title_choice = max(
-                titled, key=lambda c: (normalize_title(c.title or "").decision_power, c.confidence, c.method != "legal_notice")
+                titled,
+                key=lambda c: (
+                    normalize_title(c.title or "").decision_power,
+                    c.confidence,
+                    c.method != "legal_notice",
+                ),
             )
         evidences: list[str] = []
         for c in group:
@@ -458,7 +528,7 @@ def _merge(cands: list[PersonCandidate]) -> list[PersonCandidate]:
     return merged
 
 
-def _attach_emails(people: list[PersonCandidate], pages: list[PageLike], domain: str | None) -> None:
+def _attach_emails(people: list[PersonCandidate], pages: Sequence[PageLike], domain: str | None) -> None:
     published: dict[str, str] = {}
     for page in pages:
         for e in emails_on_domain(page.emails or [], domain) if domain else []:
@@ -485,7 +555,7 @@ def _attach_emails(people: list[PersonCandidate], pages: list[PageLike], domain:
             person.extra["email_match"] = f"{matches[0][0]:.2f}"
 
 
-def _attach_profiles(people: list[PersonCandidate], pages: list[PageLike]) -> None:
+def _attach_profiles(people: list[PersonCandidate], pages: Sequence[PageLike]) -> None:
     profiles: list[dict[str, str]] = []
     for page in pages:
         links = page.links if isinstance(page.links, dict) else {}
@@ -508,24 +578,58 @@ def _attach_profiles(people: list[PersonCandidate], pages: list[PageLike]) -> No
 # ---- public API ----------------------------------------------------------------------------------
 
 
-def extract_people(pages: list[PageLike], *, company_name: str, domain: str | None) -> list[PersonCandidate]:
+def extract_people(
+    pages: Sequence[PageLike], *, company_name: str, domain: str | None
+) -> list[PersonCandidate]:
     """Decision-maker candidates from cached pages, deduplicated by normalized name, best first."""
     raw: list[PersonCandidate] = []
     for page in pages:
         pt = _ptype(page)
         raw.extend(_from_jsonld(page, company_name))
         if pt == PageType.team:
-            raw.extend(_from_cards(page, company_name, method="team_card", confidence=CONF_TEAM_CARD,
-                                   allow_name_only=True, strict_quotes=False))
+            raw.extend(
+                _from_cards(
+                    page,
+                    company_name,
+                    method="team_card",
+                    confidence=CONF_TEAM_CARD,
+                    allow_name_only=True,
+                    strict_quotes=False,
+                )
+            )
         elif pt == PageType.about:
-            raw.extend(_from_cards(page, company_name, method="team_card", confidence=CONF_TEAM_CARD,
-                                   allow_name_only=False, strict_quotes=False))
+            raw.extend(
+                _from_cards(
+                    page,
+                    company_name,
+                    method="team_card",
+                    confidence=CONF_TEAM_CARD,
+                    allow_name_only=False,
+                    strict_quotes=False,
+                )
+            )
         elif pt == PageType.home:
-            raw.extend(_from_cards(page, company_name, method="team_card", confidence=CONF_TEAM_CARD,
-                                   allow_name_only=False, strict_quotes=True))
+            raw.extend(
+                _from_cards(
+                    page,
+                    company_name,
+                    method="team_card",
+                    confidence=CONF_TEAM_CARD,
+                    allow_name_only=False,
+                    strict_quotes=True,
+                )
+            )
         elif pt == PageType.contact:
-            raw.extend(_from_cards(page, company_name, method="signature", confidence=CONF_SIGNATURE,
-                                   allow_name_only=False, strict_quotes=True))
+            raw.extend(
+                _from_cards(
+                    page,
+                    company_name,
+                    method="signature",
+                    confidence=CONF_SIGNATURE,
+                    allow_name_only=False,
+                    strict_quotes=True,
+                )
+            )
         if pt == PageType.legal:
             raw.extend(_from_legal(page))
         if pt in (PageType.home, PageType.about, PageType.team, PageType.contact, PageType.services):

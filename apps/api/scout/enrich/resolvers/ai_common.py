@@ -21,7 +21,11 @@ def relevant_passages(
     terms = expand_terms(plan.concept or plan.name, plan.keywords)
     priors = page_priors_for(plan.concept or plan.name, plan.input_sources)
     return rank_passages(
-        passages_for_pages(rc.pages), terms, page_priors=priors, k=k, max_chars=max_chars,
+        passages_for_pages(rc.pages),
+        terms,
+        page_priors=priors,
+        k=k,
+        max_chars=max_chars,
         include_unmatched=include_unmatched,
     )
 
@@ -46,7 +50,9 @@ def _norm_url(url: str | None) -> str:
     return f"{host}{parts.path.rstrip('/')}"
 
 
-def verify_quote(quote: str | None, source_url: str | None, passages: Sequence[Passage]) -> tuple[bool, str | None]:
+def verify_quote(
+    quote: str | None, source_url: str | None, passages: Sequence[Passage]
+) -> tuple[bool, str | None]:
     """(valid, url): the quote must appear verbatim (case/accent/whitespace-insensitive) in a passage —
     the cited one first; when it is found in another passage the citation is corrected."""
     if not quote:

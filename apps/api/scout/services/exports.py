@@ -22,20 +22,48 @@ from scout.services import registry
 from scout.util.csv_safe import safe_cell
 
 PERSON_EXPORT_COLUMNS: list[tuple[str, str]] = [
-    ("full_name", "Full name"), ("first_name", "First name"), ("last_name", "Last name"), ("title", "Title"),
-    ("company", "Company"), ("domain", "Domain"), ("website", "Website"), ("email", "Email"),
-    ("email_status", "Email status"), ("email_confidence", "Email confidence"), ("profile_url", "Public profile"),
-    ("phone", "Phone"), ("city", "City"), ("country", "Country"), ("industry", "Industry"),
-    ("employee_min", "Employees min"), ("employee_max", "Employees max"), ("icp_score", "ICP score"),
-    ("overall_confidence", "Confidence"), ("person_confidence", "Person confidence"),
-    ("company_confidence", "Company confidence"), ("seniority", "Seniority"), ("role_family", "Role family"),
-    ("sources", "Sources"), ("updated_at", "Updated"),
+    ("full_name", "Full name"),
+    ("first_name", "First name"),
+    ("last_name", "Last name"),
+    ("title", "Title"),
+    ("company", "Company"),
+    ("domain", "Domain"),
+    ("website", "Website"),
+    ("email", "Email"),
+    ("email_status", "Email status"),
+    ("email_confidence", "Email confidence"),
+    ("profile_url", "Public profile"),
+    ("phone", "Phone"),
+    ("city", "City"),
+    ("country", "Country"),
+    ("industry", "Industry"),
+    ("employee_min", "Employees min"),
+    ("employee_max", "Employees max"),
+    ("icp_score", "ICP score"),
+    ("overall_confidence", "Confidence"),
+    ("person_confidence", "Person confidence"),
+    ("company_confidence", "Company confidence"),
+    ("seniority", "Seniority"),
+    ("role_family", "Role family"),
+    ("sources", "Sources"),
+    ("updated_at", "Updated"),
 ]
 COMPANY_EXPORT_COLUMNS: list[tuple[str, str]] = [
-    ("company", "Company"), ("domain", "Domain"), ("website", "Website"), ("description", "Description"),
-    ("phone", "Phone"), ("city", "City"), ("region", "Region"), ("country", "Country"), ("industry", "Industry"),
-    ("employee_min", "Employees min"), ("employee_max", "Employees max"), ("registry_id", "Registry ID"),
-    ("people_count", "People found"), ("company_confidence", "Company confidence"), ("sources", "Sources"),
+    ("company", "Company"),
+    ("domain", "Domain"),
+    ("website", "Website"),
+    ("description", "Description"),
+    ("phone", "Phone"),
+    ("city", "City"),
+    ("region", "Region"),
+    ("country", "Country"),
+    ("industry", "Industry"),
+    ("employee_min", "Employees min"),
+    ("employee_max", "Employees max"),
+    ("registry_id", "Registry ID"),
+    ("people_count", "People found"),
+    ("company_confidence", "Company confidence"),
+    ("sources", "Sources"),
     ("updated_at", "Updated"),
 ]
 
@@ -91,8 +119,16 @@ async def export_rows(
     custom_cols = []
     while True:
         res = await query_rows(
-            s, workspace_id, row_scope, filters=use_filters, sort=sort, search=search if scope != ExportScope.list else None,
-            cursor=cursor, limit=1000, with_total=False, ids=ids if scope == ExportScope.selected else None,
+            s,
+            workspace_id,
+            row_scope,
+            filters=use_filters,
+            sort=sort,
+            search=search if scope != ExportScope.list else None,
+            cursor=cursor,
+            limit=1000,
+            with_total=False,
+            ids=ids if scope == ExportScope.selected else None,
         )
         custom_cols = res.columns
         rows.extend(res.rows)
@@ -102,23 +138,41 @@ async def export_rows(
     base_cols = PERSON_EXPORT_COLUMNS if entity_type == EntityType.person else COMPANY_EXPORT_COLUMNS
     all_cols: list[tuple[str, str]] = [*base_cols, *[(f"cf:{c.id}", c.name) for c in custom_cols]]
     if columns_mode == "visible" and columns:
-        wanted = [c for c in columns if c not in ("select",)]
+        # Table column ids → export keys (some table columns combine several stored fields).
+        aliases = {"location": ["city", "country"], "employee_count": ["employee_min", "employee_max"]}
+        wanted = [k for c in columns if c != "select" for k in aliases.get(c, [c])]
         lookup = dict(all_cols)
-        all_cols = [(k, lookup.get(k, k)) for k in wanted if k in lookup]
+        all_cols = [(k, lookup[k]) for k in dict.fromkeys(wanted) if k in lookup]
     export = Export(
-        workspace_id=workspace_id, list_id=list_id, view_id=view_id, scope=scope, columns_mode=columns_mode,
-        format=fmt, row_count=len(rows), created_by=user_id,
+        workspace_id=workspace_id,
+        list_id=list_id,
+        view_id=view_id,
+        scope=scope,
+        columns_mode=columns_mode,
+        format=fmt,
+        row_count=len(rows),
+        created_by=user_id,
     )
     s.add(export)
     await s.flush()
     if rows:
         if entity_type == EntityType.person:
             await registry.record_exposures(
-                s, workspace_id, ExposureType.EXPORTED, person_ids=[r["id"] for r in rows], export_id=export.id, list_id=list_id
+                s,
+                workspace_id,
+                ExposureType.EXPORTED,
+                person_ids=[r["id"] for r in rows],
+                export_id=export.id,
+                list_id=list_id,
             )
         else:
             await registry.record_exposures(
-                s, workspace_id, ExposureType.EXPORTED, company_ids=[r["id"] for r in rows], export_id=export.id, list_id=list_id
+                s,
+                workspace_id,
+                ExposureType.EXPORTED,
+                company_ids=[r["id"] for r in rows],
+                export_id=export.id,
+                list_id=list_id,
             )
 
     def value(r: dict[str, Any], key: str) -> Any:
@@ -139,7 +193,13 @@ async def export_rows(
     w.writerow([label for _, label in all_cols])
     for r in rows:
         w.writerow([safe_cell(value(r, key)) for key, _ in all_cols])
-    return ExportResult(export.id, f"{filename_hint}-{stamp}.csv", "text/csv; charset=utf-8", ("﻿" + buf.getvalue()).encode(), len(rows))
+    return ExportResult(
+        export.id,
+        f"{filename_hint}-{stamp}.csv",
+        "text/csv; charset=utf-8",
+        ("﻿" + buf.getvalue()).encode(),
+        len(rows),
+    )
 
 
 def iter_csv(rows: Iterable[list[Any]]) -> str:

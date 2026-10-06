@@ -44,7 +44,15 @@ class LegalInfo:
     @property
     def is_empty(self) -> bool:
         return not any(
-            (self.siren, self.siret, self.rcs, self.vat_number, self.legal_name, self.register_number, self.people)
+            (
+                self.siren,
+                self.siret,
+                self.rcs,
+                self.vat_number,
+                self.legal_name,
+                self.register_number,
+                self.people,
+            )
         )
 
 
@@ -90,8 +98,12 @@ def _digits(s: str) -> str:
 
 # ---- regexes ------------------------------------------------------------------------------------
 
-_SIREN_LABEL_RE = re.compile(rf"\bSIREN\b\s*(?:n°|no\.?|nº|num[ée]ro|number)?\s*[:#]?\s*((?:{_D}){{8}}\d)(?!\d)", re.IGNORECASE)
-_SIRET_LABEL_RE = re.compile(rf"\bSIRET\b\s*(?:n°|no\.?|nº|num[ée]ro|number)?\s*[:#]?\s*((?:{_D}){{13}}\d)(?!\d)", re.IGNORECASE)
+_SIREN_LABEL_RE = re.compile(
+    rf"\bSIREN\b\s*(?:n°|no\.?|nº|num[ée]ro|number)?\s*[:#]?\s*((?:{_D}){{8}}\d)(?!\d)", re.IGNORECASE
+)
+_SIRET_LABEL_RE = re.compile(
+    rf"\bSIRET\b\s*(?:n°|no\.?|nº|num[ée]ro|number)?\s*[:#]?\s*((?:{_D}){{13}}\d)(?!\d)", re.IGNORECASE
+)
 _RCS_RE = re.compile(
     rf"\bR\.?\s?C\.?\s?S\.?\s+(?:de\s+|d['’]\s*)?([A-ZÀ-Ý][A-Za-zÀ-ÿ'’\-]+(?:[\s\-][A-ZÀ-Ý][A-Za-zÀ-ÿ'’\-]+){{0,3}})"
     rf"\s*(?:sous\s+le\s+(?:n°|num[ée]ro)\s*)?(?:[:,]\s*)?(?:[AB]\s*)?((?:{_D}){{8}}\d)(?!\d)",
@@ -100,7 +112,8 @@ _RCS_REVERSE_RE = re.compile(
     rf"(?<!\d)((?:{_D}){{8}}\d)(?!\d)\s*(?:R\.?\s?C\.?\s?S\.?)\s+(?:de\s+)?([A-ZÀ-Ý][A-Za-zÀ-ÿ'’\-]+(?:[\s\-][A-ZÀ-Ý][A-Za-zÀ-ÿ'’\-]+){{0,2}})"
 )
 _IMMAT_RE = re.compile(
-    rf"immatricul[ée]e?s?\s+(?:au|sous)[^.\n]{{0,60}}?(?:n°|num[ée]ro|number)\s*:?\s*((?:{_D}){{8}}\d)(?!\d)", re.IGNORECASE
+    rf"immatricul[ée]e?s?\s+(?:au|sous)[^.\n]{{0,60}}?(?:n°|num[ée]ro|number)\s*:?\s*((?:{_D}){{8}}\d)(?!\d)",
+    re.IGNORECASE,
 )
 _FR_VAT_RE = re.compile(r"\bFR\s?([0-9A-Z]{2})\s?(\d{3})\s?(\d{3})\s?(\d{3})\b")
 _DE_VAT_RE = re.compile(r"\b(DE)\s?(\d{3})\s?(\d{3})\s?(\d{3})\b")
@@ -114,10 +127,14 @@ _CAPITAL_RE = re.compile(
     r"((?:€|EUR|£|\$)?\s?\d[\d\s.  ,]*\d?\s*(?:€|euros?|EUR|£|GBP|CHF)?)",
     re.IGNORECASE,
 )
-_DE_CAPITAL_RE = re.compile(r"\b(?:Stammkapital|Grundkapital)\s*:?\s*(\d[\d.\s,]*\s*(?:€|EUR|Euro))", re.IGNORECASE)
+_DE_CAPITAL_RE = re.compile(
+    r"\b(?:Stammkapital|Grundkapital)\s*:?\s*(\d[\d.\s,]*\s*(?:€|EUR|Euro))", re.IGNORECASE
+)
 _UK_CAPITAL_RE = re.compile(r"\bshare capital\s*(?:of|:)?\s*((?:£|€|\$)\s?\d[\d,.\s]*)", re.IGNORECASE)
 _HR_RE = re.compile(r"\b(HR[AB])[ \t]*(?:Nr\.?[ \t]*)?(\d{1,7}(?:[ \t]?[A-Z]{1,2})?)\b")
-_AMTSGERICHT_RE = re.compile(r"\b(?:Amtsgericht|Registergericht[ \t]*:?[ \t]*Amtsgericht)[ \t]+([A-ZÄÖÜ][\wäöüß\-]+(?:[ \t][A-ZÄÖÜ][\wäöüß\-]+)?)")
+_AMTSGERICHT_RE = re.compile(
+    r"\b(?:Amtsgericht|Registergericht[ \t]*:?[ \t]*Amtsgericht)[ \t]+([A-ZÄÖÜ][\wäöüß\-]+(?:[ \t][A-ZÄÖÜ][\wäöüß\-]+)?)"
+)
 _UK_COMPANY_RE = re.compile(
     r"\b(?:company|registration|registered)\s*(?:number|no\.?|n°|nr)\s*:?\s*([A-Z]{0,2}\d{6,8})\b"
     r"|\bregistered\s+in\s+(?:England|Scotland|Wales|England\s+and\s+Wales|Northern\s+Ireland)[^.\n]{0,40}?(?:number|no\.?)\s*:?\s*([A-Z]{0,2}\d{6,8})\b",
@@ -228,7 +245,9 @@ def _next_nonempty(lines: list[str], idx: int) -> str:
 
 def _clean_legal_name(raw: str) -> str | None:
     name = collapse_ws(raw).strip(" .,:;-–")
-    name = re.split(r"\s*(?:,|\(|\s-\s|–|—|\bau capital\b|\bdont\b|\bimmatricul|\bsi[èe]ge\b)", name, maxsplit=1)[0]
+    name = re.split(
+        r"\s*(?:,|\(|\s-\s|–|—|\bau capital\b|\bdont\b|\bimmatricul|\bsi[èe]ge\b)", name, maxsplit=1
+    )[0]
     name = name.strip(" .,:;")
     if not name or len(name) > 80 or not (name[0].isupper() or name[0].isdigit()):
         return None
@@ -324,7 +343,9 @@ def parse_legal_notice(text: str) -> LegalInfo:
     m = _HR_RE.search(text)
     if m:
         court = _AMTSGERICHT_RE.search(text)
-        info.register_number = f"{m.group(1)} {m.group(2)}" + (f", Amtsgericht {court.group(1)}" if court else "")
+        info.register_number = f"{m.group(1)} {m.group(2)}" + (
+            f", Amtsgericht {court.group(1)}" if court else ""
+        )
         ev["register_number"] = _evidence(text, m.start(), m.end())
     else:
         m = _UK_COMPANY_RE.search(text)
@@ -403,7 +424,13 @@ def parse_legal_notice(text: str) -> LegalInfo:
                     info.legal_representative = name
                     info.legal_representative_role = collapse_ws(role_label)
                     ev["legal_representative"] = collapse_ws(used)[:300]
-                add_person(name, role_label if not re.match(r"(?i)repr[ée]sent[ée]e?\s+par", role_label) else "Représentant légal", used)
+                add_person(
+                    name,
+                    role_label
+                    if not re.match(r"(?i)repr[ée]sent[ée]e?\s+par", role_label)
+                    else "Représentant légal",
+                    used,
+                )
         m = _REPRESENTED_BY_RE.search(line)
         if m:
             role_label = m.group(3) or m.group(1) or "Représentant légal"
@@ -425,9 +452,16 @@ def parse_legal_notice(text: str) -> LegalInfo:
             if not m:
                 continue
             rest = m.group(1).strip()
-            if not rest or (not _POSTAL_RE.search(rest) and i + 1 < len(lines) and _POSTAL_RE.search(lines[i + 1])):
+            if not rest or (
+                not _POSTAL_RE.search(rest) and i + 1 < len(lines) and _POSTAL_RE.search(lines[i + 1])
+            ):
                 rest = (rest + " " + lines[i + 1]).strip()
-            rest = re.split(r"\s*(?:\bimmatricul|\bRCS\b|\bSIRE[NT]\b|\bTVA\b|\bt[ée]l\b|\bphone\b|\bemail\b|\bcapital\b)", rest, maxsplit=1, flags=re.IGNORECASE)[0]
+            rest = re.split(
+                r"\s*(?:\bimmatricul|\bRCS\b|\bSIRE[NT]\b|\bTVA\b|\bt[ée]l\b|\bphone\b|\bemail\b|\bcapital\b)",
+                rest,
+                maxsplit=1,
+                flags=re.IGNORECASE,
+            )[0]
             rest = collapse_ws(rest).strip(" ,.:;-")
             if 8 <= len(rest) <= 200 and re.search(r"\d", rest):
                 info.address = rest
@@ -439,6 +473,8 @@ def parse_legal_notice(text: str) -> LegalInfo:
         info.country = "FR"
     elif (info.register_number or "").startswith("HR") or (info.vat_number or "").startswith("DE"):
         info.country = "DE"
-    elif info.register_number and re.search(r"(?i)england|wales|scotland|companies house|registered office", text):
+    elif info.register_number and re.search(
+        r"(?i)england|wales|scotland|companies house|registered office", text
+    ):
         info.country = "GB"
     return info

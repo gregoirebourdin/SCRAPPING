@@ -15,13 +15,16 @@ ALGOLIA = "https://hn.algolia.com/api/v1"
 
 def test_parse_comment_first_line() -> None:
     info = parse_comment(
-        'Close | Backend Engineers, Sr. Software Engineer (Marketing) | REMOTE (US) \n'
+        "Close | Backend Engineers, Sr. Software Engineer (Marketing) | REMOTE (US) \n"
         '<a href="https:&#x2F;&#x2F;close.com&#x2F;careers" rel="nofollow">https:&#x2F;&#x2F;close.com&#x2F;careers</a>'
         "<p>We build a CRM.</p>"
     )
     assert info is not None
     assert info["company"] == "Close" and info["url"] == "https://close.com/careers"
-    assert info["location"] == "REMOTE (US)" and "Backend Engineers, Sr. Software Engineer (Marketing)" in info["roles"]
+    assert (
+        info["location"] == "REMOTE (US)"
+        and "Backend Engineers, Sr. Software Engineer (Marketing)" in info["roles"]
+    )
     assert "We build a CRM." in info["text"]
     assert parse_comment("They are a big waste of time.") is None
     job_board_only = parse_comment('Acme | SWE | Remote | <a href="https://jobs.lever.co/acme">apply</a>')
@@ -43,17 +46,31 @@ async def test_discover_latest_thread_with_location_filter() -> None:
     stories = respx.get(f"{ALGOLIA}/search_by_date").mock(
         return_value=httpx.Response(200, json=fixture_json("hn_stories.json"))
     )
-    comments = respx.get(f"{ALGOLIA}/search").mock(return_value=httpx.Response(200, json=fixture_json("hn_comments.json")))
+    comments = respx.get(f"{ALGOLIA}/search").mock(
+        return_value=httpx.Response(200, json=fixture_json("hn_comments.json"))
+    )
     src = HNHiringSource()
     q = DiscoveryQuery(key="hn:who_is_hiring:0", params={"countries": ["US"], "cities": [], "months_back": 0})
     page = await src.discover(q, None)
-    assert comments.calls.last.request.url.params["tags"] == "comment,story_49922569"  # latest "Who is hiring?"
+    assert (
+        comments.calls.last.request.url.params["tags"] == "comment,story_49922569"
+    )  # latest "Who is hiring?"
     names = [c.name for c in page.candidates]
-    assert names == ["SentiLink", "Mechanize", "Close", "Sphinx Defense", "Tenki Cloud by Luxor Tech", "InfoHawk"]
+    assert names == [
+        "SentiLink",
+        "Mechanize",
+        "Close",
+        "Sphinx Defense",
+        "Tenki Cloud by Luxor Tech",
+        "InfoHawk",
+    ]
     c = page.candidates[0]
     assert c.source == "hn_hiring" and c.domain == "sentilink.com" and c.website == "https://sentilink.com/"
     assert c.source_url == "https://news.ycombinator.com/item?id=49972097"
-    assert c.raw_data["signal"] == "hiring" and c.raw_data["story_title"] == "Ask HN: Who is hiring? (October 2026)"
+    assert (
+        c.raw_data["signal"] == "hiring"
+        and c.raw_data["story_title"] == "Ask HN: Who is hiring? (October 2026)"
+    )
     assert c.raw_data["comment_text"] and c.raw_data["posted_at"]
     assert page.next_cursor is None  # nbPages = 1 in the fixture
 

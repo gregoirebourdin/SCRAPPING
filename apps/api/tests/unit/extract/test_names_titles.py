@@ -11,15 +11,37 @@ from scout.extract.titles import is_job_title, normalize_title, title_match_scor
 
 def test_gazetteer_size_and_accents():
     assert len(FIRST_NAMES) >= 600
-    for name in ("Zoé", "Inès", "Hélène", "Jean-Pierre", "Jürgen", "José", "Fatima", "Giulia", "João", "Mohammed"):
+    for name in (
+        "Zoé",
+        "Inès",
+        "Hélène",
+        "Jean-Pierre",
+        "Jürgen",
+        "José",
+        "Fatima",
+        "Giulia",
+        "João",
+        "Mohammed",
+    ):
         assert is_known_first_name(name), name
 
 
 @pytest.mark.parametrize(
     "name",
-    ["Jean Dupont", "DUPONT Jean", "Marie-Claire Martin", "Jean de La Fontaine", "Zoé Lefèvre-Durand",
-     "Thomas Petit", "Thomas Müller", "John F. Kennedy", "Ana María García", "Kofi Annan", "O'Brien Sean",
-     "Jean-Marc O'Neil"],
+    [
+        "Jean Dupont",
+        "DUPONT Jean",
+        "Marie-Claire Martin",
+        "Jean de La Fontaine",
+        "Zoé Lefèvre-Durand",
+        "Thomas Petit",
+        "Thomas Müller",
+        "John F. Kennedy",
+        "Ana María García",
+        "Kofi Annan",
+        "O'Brien Sean",
+        "Jean-Marc O'Neil",
+    ],
 )
 def test_plausible_names(name):
     assert is_plausible_person_name(name)
@@ -27,10 +49,28 @@ def test_plausible_names(name):
 
 @pytest.mark.parametrize(
     "text",
-    ["Directeur Général", "Chef de projet", "Agence Lumière", "En savoir plus", "Nos Services", "Office Manager",
-     "Mentions Légales", "Notre Équipe", "Bonjour Paris", "jean dupont", "Jean", "Jean D.", "SEO SEA",
-     "Studio Pixel", "Politique de confidentialité", "Contact 01 23 45 67 89", "Jean Dupont Marie Martin Paul Durand",
-     "Boulangerie Martin", "Cookies Settings", "Lire la suite"],
+    [
+        "Directeur Général",
+        "Chef de projet",
+        "Agence Lumière",
+        "En savoir plus",
+        "Nos Services",
+        "Office Manager",
+        "Mentions Légales",
+        "Notre Équipe",
+        "Bonjour Paris",
+        "jean dupont",
+        "Jean",
+        "Jean D.",
+        "SEO SEA",
+        "Studio Pixel",
+        "Politique de confidentialité",
+        "Contact 01 23 45 67 89",
+        "Jean Dupont Marie Martin Paul Durand",
+        "Boulangerie Martin",
+        "Cookies Settings",
+        "Lire la suite",
+    ],
 )
 def test_implausible_names(text):
     assert not is_plausible_person_name(text)
@@ -109,8 +149,14 @@ def test_normalize_title(title, canonical, family, seniority, min_power):
 def test_decision_power_ordering_and_modifiers():
     assert normalize_title("CEO").decision_power > normalize_title("CMO").decision_power
     assert normalize_title("CMO").decision_power > normalize_title("Marketing Director").decision_power
-    assert normalize_title("Marketing Director").decision_power > normalize_title("Head of Marketing").decision_power
-    assert normalize_title("Head of Marketing").decision_power > normalize_title("Marketing manager").decision_power
+    assert (
+        normalize_title("Marketing Director").decision_power
+        > normalize_title("Head of Marketing").decision_power
+    )
+    assert (
+        normalize_title("Head of Marketing").decision_power
+        > normalize_title("Marketing manager").decision_power
+    )
     assert normalize_title("Marketing manager").decision_power > normalize_title("Graphiste").decision_power
     deputy = normalize_title("Directeur général adjoint")
     assert deputy.normalized_title.startswith("Deputy") and deputy.decision_power < 90
@@ -120,20 +166,49 @@ def test_decision_power_ordering_and_modifiers():
 
 def test_title_match_founder_ceo_owner():
     req = {"titles": ["Founder/CEO/Owner"], "role_families": [], "seniorities": []}
-    for accepted in ("Gérant", "Président", "PDG", "Fondateur", "Managing Director", "Co-founder", "Co-fondatrice",
-                     "Geschäftsführer", "Inhaber", "Propriétaire", "Directeur Général"):
+    for accepted in (
+        "Gérant",
+        "Président",
+        "PDG",
+        "Fondateur",
+        "Managing Director",
+        "Co-founder",
+        "Co-fondatrice",
+        "Geschäftsführer",
+        "Inhaber",
+        "Propriétaire",
+        "Directeur Général",
+    ):
         assert title_match_score(normalize_title(accepted), **req) >= 0.9, accepted
-    for rejected in ("Community manager", "Chef de projet", "Développeur web", "Office manager", "Stagiaire",
-                     "Directrice artistique", "Head of Growth"):
+    for rejected in (
+        "Community manager",
+        "Chef de projet",
+        "Développeur web",
+        "Office manager",
+        "Stagiaire",
+        "Directrice artistique",
+        "Head of Growth",
+    ):
         assert title_match_score(normalize_title(rejected), **req) < 0.5, rejected
 
 
 def test_title_match_families_and_similar_roles():
     info = normalize_title("Head of Growth")
-    assert title_match_score(info, titles=[], role_families=["marketing"], seniorities=["head", "director"]) >= 0.85
+    assert (
+        title_match_score(info, titles=[], role_families=["marketing"], seniorities=["head", "director"])
+        >= 0.85
+    )
     assert title_match_score(info, titles=["Head of Growth"], role_families=[], seniorities=[]) == 1.0
     assert title_match_score(info, titles=["Marketing Director"], role_families=[], seniorities=[]) >= 0.6
-    assert title_match_score(normalize_title("Community manager"), titles=["Marketing Director"], role_families=[], seniorities=[]) < 0.5
+    assert (
+        title_match_score(
+            normalize_title("Community manager"),
+            titles=["Marketing Director"],
+            role_families=[],
+            seniorities=[],
+        )
+        < 0.5
+    )
     assert title_match_score(info, titles=[], role_families=[], seniorities=[]) == 1.0
 
 
@@ -141,4 +216,6 @@ def test_is_job_title():
     assert is_job_title("Co-fondatrice & Directrice générale")
     assert is_job_title("Community manager")
     assert not is_job_title("Claire Fontaine")
-    assert not is_job_title("Nous accompagnons les marques depuis 2012 avec passion et exigence au quotidien.")
+    assert not is_job_title(
+        "Nous accompagnons les marques depuis 2012 avec passion et exigence au quotidien."
+    )

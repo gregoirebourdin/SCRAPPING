@@ -36,10 +36,29 @@ KnownPages = dict[str, tuple[str | None, str | None, str]]
 # ---- parked / for-sale domains ----------------------------------------------------------------
 
 _PARKING_HOSTS = (
-    "sedo.com", "sedoparking.com", "dan.com", "afternic.com", "hugedomains.com", "bodis.com", "parkingcrew.net",
-    "above.com", "undeveloped.com", "domainmarket.com", "buydomains.com", "parklogic.com", "uniregistry.com",
-    "sav.com", "efty.com", "atom.com", "squadhelp.com", "domainlore.com", "voodoo.com", "parked.com",
-    "domainnamesales.com", "brandbucket.com", "namebright.com",
+    "sedo.com",
+    "sedoparking.com",
+    "dan.com",
+    "afternic.com",
+    "hugedomains.com",
+    "bodis.com",
+    "parkingcrew.net",
+    "above.com",
+    "undeveloped.com",
+    "domainmarket.com",
+    "buydomains.com",
+    "parklogic.com",
+    "uniregistry.com",
+    "sav.com",
+    "efty.com",
+    "atom.com",
+    "squadhelp.com",
+    "domainlore.com",
+    "voodoo.com",
+    "parked.com",
+    "domainnamesales.com",
+    "brandbucket.com",
+    "namebright.com",
 )
 _PARKED_STRONG = (
     "this domain may be for sale",
@@ -65,10 +84,28 @@ _PARKED_STRONG = (
     "this domain is parked",
     "domaine parqué",
 )
-_PARKED_WEAK = ("related searches", "domain name", "sponsored listings", "this domain", "for sale", "à vendre", "parked")
+_PARKED_WEAK = (
+    "related searches",
+    "domain name",
+    "sponsored listings",
+    "this domain",
+    "for sale",
+    "à vendre",
+    "parked",
+)
 _PARKING_REFS = (
-    "dan.com/", "sedo.com/", "sedoparking.com", "afternic.com", "hugedomains.com", "parkingcrew.net", "bodis.com",
-    "above.com/", "domainmarket.com", "buydomains.com", "parklogic.com", "img1.wsimg.com/parking",
+    "dan.com/",
+    "sedo.com/",
+    "sedoparking.com",
+    "afternic.com",
+    "hugedomains.com",
+    "parkingcrew.net",
+    "bodis.com",
+    "above.com/",
+    "domainmarket.com",
+    "buydomains.com",
+    "parklogic.com",
+    "img1.wsimg.com/parking",
 )
 
 
@@ -89,7 +126,9 @@ def detect_parked(html: str, parsed: ParsedPage, final_url: str) -> str | None:
     for ph in _PARKING_REFS:
         if re.search(rf"(?:src|href|action|content)\s*=\s*[\"'][^\"']*{re.escape(ph)}", low_html):
             return f"parking service reference: {ph}"
-    if re.search(r"window\.location(?:\.href)?\s*=\s*[\"'][^\"']*(?:sedoparking|parkingcrew|bodis|dan\.com)", low_html):
+    if re.search(
+        r"window\.location(?:\.href)?\s*=\s*[\"'][^\"']*(?:sedoparking|parkingcrew|bodis|dan\.com)", low_html
+    ):
         return "parking redirect script"
     if len(low_text) < 1200 and sum(1 for w in _PARKED_WEAK if w in low_text) >= 3:
         return "parked page heuristics"
@@ -152,11 +191,16 @@ def _fetched_page(
     )
 
 
-async def _maybe_render(url: str, html: str, parsed: ParsedPage, *, is_home: bool) -> tuple[str, ParsedPage, FetchTier]:
+async def _maybe_render(
+    url: str, html: str, parsed: ParsedPage, *, is_home: bool
+) -> tuple[str, ParsedPage, FetchTier]:
     """Upgrade to a JS tier only when the HTTP response looks client-rendered."""
     if not render.needs_js(html, parsed):
         return html, parsed, FetchTier.http
-    for tier, renderer in ((FetchTier.crawl4ai, render.render_crawl4ai), (FetchTier.browser, render.render_playwright)):
+    for tier, renderer in (
+        (FetchTier.crawl4ai, render.render_crawl4ai),
+        (FetchTier.browser, render.render_playwright),
+    ):
         rendered = await renderer(url)
         if rendered:
             reparsed = parse_html(rendered, url, is_home=is_home)
@@ -184,14 +228,22 @@ async def _fetch_home(candidates: list[str]) -> tuple[http.HttpResponse | None, 
             last_error, last_category = str(exc), exc.category
             continue
         if resp.status_code >= 400 or not resp.text.strip():
-            last_error = f"home returned HTTP {resp.status_code}" if resp.status_code >= 400 else "empty home page"
-            last_category = ErrorCategory.not_found if resp.status_code in (404, 410) else ErrorCategory.network
+            last_error = (
+                f"home returned HTTP {resp.status_code}" if resp.status_code >= 400 else "empty home page"
+            )
+            last_category = (
+                ErrorCategory.not_found if resp.status_code in (404, 410) else ErrorCategory.network
+            )
             continue
         return resp, None
-    return None, _failure(candidates[0], WebsiteStatus.unreachable, last_category or ErrorCategory.network, last_error)
+    return None, _failure(
+        candidates[0], WebsiteStatus.unreachable, last_category or ErrorCategory.network, last_error
+    )
 
 
-def _failure(url: str, status: WebsiteStatus, category: ErrorCategory | None, error: str | None) -> CrawlResult:
+def _failure(
+    url: str, status: WebsiteStatus, category: ErrorCategory | None, error: str | None
+) -> CrawlResult:
     return CrawlResult(
         domain=registrable_domain(url) or (urlsplit(url).hostname or ""),
         home_url=None,
@@ -216,7 +268,9 @@ async def _sitemap_urls(home_url: str, domain: str) -> list[str]:
         sm = queue.pop(0)
         fetches += 1
         try:
-            resp = await http.fetch(sm, accept="application/xml,text/xml;q=0.9,*/*;q=0.5", max_bytes=2_000_000)
+            resp = await http.fetch(
+                sm, accept="application/xml,text/xml;q=0.9,*/*;q=0.5", max_bytes=2_000_000
+            )
         except (JobError, SSRFBlocked):
             continue
         if resp.status_code != 200 or not resp.text:
@@ -224,7 +278,9 @@ async def _sitemap_urls(home_url: str, domain: str) -> list[str]:
         entries = parse_sitemap_entries(resp.text)
         urls.extend(entries.urls)
         if entries.sitemaps and not urls:
-            queue.extend(u for u in pick_child_sitemaps(entries.sitemaps, 1) if registrable_domain(u) == domain)
+            queue.extend(
+                u for u in pick_child_sitemaps(entries.sitemaps, 1) if registrable_domain(u) == domain
+            )
     return urls
 
 
@@ -251,13 +307,21 @@ async def crawl_site(
     try:
         async with asyncio.timeout(HOME_TIME_BUDGET_S):
             if not await robots.allowed(candidates[0]):
-                res = _failure(candidates[0], WebsiteStatus.blocked, ErrorCategory.blocked, "disallowed by robots.txt")
+                res = _failure(
+                    candidates[0], WebsiteStatus.blocked, ErrorCategory.blocked, "disallowed by robots.txt"
+                )
                 res.robots_blocked = True
                 return res
             home_resp, failure = await _fetch_home(candidates)
     except TimeoutError:
-        home_resp, failure = None, _failure(
-            candidates[0], WebsiteStatus.unreachable, ErrorCategory.timeout, "home page time budget exhausted"
+        home_resp, failure = (
+            None,
+            _failure(
+                candidates[0],
+                WebsiteStatus.unreachable,
+                ErrorCategory.timeout,
+                "home page time budget exhausted",
+            ),
         )
     if failure is not None or home_resp is None:
         assert failure is not None
@@ -266,7 +330,9 @@ async def crawl_site(
 
     final_url = home_resp.final_url
     domain = registrable_domain(final_url) or (urlsplit(final_url).hostname or "")
-    result = CrawlResult(domain=domain, home_url=final_url, status=WebsiteStatus.ok, bytes=home_resp.size_bytes)
+    result = CrawlResult(
+        domain=domain, home_url=final_url, status=WebsiteStatus.ok, bytes=home_resp.size_bytes
+    )
     if domain in NON_COMPANY_DOMAINS:
         result.status = WebsiteStatus.unreachable
         result.error_category = ErrorCategory.validation
@@ -308,7 +374,9 @@ async def crawl_site(
         etag, last_mod, cached_hash = known.get(key, (None, None, ""))
         try:
             async with domain_slot(domain):
-                resp = await http.fetch(url, etag=etag if cached_hash else None, last_modified=last_mod if cached_hash else None)
+                resp = await http.fetch(
+                    url, etag=etag if cached_hash else None, last_modified=last_mod if cached_hash else None
+                )
         except (JobError, SSRFBlocked) as exc:
             log.debug("crawl_page_failed", url=url, error=str(exc))
             result.pages_failed += 1
@@ -322,9 +390,16 @@ async def crawl_site(
                 seen.add(key)
                 result.pages.append(
                     FetchedPage(
-                        url=url, final_url=resp.final_url, canonical_url=key, status_code=304,
-                        content_type=resp.content_type, page_type=page_type, content_hash=cached_hash,
-                        etag=resp.etag or etag, last_modified=resp.last_modified or last_mod, not_modified=True,
+                        url=url,
+                        final_url=resp.final_url,
+                        canonical_url=key,
+                        status_code=304,
+                        content_type=resp.content_type,
+                        page_type=page_type,
+                        content_hash=cached_hash,
+                        etag=resp.etag or etag,
+                        last_modified=resp.last_modified or last_mod,
+                        not_modified=True,
                     )
                 )
             return
@@ -360,7 +435,11 @@ async def crawl_site(
     order = {canonical_url(u): i for i, (u, _pt) in enumerate(plan)}
     result.pages.sort(key=lambda p: (p.page_type != PageType.home, order.get(canonical_url(p.url), 99)))
     log.info(
-        "crawl_done", domain=domain, pages=len(result.pages), failed=result.pages_failed,
-        tier_max=result.tier_max, ms=int((time.monotonic() - started) * 1000),
+        "crawl_done",
+        domain=domain,
+        pages=len(result.pages),
+        failed=result.pages_failed,
+        tier_max=result.tier_max,
+        ms=int((time.monotonic() - started) * 1000),
     )
     return result

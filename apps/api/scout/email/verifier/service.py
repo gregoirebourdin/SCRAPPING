@@ -128,7 +128,11 @@ class ServiceVerifier:
         mx_valid: bool | None = None
         if syntax_valid and not disposable:
             mx_valid = bool(data.get("has_mx")) if "has_mx" in data else None
-            if data.get("error") and not data.get("has_mx") and "no such host" not in str(data["error"]).lower():
+            if (
+                data.get("error")
+                and not data.get("has_mx")
+                and "no such host" not in str(data["error"]).lower()
+            ):
                 mx_valid = None  # DNS trouble, not a definitive "no MX"
         return VerificationResult(
             address=addr,
@@ -141,7 +145,8 @@ class ServiceVerifier:
             free_provider=bool(data.get("free")) or (bool(domain) and is_free_provider(domain)),
             verifier=self.name,
             raw=data,
-            error=(str(data["error"]) if data.get("error") else None) or (str(smtp["error"]) if smtp.get("error") else None),
+            error=(str(data["error"]) if data.get("error") else None)
+            or (str(smtp["error"]) if smtp.get("error") else None),
         )
 
     async def is_catch_all(self, domain: str) -> bool | None:

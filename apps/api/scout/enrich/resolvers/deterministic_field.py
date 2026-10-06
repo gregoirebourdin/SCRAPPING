@@ -27,12 +27,18 @@ def employee_range_label(lo: int | None, hi: int | None) -> str | None:
 async def _icp_score(rc: ResolveContext) -> int | None:
     if rc.company is None:
         return None
-    cond: list[Any] = [QualificationScore.workspace_id == rc.workspace_id, QualificationScore.company_id == rc.company.id]
+    cond: list[Any] = [
+        QualificationScore.workspace_id == rc.workspace_id,
+        QualificationScore.company_id == rc.company.id,
+    ]
     if rc.person is not None:
         cond.append(QualificationScore.person_id == rc.person.id)
     async with session_scope() as s:
         return await s.scalar(
-            sa.select(QualificationScore.icp_score).where(*cond).order_by(QualificationScore.computed_at.desc()).limit(1)
+            sa.select(QualificationScore.icp_score)
+            .where(*cond)
+            .order_by(QualificationScore.computed_at.desc())
+            .limit(1)
         )
 
 
@@ -40,8 +46,8 @@ async def resolve(rc: ResolveContext) -> CellResult:
     plan = rc.plan
     f = plan.field or ""
     c, p = rc.company, rc.person
-    company_conf = (c.company_confidence if c is not None and c.company_confidence is not None else 0.9)
-    person_conf = (p.identity_confidence if p is not None and p.identity_confidence is not None else 0.9)
+    company_conf = c.company_confidence if c is not None and c.company_confidence is not None else 0.9
+    person_conf = p.identity_confidence if p is not None and p.identity_confidence is not None else 0.9
     value: Any = None
     conf: float = company_conf
     source_id = "company_record"
@@ -60,7 +66,9 @@ async def resolve(rc: ResolveContext) -> CellResult:
             value = p.full_name
         else:
             emails = await rc.emails()
-            email = next((e for e in emails if e.id == p.primary_email_id), None) or (emails[0] if emails else None)
+            email = next((e for e in emails if e.id == p.primary_email_id), None) or (
+                emails[0] if emails else None
+            )
             if email is None:
                 return unknown(plan, resolver=RESOLVER, error="Missing dependency: email")
             source_id = "email_verification"
@@ -87,5 +95,7 @@ async def resolve(rc: ResolveContext) -> CellResult:
         return failed(plan, resolver=RESOLVER, error=f"Unsupported record field: {f}")
 
     if value is None or value == "":
-        return unknown(plan, resolver=RESOLVER, evidence=f"No {f.replace('_', ' ')} on record", source_id=source_id)
+        return unknown(
+            plan, resolver=RESOLVER, evidence=f"No {f.replace('_', ' ')} on record", source_id=source_id
+        )
     return ok(plan, value, resolver=RESOLVER, confidence=conf, evidence=evidence, source_id=source_id)

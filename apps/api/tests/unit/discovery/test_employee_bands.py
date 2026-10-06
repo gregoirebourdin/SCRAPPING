@@ -32,7 +32,14 @@ def test_open_ended_range() -> None:
 
 @pytest.mark.parametrize(
     ("code", "expected"),
-    [("12", (20, 49)), ("01", (1, 2)), ("53", (10000, None)), ("NN", (0, 0)), ("XX", (None, None)), (None, (None, None))],
+    [
+        ("12", (20, 49)),
+        ("01", (1, 2)),
+        ("53", (10000, None)),
+        ("NN", (0, 0)),
+        ("XX", (None, None)),
+        (None, (None, None)),
+    ],
 )
 def test_range_for_tranche(code: str | None, expected: tuple[int | None, int | None]) -> None:
     assert range_for_tranche(code) == expected

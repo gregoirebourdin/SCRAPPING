@@ -155,7 +155,9 @@ class Workspace(Base):
     id: Mapped[uuid.UUID] = pk()
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     slug: Mapped[str] = mapped_column(sa.Text, nullable=False, unique=True)
-    monthly_budget_usd: Mapped[Decimal] = mapped_column(sa.Numeric(10, 2), nullable=False, server_default="30")
+    monthly_budget_usd: Mapped[Decimal] = mapped_column(
+        sa.Numeric(10, 2), nullable=False, server_default="30"
+    )
     hard_budget_cap: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.true())
     settings: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
     created_at: Mapped[datetime] = created_at()
@@ -170,7 +172,9 @@ class WorkspaceMember(Base):
     user_id: Mapped[str] = mapped_column(
         sa.Text, sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True
     )
-    role: Mapped[E.MemberRole] = mapped_column(enum_col(E.MemberRole), nullable=False, server_default="member")
+    role: Mapped[E.MemberRole] = mapped_column(
+        enum_col(E.MemberRole), nullable=False, server_default="member"
+    )
     created_at: Mapped[datetime] = created_at()
 
 
@@ -305,7 +309,9 @@ class Campaign(Base):
     mode: Mapped[E.CampaignMode] = mapped_column(
         enum_col(E.CampaignMode), nullable=False, server_default="people"
     )
-    seed_type: Mapped[E.SeedType] = mapped_column(enum_col(E.SeedType), nullable=False, server_default="search")
+    seed_type: Mapped[E.SeedType] = mapped_column(
+        enum_col(E.SeedType), nullable=False, server_default="search"
+    )
     seed_ref: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
     max_cost_usd: Mapped[Decimal | None] = mapped_column(sa.Numeric(10, 2))
     max_raw_candidates: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="60000")
@@ -477,6 +483,9 @@ class Company(DiscoveryHistoryMixin, Base):
     has_conflicts: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.false())
     needs_review: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.false())
     last_crawled_at: Mapped[datetime | None] = tstz()
+    # Last technology fingerprint scan (also when nothing was detected: zero-tech sites are not re-scanned
+    # before the freshness window ends).
+    last_tech_scan_at: Mapped[datetime | None] = tstz()
     created_at: Mapped[datetime] = created_at()
     updated_at: Mapped[datetime] = updated_at()
 
@@ -514,7 +523,9 @@ class CompanyFieldObservation(Base):
     company_id: Mapped[uuid.UUID] = fk_uuid("companies.id", ondelete="CASCADE", nullable=False)
     field_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     value_json: Mapped[Any] = mapped_column(JSONB, nullable=True)
-    source_type: Mapped[E.SourceType] = mapped_column(enum_col(E.SourceType, "company_obs_source"), nullable=False)
+    source_type: Mapped[E.SourceType] = mapped_column(
+        enum_col(E.SourceType, "company_obs_source"), nullable=False
+    )
     source_key: Mapped[str | None] = mapped_column(sa.Text)
     source_url: Mapped[str | None] = mapped_column(sa.Text)
     source_title: Mapped[str | None] = mapped_column(sa.Text)
@@ -645,7 +656,9 @@ class PersonFieldObservation(Base):
     person_id: Mapped[uuid.UUID] = fk_uuid("people.id", ondelete="CASCADE", nullable=False)
     field_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     value_json: Mapped[Any] = mapped_column(JSONB, nullable=True)
-    source_type: Mapped[E.SourceType] = mapped_column(enum_col(E.SourceType, "person_obs_source"), nullable=False)
+    source_type: Mapped[E.SourceType] = mapped_column(
+        enum_col(E.SourceType, "person_obs_source"), nullable=False
+    )
     source_key: Mapped[str | None] = mapped_column(sa.Text)
     source_url: Mapped[str | None] = mapped_column(sa.Text)
     source_title: Mapped[str | None] = mapped_column(sa.Text)
@@ -686,7 +699,9 @@ class LeadExposure(Base):
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), sa.ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
     )
-    entity_type: Mapped[E.EntityType] = mapped_column(enum_col(E.EntityType, "exposure_entity"), nullable=False)
+    entity_type: Mapped[E.EntityType] = mapped_column(
+        enum_col(E.EntityType, "exposure_entity"), nullable=False
+    )
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     exposure_type: Mapped[E.ExposureType] = mapped_column(enum_col(E.ExposureType), nullable=False)
@@ -700,7 +715,12 @@ class LeadExposure(Base):
 
     __table_args__ = (
         sa.Index(
-            "ix_lead_exposures_lookup", "workspace_id", "entity_type", "entity_id", "exposure_type", "occurred_at"
+            "ix_lead_exposures_lookup",
+            "workspace_id",
+            "entity_type",
+            "entity_id",
+            "exposure_type",
+            "occurred_at",
         ),
         sa.Index("ix_lead_exposures_list", "workspace_id", "list_id"),
         sa.Index("ix_lead_exposures_campaign", "campaign_id"),
@@ -743,7 +763,9 @@ class Email(Base):
     )
     pattern: Mapped[str | None] = mapped_column(sa.Text)
     source_url: Mapped[str | None] = mapped_column(sa.Text)
-    status: Mapped[E.EmailStatus] = mapped_column(enum_col(E.EmailStatus), nullable=False, server_default="UNKNOWN")
+    status: Mapped[E.EmailStatus] = mapped_column(
+        enum_col(E.EmailStatus), nullable=False, server_default="UNKNOWN"
+    )
     mx_valid: Mapped[bool | None] = mapped_column(sa.Boolean)
     smtp_result: Mapped[E.SmtpResult] = mapped_column(
         enum_col(E.SmtpResult), nullable=False, server_default="not_attempted"
@@ -764,6 +786,8 @@ class Email(Base):
         sa.UniqueConstraint("workspace_id", "address"),
         sa.Index("ix_emails_ws_status", "workspace_id", "status"),
         sa.Index("ix_emails_domain", "domain"),
+        # Global (cross-workspace) lookups by address: pattern-memory idempotence in scout.email.store.
+        sa.Index("ix_emails_address", "address"),
     )
 
 
@@ -773,9 +797,13 @@ class EmailCheck(Base):
     workspace_id: Mapped[uuid.UUID] = ws_fk()
     email_id: Mapped[uuid.UUID] = fk_uuid("emails.id", ondelete="CASCADE", nullable=False, index=True)
     verifier: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    status: Mapped[E.EmailStatus] = mapped_column(enum_col(E.EmailStatus, "email_check_status"), nullable=False)
+    status: Mapped[E.EmailStatus] = mapped_column(
+        enum_col(E.EmailStatus, "email_check_status"), nullable=False
+    )
     mx_valid: Mapped[bool | None] = mapped_column(sa.Boolean)
-    smtp_result: Mapped[E.SmtpResult] = mapped_column(enum_col(E.SmtpResult, "email_check_smtp"), nullable=False)
+    smtp_result: Mapped[E.SmtpResult] = mapped_column(
+        enum_col(E.SmtpResult, "email_check_smtp"), nullable=False
+    )
     catch_all: Mapped[bool | None] = mapped_column(sa.Boolean)
     result: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
     duration_ms: Mapped[int | None] = mapped_column(sa.Integer)
@@ -807,6 +835,8 @@ class DomainDnsCache(Base):
     has_mx: Mapped[bool | None] = mapped_column(sa.Boolean)
     mx_hosts: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default="[]")
     has_a: Mapped[bool | None] = mapped_column(sa.Boolean)
+    # RFC 7505 null MX ("0 ."): the domain explicitly accepts no mail.
+    null_mx: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.false())
     catch_all: Mapped[bool | None] = mapped_column(sa.Boolean)
     catch_all_checked_at: Mapped[datetime | None] = tstz()
     checked_at: Mapped[datetime] = mapped_column(
@@ -827,12 +857,16 @@ class WebsiteCrawlRun(Base):
     company_id: Mapped[uuid.UUID] = fk_uuid("companies.id", ondelete="CASCADE", nullable=False, index=True)
     domain: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default="running")
-    tier_max: Mapped[E.FetchTier] = mapped_column(enum_col(E.FetchTier), nullable=False, server_default="http")
+    tier_max: Mapped[E.FetchTier] = mapped_column(
+        enum_col(E.FetchTier), nullable=False, server_default="http"
+    )
     pages_fetched: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
     pages_failed: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
     pages_unchanged: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
     bytes: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
-    error_category: Mapped[E.ErrorCategory | None] = mapped_column(enum_col(E.ErrorCategory, "crawl_error_cat"))
+    error_category: Mapped[E.ErrorCategory | None] = mapped_column(
+        enum_col(E.ErrorCategory, "crawl_error_cat")
+    )
     error: Mapped[str | None] = mapped_column(sa.Text)
     job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     started_at: Mapped[datetime] = mapped_column(
@@ -848,7 +882,9 @@ class WebsitePage(Base):
     company_id: Mapped[uuid.UUID] = fk_uuid("companies.id", ondelete="CASCADE", nullable=False, index=True)
     url: Mapped[str] = mapped_column(sa.Text, nullable=False)
     canonical_url: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    page_type: Mapped[E.PageType] = mapped_column(enum_col(E.PageType), nullable=False, server_default="other")
+    page_type: Mapped[E.PageType] = mapped_column(
+        enum_col(E.PageType), nullable=False, server_default="other"
+    )
     title: Mapped[str | None] = mapped_column(sa.Text)
     meta_description: Mapped[str | None] = mapped_column(sa.Text)
     content_text: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default="")
@@ -890,7 +926,9 @@ class CustomColumn(Base):
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     slug: Mapped[str] = mapped_column(sa.Text, nullable=False)
     data_type: Mapped[E.ColumnDataType] = mapped_column(enum_col(E.ColumnDataType), nullable=False)
-    kind: Mapped[E.ColumnKind] = mapped_column(enum_col(E.ColumnKind), nullable=False, server_default="factual")
+    kind: Mapped[E.ColumnKind] = mapped_column(
+        enum_col(E.ColumnKind), nullable=False, server_default="factual"
+    )
     entity_type: Mapped[E.EntityType] = mapped_column(
         enum_col(E.EntityType, "column_entity_type"), nullable=False, server_default="company"
     )
@@ -926,7 +964,9 @@ class CustomFieldValue(Base):
     id: Mapped[uuid.UUID] = pk()
     workspace_id: Mapped[uuid.UUID] = ws_fk()
     column_id: Mapped[uuid.UUID] = fk_uuid("custom_columns.id", ondelete="CASCADE", nullable=False)
-    entity_type: Mapped[E.EntityType] = mapped_column(enum_col(E.EntityType, "cell_entity_type"), nullable=False)
+    entity_type: Mapped[E.EntityType] = mapped_column(
+        enum_col(E.EntityType, "cell_entity_type"), nullable=False
+    )
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     value_json: Mapped[Any] = mapped_column(JSONB, nullable=True)
     display_value: Mapped[str | None] = mapped_column(sa.Text)
@@ -935,7 +975,9 @@ class CustomFieldValue(Base):
     source_url: Mapped[str | None] = mapped_column(sa.Text)
     evidence: Mapped[str | None] = mapped_column(sa.Text)
     resolver: Mapped[str | None] = mapped_column(sa.Text)
-    status: Mapped[E.CellStatus] = mapped_column(enum_col(E.CellStatus), nullable=False, server_default="not_started")
+    status: Mapped[E.CellStatus] = mapped_column(
+        enum_col(E.CellStatus), nullable=False, server_default="not_started"
+    )
     error: Mapped[str | None] = mapped_column(sa.Text)
     input_hash: Mapped[str | None] = mapped_column(sa.Text)
     is_user_override: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.false())
@@ -1070,7 +1112,9 @@ class Job(Base):
     workspace_id: Mapped[uuid.UUID] = ws_fk()
     campaign_id: Mapped[uuid.UUID | None] = fk_uuid("campaigns.id", ondelete="CASCADE", index=True)
     type: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    status: Mapped[E.JobStatus] = mapped_column(enum_col(E.JobStatus), nullable=False, server_default="pending")
+    status: Mapped[E.JobStatus] = mapped_column(
+        enum_col(E.JobStatus), nullable=False, server_default="pending"
+    )
     priority: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -1135,7 +1179,9 @@ class JobAttempt(Base):
     worker_id: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default="running")
     error: Mapped[str | None] = mapped_column(sa.Text)
-    error_category: Mapped[E.ErrorCategory | None] = mapped_column(enum_col(E.ErrorCategory, "attempt_error_cat"))
+    error_category: Mapped[E.ErrorCategory | None] = mapped_column(
+        enum_col(E.ErrorCategory, "attempt_error_cat")
+    )
     started_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
     )
@@ -1264,7 +1310,9 @@ class Import(Base):
     workspace_id: Mapped[uuid.UUID] = ws_fk()
     list_id: Mapped[uuid.UUID | None] = fk_uuid("lists.id", ondelete="SET NULL")
     filename: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    status: Mapped[E.ImportStatus] = mapped_column(enum_col(E.ImportStatus), nullable=False, server_default="pending")
+    status: Mapped[E.ImportStatus] = mapped_column(
+        enum_col(E.ImportStatus), nullable=False, server_default="pending"
+    )
     column_mapping: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
     mark_as_known: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.true())
     row_count: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
@@ -1343,3 +1391,8 @@ class GroundedResearch(Base):
     model: Mapped[str | None] = mapped_column(sa.Text)
     cache_key: Mapped[str] = mapped_column(sa.Text, nullable=False, index=True)
     created_at: Mapped[datetime] = created_at()
+
+    # Cache lookup: latest research for (workspace, cache_key) within the freshness window.
+    __table_args__ = (
+        sa.Index("ix_grounded_research_ws_key_created", "workspace_id", "cache_key", "created_at"),
+    )

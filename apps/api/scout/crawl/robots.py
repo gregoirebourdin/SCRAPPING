@@ -77,7 +77,9 @@ def parse_robots(text: str, origin: str) -> RobotsInfo:
 async def _load(origin: str) -> RobotsInfo:
     now = time.time()
     try:
-        resp = await http.fetch(f"{origin}/robots.txt", accept="text/plain,*/*;q=0.5", max_bytes=ROBOTS_MAX_BYTES)
+        resp = await http.fetch(
+            f"{origin}/robots.txt", accept="text/plain,*/*;q=0.5", max_bytes=ROBOTS_MAX_BYTES
+        )
     except BlockedError as exc:
         status = getattr(exc, "status_code", None)
         if status in (401, 403):

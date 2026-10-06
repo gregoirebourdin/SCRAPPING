@@ -46,8 +46,15 @@ async def resolve(rc: ResolveContext) -> CellResult:
         if rows:
             names = [t.name for t in rows]
             value: Any = names if plan.data_type in (ColumnDataType.json,) else ", ".join(names)
-            return ok(plan, value, resolver=RESOLVER, confidence=0.9, evidence=f"Detected {len(names)} technologies",
-                      source_url=rows[0].source_url, source_id="tech_scan")
+            return ok(
+                plan,
+                value,
+                resolver=RESOLVER,
+                confidence=0.9,
+                evidence=f"Detected {len(names)} technologies",
+                source_url=rows[0].source_url,
+                source_id="tech_scan",
+            )
         if not rc.pages and not techs:
             return unknown(plan, resolver=RESOLVER, error=NOT_CRAWLED)
         return unknown(plan, resolver=RESOLVER, evidence="No technologies detected", source_id="tech_scan")
@@ -60,19 +67,41 @@ async def resolve(rc: ResolveContext) -> CellResult:
         version = f" {t.version}" if t.version else ""
         evidence = f"{t.name}{version} detected by {t.detector}"
         value = True if boolean else ", ".join(m.name for m in matched)
-        return ok(plan, value, resolver=RESOLVER, confidence=t.confidence or 0.9, evidence=evidence,
-                  source_url=t.source_url, source_id="tech_scan")
+        return ok(
+            plan,
+            value,
+            resolver=RESOLVER,
+            confidence=t.confidence or 0.9,
+            evidence=evidence,
+            source_url=t.source_url,
+            source_id="tech_scan",
+        )
     for wanted in plan.technologies:
         hit = _script_hit(rc.pages, wanted)
         if hit:
             page, evidence = hit
-            return ok(plan, True if boolean else wanted, resolver="page_scripts", confidence=0.8, evidence=evidence,
-                      source_url=page.url, source_id="tech_scan")
+            return ok(
+                plan,
+                True if boolean else wanted,
+                resolver="page_scripts",
+                confidence=0.8,
+                evidence=evidence,
+                source_url=page.url,
+                source_id="tech_scan",
+            )
     if not rc.pages and not techs:
         return unknown(plan, resolver=RESOLVER, error=NOT_CRAWLED)
-    known = all(_canon(w) in aliases or canon(w) in {_canon(v) for v in aliases.values()} for w in plan.technologies)
+    known = all(
+        _canon(w) in aliases or canon(w) in {_canon(v) for v in aliases.values()} for w in plan.technologies
+    )
     evidence = f"{' / '.join(plan.technologies)} not detected among {len(techs)} detected technologies"
     if boolean:
-        return ok(plan, False, resolver=RESOLVER, confidence=0.85 if known else 0.6, evidence=evidence,
-                  source_id="tech_scan")
+        return ok(
+            plan,
+            False,
+            resolver=RESOLVER,
+            confidence=0.85 if known else 0.6,
+            evidence=evidence,
+            source_id="tech_scan",
+        )
     return unknown(plan, resolver=RESOLVER, evidence=evidence, source_id="tech_scan")

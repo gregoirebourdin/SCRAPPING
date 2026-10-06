@@ -68,8 +68,14 @@ def test_statutory_auditors_and_birth_names_are_handled() -> None:
     names = [p["full_name"] for p in map_result(ebra).people]
     assert names == ["Soizic Bouju", "Pierre Fanneau"]
     tweaked = copy.deepcopy(ebra)
-    tweaked["dirigeants"] = [{"nom": "GUILLOT (DUPESSEY)", "prenoms": "CAROLE FRANCOISE", "qualite": "Gérant",
-                              "type_dirigeant": "personne physique"}]
+    tweaked["dirigeants"] = [
+        {
+            "nom": "GUILLOT (DUPESSEY)",
+            "prenoms": "CAROLE FRANCOISE",
+            "qualite": "Gérant",
+            "type_dirigeant": "personne physique",
+        }
+    ]
     assert map_result(tweaked).people[0]["full_name"] == "Carole Guillot"
 
 
@@ -128,8 +134,15 @@ def test_plan_restricted_to_requested_area() -> None:
 @respx.mock
 async def test_discover_pagination_and_params(src: FrRegistrySource) -> None:
     route = respx.get(API).mock(return_value=httpx.Response(200, json=fixture_json("fr_registry_page.json")))
-    q = DiscoveryQuery(key="k", params={"naf": ["73.11Z", "70.21Z"], "departement": "69",
-                                        "tranches": ["01", "02", "03", "11", "12"], "restricted": True})
+    q = DiscoveryQuery(
+        key="k",
+        params={
+            "naf": ["73.11Z", "70.21Z"],
+            "departement": "69",
+            "tranches": ["01", "02", "03", "11", "12"],
+            "restricted": True,
+        },
+    )
     page = await src.discover(q, None)
     assert len(page.candidates) == 25 and page.next_cursor == {"page": 2}
     sent = route.calls.last.request.url.params
@@ -146,14 +159,19 @@ async def test_discover_pagination_and_params(src: FrRegistrySource) -> None:
 
 @respx.mock
 async def test_empty_results_exhaust(src: FrRegistrySource) -> None:
-    respx.get(API).mock(return_value=httpx.Response(200, json={"results": [], "total_results": 0, "page": 1,
-                                                                "per_page": 25, "total_pages": 0}))
+    respx.get(API).mock(
+        return_value=httpx.Response(
+            200, json={"results": [], "total_results": 0, "page": 1, "per_page": 25, "total_pages": 0}
+        )
+    )
     page = await src.discover(DiscoveryQuery(key="k", params={"naf": ["86.23Z"], "departement": "48"}), None)
     assert page.candidates == [] and page.next_cursor is None
 
 
 @respx.mock
-@pytest.mark.parametrize(("status", "exc"), [(429, RateLimitedError), (503, FetchError), (400, PermanentError)])
+@pytest.mark.parametrize(
+    ("status", "exc"), [(429, RateLimitedError), (503, FetchError), (400, PermanentError)]
+)
 async def test_http_errors(src: FrRegistrySource, status: int, exc: type[Exception]) -> None:
     respx.get(API).mock(return_value=httpx.Response(status, json={"erreur": "x"}))
     with pytest.raises(exc):

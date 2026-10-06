@@ -23,20 +23,40 @@ def _answer(prompt: str) -> dict:
         return {"people": []}
     return {
         "people": [
-            {"full_name": "Sarah Benali", "title": "Cheffe de projet",
-             "evidence_quote": "Sarah Benali\nCheffe de projet", "source_url": "http://agence-lumiere.fr/equipe"},
+            {
+                "full_name": "Sarah Benali",
+                "title": "Cheffe de projet",
+                "evidence_quote": "Sarah Benali\nCheffe de projet",
+                "source_url": "http://agence-lumiere.fr/equipe",
+            },
             # hallucinated: not on the page
-            {"full_name": "Pierre Lambert", "title": "CEO",
-             "evidence_quote": "Pierre Lambert, CEO", "source_url": "http://agence-lumiere.fr/equipe"},
+            {
+                "full_name": "Pierre Lambert",
+                "title": "CEO",
+                "evidence_quote": "Pierre Lambert, CEO",
+                "source_url": "http://agence-lumiere.fr/equipe",
+            },
             # real name but invented evidence → rejected
-            {"full_name": "Thomas Petit", "title": "Directeur général",
-             "evidence_quote": "Thomas Petit, directeur général depuis 2010", "source_url": "http://agence-lumiere.fr/equipe"},
+            {
+                "full_name": "Thomas Petit",
+                "title": "Directeur général",
+                "evidence_quote": "Thomas Petit, directeur général depuis 2010",
+                "source_url": "http://agence-lumiere.fr/equipe",
+            },
             # verbatim text but not a person's name
-            {"full_name": "Ils nous font confiance", "title": None,
-             "evidence_quote": "Ils nous font confiance", "source_url": "http://agence-lumiere.fr/equipe"},
+            {
+                "full_name": "Ils nous font confiance",
+                "title": None,
+                "evidence_quote": "Ils nous font confiance",
+                "source_url": "http://agence-lumiere.fr/equipe",
+            },
             # real person, invented title → title dropped, person kept with lower confidence
-            {"full_name": "INÈS GARNIER", "title": "VP Engineering",
-             "evidence_quote": "Inès Garnier  Développeuse web", "source_url": "http://agence-lumiere.fr/equipe"},
+            {
+                "full_name": "INÈS GARNIER",
+                "title": "VP Engineering",
+                "evidence_quote": "Inès Garnier  Développeuse web",
+                "source_url": "http://agence-lumiere.fr/equipe",
+            },
         ]
     }
 

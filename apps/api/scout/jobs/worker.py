@@ -55,7 +55,7 @@ class Worker:
         for t in self._tasks:
             t.cancel()
         if self._running:
-            done, pending = await asyncio.wait(list(self._running.values()), timeout=grace_s)
+            _done, pending = await asyncio.wait(list(self._running.values()), timeout=grace_s)
             for t in pending:
                 t.cancel()
         if self._listen_conn is not None:
@@ -140,7 +140,8 @@ class Worker:
                 self._listen_conn = await asyncpg.connect(url)
                 await self._listen_conn.add_listener(queue.JOBS_CHANNEL, lambda *_: self._wake.set())
                 while not self._stop.is_set() and not self._listen_conn.is_closed():
-                    await asyncio.sleep(5)
+                    with suppress(TimeoutError):
+                        await asyncio.wait_for(self._stop.wait(), timeout=5)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -151,18 +152,30 @@ class Worker:
     async def _execute(self, job: queue.ClaimedJob) -> None:
         spec = get_handler(job.type)
         structlog.contextvars.bind_contextvars(
-            job_id=str(job.id), job_type=job.type, workspace_id=str(job.workspace_id),
+            job_id=str(job.id),
+            job_type=job.type,
+            workspace_id=str(job.workspace_id),
             campaign_id=str(job.campaign_id) if job.campaign_id else None,
         )
         try:
             if spec is None:
-                await queue.fail(job, self.worker_id, error=f"no handler for {job.type}",
-                                 category=ErrorCategory.internal, retryable=False)
+                await queue.fail(
+                    job,
+                    self.worker_id,
+                    error=f"no handler for {job.type}",
+                    category=ErrorCategory.internal,
+                    retryable=False,
+                )
                 return
             await queue.mark_running(job.id)
             ctx = JobContext(
-                job_id=job.id, workspace_id=job.workspace_id, campaign_id=job.campaign_id, type=job.type,
-                payload=job.payload, attempt=job.attempts, worker_id=self.worker_id,
+                job_id=job.id,
+                workspace_id=job.workspace_id,
+                campaign_id=job.campaign_id,
+                type=job.type,
+                payload=job.payload,
+                attempt=job.attempts,
+                worker_id=self.worker_id,
             )
             started = time.monotonic()
             try:
@@ -172,22 +185,40 @@ class Worker:
                 await queue.requeue_paused(job, self.worker_id)
                 return
             except TimeoutError:
-                await queue.fail(job, self.worker_id, error=f"timed out after {spec.timeout_s}s",
-                                 category=ErrorCategory.timeout, retryable=True)
+                await queue.fail(
+                    job,
+                    self.worker_id,
+                    error=f"timed out after {spec.timeout_s}s",
+                    category=ErrorCategory.timeout,
+                    retryable=True,
+                )
                 log.warning("job.timeout")
                 return
             except JobError as exc:
-                status = await queue.fail(job, self.worker_id, error=str(exc), category=exc.category,
-                                          retryable=exc.retryable, blocked=isinstance(exc, BlockedError))
+                status = await queue.fail(
+                    job,
+                    self.worker_id,
+                    error=str(exc),
+                    category=exc.category,
+                    retryable=exc.retryable,
+                    blocked=isinstance(exc, BlockedError),
+                )
                 log.warning("job.failed", error=str(exc), category=exc.category, status=status)
                 return
             except Exception as exc:  # unexpected: retry with backoff, then dead-letter
-                status = await queue.fail(job, self.worker_id, error=f"{type(exc).__name__}: {exc}",
-                                          category=ErrorCategory.internal, retryable=True)
+                status = await queue.fail(
+                    job,
+                    self.worker_id,
+                    error=f"{type(exc).__name__}: {exc}",
+                    category=ErrorCategory.internal,
+                    retryable=True,
+                )
                 log.exception("job.crashed", status=status)
                 return
             if ctx.reschedule_after is not None:
-                await queue.reschedule(job, self.worker_id, delay_s=ctx.reschedule_after, payload=ctx.reschedule_payload)
+                await queue.reschedule(
+                    job, self.worker_id, delay_s=ctx.reschedule_after, payload=ctx.reschedule_payload
+                )
             else:
                 await queue.complete(job, self.worker_id, result=result)
             log.debug("job.done", ms=int((time.monotonic() - started) * 1000))

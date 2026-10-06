@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Generic, Literal, Protocol, TypeVar
+from typing import Any, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
@@ -23,7 +23,7 @@ class AIUsage:
 
 
 @dataclass
-class AIResult(Generic[T]):
+class AIResult[T: BaseModel]:
     value: T
     usage: AIUsage
     raw_text: str | None = None
@@ -43,7 +43,7 @@ class GroundingSupport:
 
 
 @dataclass
-class GroundedResult(Generic[T]):
+class GroundedResult[T: BaseModel]:
     text: str
     value: T | None
     sources: list[GroundingSource]

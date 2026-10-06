@@ -39,7 +39,8 @@ FIELD_INSTRUCTIONS = {
 }
 SYSTEM = (
     "You write concise, specific B2B copy for a lead intelligence application. Use only the facts provided; never "
-    "invent numbers, clients, names, awards or events. Output only the requested text.\n\n" + UNTRUSTED_CONTENT_RULES
+    "invent numbers, clients, names, awards or events. Output only the requested text.\n\n"
+    + UNTRUSTED_CONTENT_RULES
 )
 _SENT = re.compile(r"(?<=[.!?])\s+")
 
@@ -55,8 +56,10 @@ def _facts(rc: ResolveContext) -> str:
     if c is not None:
         lines.append(f"Company: {c.name}")
         for label, val in (
-            ("Domain", c.domain), ("Location", ", ".join(x for x in (c.city, c.country) if x)),
-            ("Industry", c.industry or c.category_raw), ("Employees", employee_range_label(c.employee_min, c.employee_max)),
+            ("Domain", c.domain),
+            ("Location", ", ".join(x for x in (c.city, c.country) if x)),
+            ("Industry", c.industry or c.category_raw),
+            ("Employees", employee_range_label(c.employee_min, c.employee_max)),
             ("Description", c.description),
         ):
             if val:
@@ -100,9 +103,15 @@ def extractive_summary(rc: ResolveContext) -> CellResult:
     for text, url in candidates:
         summary = _first_sentences(text)
         if len(summary.split()) >= 6 and not contains_any(summary, ["cookie", "cookies", "javascript"]):
-            return ok(plan, summary, resolver=RESOLVER_EXTRACTIVE, confidence=0.6,
-                      evidence="Extracted from " + (url or "the company record"), source_url=url,
-                      source_id="website" if url else "company_record")
+            return ok(
+                plan,
+                summary,
+                resolver=RESOLVER_EXTRACTIVE,
+                confidence=0.6,
+                evidence="Extracted from " + (url or "the company record"),
+                source_url=url,
+                source_id="website" if url else "company_record",
+            )
     if not rc.pages:
         return unknown(plan, resolver=RESOLVER_EXTRACTIVE, error=NOT_CRAWLED)
     return unknown(plan, resolver=RESOLVER_EXTRACTIVE, evidence="No descriptive text found on the website")
@@ -110,12 +119,16 @@ def extractive_summary(rc: ResolveContext) -> CellResult:
 
 def _is_summary(rc: ResolveContext) -> bool:
     plan = rc.plan
-    return plan.field == "summary" or contains_any(f"{plan.name} {plan.concept or ''}", ["summary", "resume", "description"])
+    return plan.field == "summary" or contains_any(
+        f"{plan.name} {plan.concept or ''}", ["summary", "resume", "description"]
+    )
 
 
 def _prompt(rc: ResolveContext, passages: Sequence[Passage]) -> str:
     plan = rc.plan
-    instruction = FIELD_INSTRUCTIONS.get(plan.field or "") or (plan.output_instructions or plan.concept or plan.name)
+    instruction = FIELD_INSTRUCTIONS.get(plan.field or "") or (
+        plan.output_instructions or plan.concept or plan.name
+    )
     lang = _language(rc.pages)
     parts = [
         f"Task: {instruction}",
@@ -139,13 +152,26 @@ async def resolve(rc: ResolveContext) -> CellResult:
     if not rc.pages and not (rc.company is not None and rc.company.description):
         return unknown(plan, resolver=RESOLVER_AI, error=NOT_CRAWLED)
     passages = relevant_passages(rc, k=5, max_chars=4500, include_unmatched=True) if rc.pages else []
-    res = await ai.structured(role=ModelRole.reasoning, system=SYSTEM, prompt=_prompt(rc, passages),
-                              schema=GeneratedText, temperature=0.4)
+    res = await ai.structured(
+        role=ModelRole.reasoning,
+        system=SYSTEM,
+        prompt=_prompt(rc, passages),
+        schema=GeneratedText,
+        temperature=0.4,
+    )
     text = re.sub(r"\s+", " ", (res.value.text or "")).strip().strip('"“”')[:MAX_CHARS]
     common: dict[str, Any] = {"model": res.usage.model, "cost_usd": res.usage.cost_usd}
     if not text:
         return unknown(plan, resolver=RESOLVER_AI, evidence="The model returned no text", **common)
     urls = list(dict.fromkeys(p.page_url for p in passages))[:3]
     evidence = "Generated from " + (", ".join(urls) if urls else "the lead record")
-    return ok(plan, text, resolver=RESOLVER_AI, confidence=None, evidence=evidence,
-              source_url=urls[0] if urls else None, source_id="ai_generated", **common)
+    return ok(
+        plan,
+        text,
+        resolver=RESOLVER_AI,
+        confidence=None,
+        evidence=evidence,
+        source_url=urls[0] if urls else None,
+        source_id="ai_generated",
+        **common,
+    )

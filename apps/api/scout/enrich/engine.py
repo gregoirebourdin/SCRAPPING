@@ -40,6 +40,7 @@ from scout.db.models import (
     CustomColumn,
     CustomFieldValue,
     LeadExposure,
+    List,
     ListMembership,
     Person,
     WebsitePage,
@@ -68,12 +69,13 @@ JOB_TYPE = "enrichment.batch"
 BATCH_SIZE = 50
 ENTITY_CONCURRENCY = 6
 EVENT_FLUSH_EVERY = 25
-ORPHAN_AFTER = timedelta(minutes=30)   # queued/running cells older than this are re-queued
+ORPHAN_AFTER = timedelta(minutes=30)  # queued/running cells older than this are re-queued
 _IN_CHUNK = 5000
 # Strategies whose result is a pure function of (plan, pages, extra inputs): safe to skip when unchanged.
 SKIPPABLE = frozenset(WEBSITE_STRATEGIES | {"web_research"})
 AI_STRATEGIES = frozenset({"semantic_classifier", "ai_extraction", "generated_text", "web_research"})
 STRICT_WEBSITE = frozenset(WEBSITE_STRATEGIES - {"generated_text"})
+
 
 def _chunks[T](items: Sequence[T], n: int) -> Iterable[Sequence[T]]:
     for i in range(0, len(items), n):
@@ -125,9 +127,9 @@ async def cached_pages(workspace_id: uuid.UUID, company_id: uuid.UUID) -> list[W
 
 
 def _has_website(company: Company) -> bool:
-    return bool(company.domain or company.normalized_domain or company.website_url) and company.website_status not in (
-        WebsiteStatus.none,
-    )
+    return bool(
+        company.domain or company.normalized_domain or company.website_url
+    ) and company.website_status not in (WebsiteStatus.none,)
 
 
 async def _no_pages_reason(plan: EnrichmentPlan, company: Company) -> CellResult:
@@ -155,8 +157,13 @@ def compute_input_hash(plan: EnrichmentPlan, pages: Sequence[Any], extra: str = 
     return sha256_hex(f"{plan_json}\n{page_part}\n{extra}")
 
 
-def _extra_inputs(plan: EnrichmentPlan, company: Company | None, person: Person | None,
-                  factual: dict[str, str], deps: dict[str, Any]) -> str:
+def _extra_inputs(
+    plan: EnrichmentPlan,
+    company: Company | None,
+    person: Person | None,
+    factual: dict[str, str],
+    deps: dict[str, Any],
+) -> str:
     parts: list[Any] = []
     if plan.strategy in AI_STRATEGIES:
         from scout.ai.factory import get_ai
@@ -188,7 +195,11 @@ def _human_error(exc: BaseException) -> str:
         return "Timed out"
     if isinstance(exc, RetryableError):
         msg = str(exc)
-        return "AI request failed — retry later" if "gemini" in msg.lower() or "ai" in msg.lower() else "Temporary error — retry later"
+        return (
+            "AI request failed — retry later"
+            if "gemini" in msg.lower() or "ai" in msg.lower()
+            else "Temporary error — retry later"
+        )
     if isinstance(exc, JobError):
         return str(exc)[:200] or "Enrichment error"
     return "Enrichment error (internal)"
@@ -217,9 +228,15 @@ async def resolve_plan(
     pages: list[WebsitePage] | None = None,
 ) -> CellResult:
     """Run a plan for one entity without persisting anything (column previews, campaign stages)."""
-    if pages is None and company is not None and (plan.strategy in WEBSITE_STRATEGIES or plan.strategy == "tech_detection"):
+    if (
+        pages is None
+        and company is not None
+        and (plan.strategy in WEBSITE_STRATEGIES or plan.strategy == "tech_detection")
+    ):
         pages = await cached_pages(workspace_id, company.id)
-    rc = ResolveContext(plan=plan, workspace_id=workspace_id, company=company, person=person, pages=list(pages or []))
+    rc = ResolveContext(
+        plan=plan, workspace_id=workspace_id, company=company, person=person, pages=list(pages or [])
+    )
     return await _safe_resolve(rc)
 
 
@@ -238,28 +255,50 @@ async def create_column(
 ) -> CustomColumn:
     """Plan (unless given) and persist a custom column with a unique slug per (workspace, list)."""
     name = (name or "").strip() or "Column"
+    if list_id is not None:
+        async with session_scope() as s:
+            owner = await s.scalar(sa.select(List.workspace_id).where(List.id == list_id))
+        if owner != workspace_id:
+            raise NotFound("List not found")
     plan = plan or await plan_column(name, instruction, data_type=data_type)
     base = slugify(name)
     scope = [CustomColumn.workspace_id == workspace_id, CustomColumn.list_id.is_not_distinct_from(list_id)]
     for attempt in range(5):
         try:
             async with session_scope() as s:
-                taken = set((await s.scalars(
-                    sa.select(CustomColumn.slug).where(*scope, CustomColumn.slug.startswith(base, autoescape=True))
-                )).all())
+                taken = set(
+                    (
+                        await s.scalars(
+                            sa.select(CustomColumn.slug).where(
+                                *scope, CustomColumn.slug.startswith(base, autoescape=True)
+                            )
+                        )
+                    ).all()
+                )
                 slug, n = base, 2
                 while slug in taken:
                     slug, n = f"{base}_{n}", n + 1
-                position = await s.scalar(sa.select(sa.func.coalesce(sa.func.max(CustomColumn.position), -1)).where(*scope))
+                position = await s.scalar(
+                    sa.select(sa.func.coalesce(sa.func.max(CustomColumn.position), -1)).where(*scope)
+                )
                 col = CustomColumn(
-                    id=uuid7(), workspace_id=workspace_id, list_id=list_id, name=name, slug=slug,
-                    data_type=plan.data_type, kind=plan.kind, entity_type=plan.entity_type,
-                    resolver_type=plan.resolver, instructions=instruction or "",
+                    id=uuid7(),
+                    workspace_id=workspace_id,
+                    list_id=list_id,
+                    name=name,
+                    slug=slug,
+                    data_type=plan.data_type,
+                    kind=plan.kind,
+                    entity_type=plan.entity_type,
+                    resolver_type=plan.resolver,
+                    instructions=instruction or "",
                     configuration=plan.model_dump(mode="json"),
                     source_preferences=[str(getattr(x, "value", x)) for x in plan.input_sources],
                     confidence_threshold=plan.confidence_threshold,
                     refresh_policy={"refresh_days": plan.refresh_days},
-                    depends_on=[], position=int(position or 0) + 1, created_by=created_by,
+                    depends_on=[],
+                    position=int(position or 0) + 1,
+                    created_by=created_by,
                 )
                 s.add(col)
                 await s.flush()
@@ -267,11 +306,15 @@ async def create_column(
             return col
         except IntegrityError:
             if attempt == 4:
-                raise Conflict("Could not allocate a unique column slug", code="column_slug_conflict") from None
+                raise Conflict(
+                    "Could not allocate a unique column slug", code="column_slug_conflict"
+                ) from None
     raise AssertionError("unreachable")
 
 
-async def _mark_cells_stale(s: AsyncSession, column_id: uuid.UUID, entity_ids: Sequence[uuid.UUID] | None = None) -> int:
+async def _mark_cells_stale(
+    s: AsyncSession, column_id: uuid.UUID, entity_ids: Sequence[uuid.UUID] | None = None
+) -> int:
     stmt = (
         sa.update(CustomFieldValue)
         .where(
@@ -334,9 +377,13 @@ async def update_column_definition(
         col.confidence_threshold = plan.confidence_threshold
         col.refresh_policy = {**(col.refresh_policy or {}), "refresh_days": plan.refresh_days}
         if old_entity != plan.entity_type:
-            await s.execute(sa.delete(CustomFieldValue).where(
-                CustomFieldValue.column_id == column_id, CustomFieldValue.entity_type == old_entity,
-                CustomFieldValue.is_user_override.is_(False)))
+            await s.execute(
+                sa.delete(CustomFieldValue).where(
+                    CustomFieldValue.column_id == column_id,
+                    CustomFieldValue.entity_type == old_entity,
+                    CustomFieldValue.is_user_override.is_(False),
+                )
+            )
         if stale:
             await _mark_cells_stale(s, column_id)
     return col
@@ -360,10 +407,15 @@ async def column_entity_ids(
     q: Any
     if column.entity_type == EntityType.company:
         if company_ids is not None:
-            q = sa.select(Company.id).where(Company.workspace_id == workspace_id, Company.id.in_(list(company_ids)))
+            q = sa.select(Company.id).where(
+                Company.workspace_id == workspace_id, Company.id.in_(list(company_ids))
+            )
         elif person_ids is not None:
             q = sa.select(Person.company_id).where(
-                Person.workspace_id == workspace_id, Person.id.in_(list(person_ids)), Person.company_id.is_not(None))
+                Person.workspace_id == workspace_id,
+                Person.id.in_(list(person_ids)),
+                Person.company_id.is_not(None),
+            )
         elif list_id is not None:
             q = (
                 sa.select(sa.func.coalesce(lm.company_id, Person.company_id))
@@ -375,15 +427,22 @@ async def column_entity_ids(
             q = sa.select(Company.id).where(Company.workspace_id == workspace_id)
     else:
         if person_ids is not None:
-            q = sa.select(Person.id).where(Person.workspace_id == workspace_id, Person.id.in_(list(person_ids)))
+            q = sa.select(Person.id).where(
+                Person.workspace_id == workspace_id, Person.id.in_(list(person_ids))
+            )
         elif company_ids is not None:
-            q = sa.select(Person.id).where(Person.workspace_id == workspace_id, Person.company_id.in_(list(company_ids)))
+            q = sa.select(Person.id).where(
+                Person.workspace_id == workspace_id, Person.company_id.in_(list(company_ids))
+            )
         elif list_id is not None:
-            direct = sa.select(lm.person_id).where(lm.list_id == list_id, lm.workspace_id == workspace_id,
-                                                   lm.person_id.is_not(None))
+            direct = sa.select(lm.person_id).where(
+                lm.list_id == list_id, lm.workspace_id == workspace_id, lm.person_id.is_not(None)
+            )
             via_company = sa.select(Person.id).where(
                 Person.workspace_id == workspace_id,
-                Person.company_id.in_(sa.select(lm.company_id).where(lm.list_id == list_id, lm.company_id.is_not(None))),
+                Person.company_id.in_(
+                    sa.select(lm.company_id).where(lm.list_id == list_id, lm.company_id.is_not(None))
+                ),
             )
             q = sa.union(direct, via_company)
         else:
@@ -393,7 +452,9 @@ async def column_entity_ids(
     return sorted(ids)
 
 
-async def estimate_coverage(workspace_id: uuid.UUID, column: CustomColumn, entity_ids: Sequence[uuid.UUID]) -> dict[str, int]:
+async def estimate_coverage(
+    workspace_id: uuid.UUID, column: CustomColumn, entity_ids: Sequence[uuid.UUID]
+) -> dict[str, int]:
     """{"total", "cached", "done"}: cached = entities whose company already has cached pages
     (UI: “2,942 / 3,000 already cached”); done = cells already resolved (success/unknown)."""
     ids = list(entity_ids)
@@ -402,18 +463,31 @@ async def estimate_coverage(workspace_id: uuid.UUID, column: CustomColumn, entit
         for chunk in _chunks(ids, _IN_CHUNK):
             if column.entity_type == EntityType.company:
                 has_pages = sa.exists().where(WebsitePage.company_id == Company.id)
-                q = sa.select(sa.func.count()).select_from(Company).where(
-                    Company.workspace_id == workspace_id, Company.id.in_(list(chunk)), has_pages)
+                q = (
+                    sa.select(sa.func.count())
+                    .select_from(Company)
+                    .where(Company.workspace_id == workspace_id, Company.id.in_(list(chunk)), has_pages)
+                )
             else:
                 has_pages = sa.exists().where(WebsitePage.company_id == Person.company_id)
-                q = sa.select(sa.func.count()).select_from(Person).where(
-                    Person.workspace_id == workspace_id, Person.id.in_(list(chunk)), has_pages)
+                q = (
+                    sa.select(sa.func.count())
+                    .select_from(Person)
+                    .where(Person.workspace_id == workspace_id, Person.id.in_(list(chunk)), has_pages)
+                )
             cached += int(await s.scalar(q) or 0)
-            done += int(await s.scalar(
-                sa.select(sa.func.count()).select_from(CustomFieldValue).where(
-                    CustomFieldValue.column_id == column.id, CustomFieldValue.entity_id.in_(list(chunk)),
-                    CustomFieldValue.status.in_([CellStatus.success, CellStatus.unknown]))
-            ) or 0)
+            done += int(
+                await s.scalar(
+                    sa.select(sa.func.count())
+                    .select_from(CustomFieldValue)
+                    .where(
+                        CustomFieldValue.column_id == column.id,
+                        CustomFieldValue.entity_id.in_(list(chunk)),
+                        CustomFieldValue.status.in_([CellStatus.success, CellStatus.unknown]),
+                    )
+                )
+                or 0
+            )
     return {"total": len(ids), "cached": cached, "done": done}
 
 
@@ -422,11 +496,13 @@ async def estimate_coverage(workspace_id: uuid.UUID, column: CustomColumn, entit
 # =============================================================================================
 async def column_progress(workspace_id: uuid.UUID, column_id: uuid.UUID) -> dict[str, Any]:
     async with session_scope() as s:
-        rows = (await s.execute(
-            sa.select(CustomFieldValue.status, sa.func.count())
-            .where(CustomFieldValue.column_id == column_id, CustomFieldValue.workspace_id == workspace_id)
-            .group_by(CustomFieldValue.status)
-        )).all()
+        rows = (
+            await s.execute(
+                sa.select(CustomFieldValue.status, sa.func.count())
+                .where(CustomFieldValue.column_id == column_id, CustomFieldValue.workspace_id == workspace_id)
+                .group_by(CustomFieldValue.status)
+            )
+        ).all()
     counts = {str(getattr(st, "value", st)): int(n) for st, n in rows}
     return {
         "column_id": str(column_id),
@@ -440,25 +516,49 @@ async def column_progress(workspace_id: uuid.UUID, column_id: uuid.UUID) -> dict
     }
 
 
-async def _emit_progress(workspace_id: uuid.UUID, column_id: uuid.UUID, *, campaign_id: uuid.UUID | None = None,
-                         job_id: uuid.UUID | None = None) -> None:
+async def _emit_progress(
+    workspace_id: uuid.UUID,
+    column_id: uuid.UUID,
+    *,
+    campaign_id: uuid.UUID | None = None,
+    job_id: uuid.UUID | None = None,
+) -> None:
     from scout.jobs.events import emit
 
-    await emit(workspace_id, "column.progress", await column_progress(workspace_id, column_id),
-               campaign_id=campaign_id, job_id=job_id)
+    await emit(
+        workspace_id,
+        "column.progress",
+        await column_progress(workspace_id, column_id),
+        campaign_id=campaign_id,
+        job_id=job_id,
+    )
 
 
 # =============================================================================================
 # Fan-out
 # =============================================================================================
-async def _upsert_status(s: AsyncSession, workspace_id: uuid.UUID, column_id: uuid.UUID, entity_type: EntityType,
-                         entity_ids: Sequence[uuid.UUID], status: CellStatus) -> None:
+async def _upsert_status(
+    s: AsyncSession,
+    workspace_id: uuid.UUID,
+    column_id: uuid.UUID,
+    entity_type: EntityType,
+    entity_ids: Sequence[uuid.UUID],
+    status: CellStatus,
+) -> None:
     for chunk in _chunks(list(entity_ids), 1000):
-        stmt = pg_insert(CustomFieldValue).values([
-            {"id": uuid7(), "workspace_id": workspace_id, "column_id": column_id, "entity_type": entity_type,
-             "entity_id": eid, "status": status}
-            for eid in chunk
-        ])
+        stmt = pg_insert(CustomFieldValue).values(
+            [
+                {
+                    "id": uuid7(),
+                    "workspace_id": workspace_id,
+                    "column_id": column_id,
+                    "entity_type": entity_type,
+                    "entity_id": eid,
+                    "status": status,
+                }
+                for eid in chunk
+            ]
+        )
         stmt = stmt.on_conflict_do_update(
             index_elements=["column_id", "entity_type", "entity_id"],
             set_={"status": status, "error": None, "updated_at": sa.func.now()},
@@ -488,7 +588,11 @@ async def enqueue_column(
 
     async with session_scope() as s:
         col = await _get_column(s, workspace_id, column_id)
-    ids = list(entity_ids) if entity_ids is not None else await column_entity_ids(workspace_id, col, list_id=list_id)
+    ids = (
+        list(entity_ids)
+        if entity_ids is not None
+        else await column_entity_ids(workspace_id, col, list_id=list_id)
+    )
     ids = list(dict.fromkeys(ids))
     if not ids:
         await _emit_progress(workspace_id, column_id, campaign_id=campaign_id)
@@ -502,12 +606,21 @@ async def enqueue_column(
     async with session_scope() as s:
         existing: dict[uuid.UUID, Any] = {}
         for chunk in _chunks(ids, _IN_CHUNK):
-            rows = (await s.execute(
-                sa.select(CustomFieldValue.entity_id, CustomFieldValue.status, CustomFieldValue.is_user_override,
-                          CustomFieldValue.observed_at, CustomFieldValue.updated_at)
-                .where(CustomFieldValue.column_id == column_id, CustomFieldValue.entity_type == etype,
-                       CustomFieldValue.entity_id.in_(list(chunk)))
-            )).all()
+            rows = (
+                await s.execute(
+                    sa.select(
+                        CustomFieldValue.entity_id,
+                        CustomFieldValue.status,
+                        CustomFieldValue.is_user_override,
+                        CustomFieldValue.observed_at,
+                        CustomFieldValue.updated_at,
+                    ).where(
+                        CustomFieldValue.column_id == column_id,
+                        CustomFieldValue.entity_type == etype,
+                        CustomFieldValue.entity_id.in_(list(chunk)),
+                    )
+                )
+            ).all()
             existing.update({r.entity_id: r for r in rows})
         for eid in ids:
             cell = existing.get(eid)
@@ -518,10 +631,18 @@ async def enqueue_column(
                 continue
             if force:
                 to_queue.append(eid)
-            elif cell.status in (CellStatus.success, CellStatus.unknown) and cell.observed_at and cell.observed_at >= cutoff:
+            elif (
+                cell.status in (CellStatus.success, CellStatus.unknown)
+                and cell.observed_at
+                and cell.observed_at >= cutoff
+            ):
                 if not only_missing or refresh:
                     to_check.append(eid)
-            elif cell.status in (CellStatus.queued, CellStatus.running) and cell.updated_at and now - cell.updated_at < ORPHAN_AFTER:
+            elif (
+                cell.status in (CellStatus.queued, CellStatus.running)
+                and cell.updated_at
+                and now - cell.updated_at < ORPHAN_AFTER
+            ):
                 continue  # already in flight
             else:
                 to_queue.append(eid)
@@ -530,13 +651,23 @@ async def enqueue_column(
         targets = to_queue + to_check
         for chunk in _chunks(targets, BATCH_SIZE):
             keys = ",".join(sorted(str(x) for x in chunk))
-            payload: dict[str, Any] = {"column_id": str(column_id), "entity_ids": [str(x) for x in chunk],
-                                       "force": force, "refresh": refresh}
+            payload: dict[str, Any] = {
+                "column_id": str(column_id),
+                "entity_ids": [str(x) for x in chunk],
+                "force": force,
+                "refresh": refresh,
+            }
             if max_page_age_days is not None:
                 payload["max_page_age_days"] = int(max_page_age_days)
             mode = "f" if force else "r" if refresh else "n"
-            await enqueue(s, workspace_id=workspace_id, type=JOB_TYPE, payload=payload, campaign_id=campaign_id,
-                          dedupe_key=f"enrich:{column_id}:{mode}:{sha256_hex(keys)[:24]}")
+            await enqueue(
+                s,
+                workspace_id=workspace_id,
+                type=JOB_TYPE,
+                payload=payload,
+                campaign_id=campaign_id,
+                dedupe_key=f"enrich:{column_id}:{mode}:{sha256_hex(keys)[:24]}",
+            )
     log.info("enrich.enqueued", column_id=str(column_id), queued=len(to_queue), rechecked=len(to_check))
     await _emit_progress(workspace_id, column_id, campaign_id=campaign_id)
     return len(targets)
@@ -548,8 +679,17 @@ async def enqueue_column(
 class _Batch:
     """Executes one `enrichment.batch`: bounded concurrency, shared page loads per company, batched events."""
 
-    def __init__(self, workspace_id: uuid.UUID, column: CustomColumn, *, force: bool, refresh: bool,
-                 max_page_age_days: int | None, campaign_id: uuid.UUID | None, job_id: uuid.UUID | None) -> None:
+    def __init__(
+        self,
+        workspace_id: uuid.UUID,
+        column: CustomColumn,
+        *,
+        force: bool,
+        refresh: bool,
+        max_page_age_days: int | None,
+        campaign_id: uuid.UUID | None,
+        job_id: uuid.UUID | None,
+    ) -> None:
         self.ws = workspace_id
         self.column = column
         self.plan = plan_of(column)
@@ -574,18 +714,41 @@ class _Batch:
     async def load(self, entity_ids: Sequence[uuid.UUID]) -> None:
         ids = list(entity_ids)
         async with session_scope() as s:
-            self.cells = {c.entity_id: c for c in (await s.scalars(sa.select(CustomFieldValue).where(
-                CustomFieldValue.column_id == self.column.id, CustomFieldValue.entity_type == self.etype,
-                CustomFieldValue.entity_id.in_(ids)))).all()}
+            self.cells = {
+                c.entity_id: c
+                for c in (
+                    await s.scalars(
+                        sa.select(CustomFieldValue).where(
+                            CustomFieldValue.column_id == self.column.id,
+                            CustomFieldValue.entity_type == self.etype,
+                            CustomFieldValue.entity_id.in_(ids),
+                        )
+                    )
+                ).all()
+            }
             if self.etype == EntityType.company:
                 company_ids = ids
             else:
-                self.people = {p.id: p for p in (await s.scalars(sa.select(Person).where(
-                    Person.workspace_id == self.ws, Person.id.in_(ids)))).all()}
+                self.people = {
+                    p.id: p
+                    for p in (
+                        await s.scalars(
+                            sa.select(Person).where(Person.workspace_id == self.ws, Person.id.in_(ids))
+                        )
+                    ).all()
+                }
                 company_ids = list({p.company_id for p in self.people.values() if p.company_id})
             if company_ids:
-                self.companies = {c.id: c for c in (await s.scalars(sa.select(Company).where(
-                    Company.workspace_id == self.ws, Company.id.in_(company_ids)))).all()}
+                self.companies = {
+                    c.id: c
+                    for c in (
+                        await s.scalars(
+                            sa.select(Company).where(
+                                Company.workspace_id == self.ws, Company.id.in_(company_ids)
+                            )
+                        )
+                    ).all()
+                }
             if self.plan.strategy == "generated_text":
                 await self._load_factual(s, ids)
             if self.plan.depends_on:
@@ -599,29 +762,56 @@ class _Batch:
                 keys.append((EntityType.company, p.company_id))
         return keys
 
-    async def _cell_values(self, s: AsyncSession, columns: dict[uuid.UUID, CustomColumn],
-                           ids: Sequence[uuid.UUID]) -> dict[tuple[EntityType, uuid.UUID], dict[uuid.UUID, Any]]:
+    async def _cell_values(
+        self, s: AsyncSession, columns: dict[uuid.UUID, CustomColumn], ids: Sequence[uuid.UUID]
+    ) -> dict[tuple[EntityType, uuid.UUID], dict[uuid.UUID, Any]]:
         keys = {k for eid in ids for k in self._entity_keys(eid)}
         out: dict[tuple[EntityType, uuid.UUID], dict[uuid.UUID, Any]] = {}
         if not columns or not keys:
             return out
-        rows = (await s.execute(
-            sa.select(CustomFieldValue.column_id, CustomFieldValue.entity_type, CustomFieldValue.entity_id,
-                      CustomFieldValue.value_json, CustomFieldValue.display_value)
-            .where(CustomFieldValue.column_id.in_(list(columns)), CustomFieldValue.status == CellStatus.success,
-                   CustomFieldValue.entity_id.in_([k[1] for k in keys]))
-        )).all()
+        rows = (
+            await s.execute(
+                sa.select(
+                    CustomFieldValue.column_id,
+                    CustomFieldValue.entity_type,
+                    CustomFieldValue.entity_id,
+                    CustomFieldValue.value_json,
+                    CustomFieldValue.display_value,
+                ).where(
+                    CustomFieldValue.column_id.in_(list(columns)),
+                    CustomFieldValue.status == CellStatus.success,
+                    CustomFieldValue.entity_id.in_([k[1] for k in keys]),
+                )
+            )
+        ).all()
         for r in rows:
-            out.setdefault((EntityType(r.entity_type), r.entity_id), {})[r.column_id] = (r.value_json, r.display_value)
+            out.setdefault((EntityType(r.entity_type), r.entity_id), {})[r.column_id] = (
+                r.value_json,
+                r.display_value,
+            )
         return out
 
     async def _load_factual(self, s: AsyncSession, ids: Sequence[uuid.UUID]) -> None:
         """Existing *factual* column values (never generated ones) as extra input for generated text."""
-        cols = {c.id: c for c in (await s.scalars(sa.select(CustomColumn).where(
-            CustomColumn.workspace_id == self.ws, CustomColumn.id != self.column.id,
-            CustomColumn.kind == ColumnKind.factual,
-            sa.or_(CustomColumn.list_id.is_(None), CustomColumn.list_id.is_not_distinct_from(self.column.list_id)),
-        ).order_by(CustomColumn.position).limit(30))).all()}
+        cols = {
+            c.id: c
+            for c in (
+                await s.scalars(
+                    sa.select(CustomColumn)
+                    .where(
+                        CustomColumn.workspace_id == self.ws,
+                        CustomColumn.id != self.column.id,
+                        CustomColumn.kind == ColumnKind.factual,
+                        sa.or_(
+                            CustomColumn.list_id.is_(None),
+                            CustomColumn.list_id.is_not_distinct_from(self.column.list_id),
+                        ),
+                    )
+                    .order_by(CustomColumn.position)
+                    .limit(30)
+                )
+            ).all()
+        }
         values = await self._cell_values(s, cols, ids)
         for eid in ids:
             facts: dict[str, str] = {}
@@ -639,10 +829,17 @@ class _Batch:
                 uuids.append(uuid.UUID(r))
             except ValueError:
                 continue
-        cols = {c.id: c for c in (await s.scalars(sa.select(CustomColumn).where(
-            CustomColumn.workspace_id == self.ws,
-            sa.or_(CustomColumn.id.in_(uuids), CustomColumn.slug.in_(refs)),
-        ))).all()}
+        cols = {
+            c.id: c
+            for c in (
+                await s.scalars(
+                    sa.select(CustomColumn).where(
+                        CustomColumn.workspace_id == self.ws,
+                        sa.or_(CustomColumn.id.in_(uuids), CustomColumn.slug.in_(refs)),
+                    )
+                )
+            ).all()
+        }
         values = await self._cell_values(s, cols, ids)
         for eid in ids:
             found: dict[str, Any] = {}
@@ -655,14 +852,18 @@ class _Batch:
             self.deps[eid] = found
 
     # ------------------------------------------------------------------ pages
-    async def pages_for(self, company: Company, *, refresh: bool) -> tuple[list[WebsitePage], CellResult | None]:
+    async def pages_for(
+        self, company: Company, *, refresh: bool
+    ) -> tuple[list[WebsitePage], CellResult | None]:
         fut = self._pages.get(company.id)
         if fut is None:
             fut = asyncio.ensure_future(self._load_pages(company, refresh=refresh))
             self._pages[company.id] = fut
         return await fut
 
-    async def _load_pages(self, company: Company, *, refresh: bool) -> tuple[list[WebsitePage], CellResult | None]:
+    async def _load_pages(
+        self, company: Company, *, refresh: bool
+    ) -> tuple[list[WebsitePage], CellResult | None]:
         plan = self.plan
         pages = await cached_pages(self.ws, company.id)
         if plan.strategy not in WEBSITE_STRATEGIES:
@@ -676,8 +877,9 @@ class _Batch:
             if ensure_crawled is not None:
                 max_age = self.max_page_age_days or (plan.refresh_days if (refresh or recrawl) else 30)
                 try:
-                    crawled = await ensure_crawled(self.ws, company.id, max_age_days=max_age,
-                                                   force=bool(self.force and recrawl))
+                    crawled = await ensure_crawled(
+                        self.ws, company.id, max_age_days=max_age, force=bool(self.force and recrawl)
+                    )
                     pages = list(crawled or []) or pages
                 except BlockedError:
                     if not pages:
@@ -697,8 +899,12 @@ class _Batch:
                     await self._process(eid)
                 except Exception as exc:
                     log.exception("enrich.entity_failed", entity_id=str(eid))
-                    await self._write(eid, failed(self.plan, resolver=self.plan.strategy, error=_human_error(exc)),
-                                      None, None)
+                    await self._write(
+                        eid,
+                        failed(self.plan, resolver=self.plan.strategy, error=_human_error(exc)),
+                        None,
+                        None,
+                    )
 
         try:
             await asyncio.gather(*(guarded(eid) for eid in entity_ids))
@@ -713,13 +919,29 @@ class _Batch:
             self.stats["skipped"] += 1
             return
         person = self.people.get(eid) if self.etype == EntityType.person else None
-        company = (self.companies.get(eid) if self.etype == EntityType.company
-                   else self.companies.get(person.company_id) if person is not None and person.company_id else None)
-        if (self.etype == EntityType.company and company is None) or (self.etype == EntityType.person and person is None):
-            await self._write(eid, failed(plan, resolver=plan.strategy, error="Lead no longer exists"), None, None)
+        company = (
+            self.companies.get(eid)
+            if self.etype == EntityType.company
+            else self.companies.get(person.company_id)
+            if person is not None and person.company_id
+            else None
+        )
+        if (self.etype == EntityType.company and company is None) or (
+            self.etype == EntityType.person and person is None
+        ):
+            await self._write(
+                eid, failed(plan, resolver=plan.strategy, error="Lead no longer exists"), None, None
+            )
             return
-        stale_by_age = bool(cell is not None and cell.observed_at is not None and cell.observed_at < self.cutoff)
-        refreshing = self.force or self.refresh or stale_by_age or (cell is not None and cell.status == CellStatus.stale)
+        stale_by_age = bool(
+            cell is not None and cell.observed_at is not None and cell.observed_at < self.cutoff
+        )
+        refreshing = (
+            self.force
+            or self.refresh
+            or stale_by_age
+            or (cell is not None and cell.status == CellStatus.stale)
+        )
 
         pages: list[WebsitePage] = []
         if company is not None and (plan.strategy in WEBSITE_STRATEGIES or plan.strategy == "tech_detection"):
@@ -729,8 +951,9 @@ class _Batch:
                 await self._write(eid, problem, company, person)
                 return
         elif company is None and plan.strategy in STRICT_WEBSITE:
-            await self._write(eid, unknown(plan, resolver=plan.strategy, error="Missing dependency: company"),
-                              None, person)
+            await self._write(
+                eid, unknown(plan, resolver=plan.strategy, error="Missing dependency: company"), None, person
+            )
             return
 
         factual = self.factual.get(eid, {})
@@ -741,17 +964,31 @@ class _Batch:
             and cell is not None
             and cell.input_hash == input_hash
             and plan.strategy in SKIPPABLE
-            and cell.status in (CellStatus.success, CellStatus.unknown, CellStatus.stale, CellStatus.queued,
-                                CellStatus.running)
+            and cell.status
+            in (
+                CellStatus.success,
+                CellStatus.unknown,
+                CellStatus.stale,
+                CellStatus.queued,
+                CellStatus.running,
+            )
             and not (plan.strategy == "web_research" and (stale_by_age or self.refresh))
         ):
             await self._restore(eid, cell)
             return
 
         await self._set_running(eid)
-        rc = ResolveContext(plan=plan, workspace_id=self.ws, company=company, person=person, pages=pages,
-                            column_id=self.column.id, factual_values=factual, dependency_values=deps,
-                            force=self.force)
+        rc = ResolveContext(
+            plan=plan,
+            workspace_id=self.ws,
+            company=company,
+            person=person,
+            pages=pages,
+            column_id=self.column.id,
+            factual_values=factual,
+            dependency_values=deps,
+            force=self.force,
+        )
         result = await _safe_resolve(rc)
         result.input_hash = input_hash if result.status != CellStatus.failed else None
         await self._write(eid, result, company, person)
@@ -764,9 +1001,14 @@ class _Batch:
         if cell.status == status and not (cell.observed_at is not None and cell.observed_at < self.cutoff):
             return
         async with session_scope() as s:
-            await s.execute(sa.update(CustomFieldValue).where(
-                CustomFieldValue.id == cell.id, CustomFieldValue.is_user_override.is_(False),
-            ).values(status=status, observed_at=sa.func.now(), updated_at=sa.func.now()))
+            await s.execute(
+                sa.update(CustomFieldValue)
+                .where(
+                    CustomFieldValue.id == cell.id,
+                    CustomFieldValue.is_user_override.is_(False),
+                )
+                .values(status=status, observed_at=sa.func.now(), updated_at=sa.func.now())
+            )
         await self._event(eid, status, cell.display_value, cell.confidence)
 
     async def _set_running(self, eid: uuid.UUID) -> None:
@@ -774,11 +1016,15 @@ class _Batch:
             await _upsert_status(s, self.ws, self.column.id, self.etype, [eid], CellStatus.running)
         await self._event(eid, CellStatus.running, None, None)
 
-    async def _write(self, eid: uuid.UUID, result: CellResult, company: Company | None, person: Person | None) -> None:
+    async def _write(
+        self, eid: uuid.UUID, result: CellResult, company: Company | None, person: Person | None
+    ) -> None:
         status = CellStatus(result.status)
         values: dict[str, Any] = {
             "value_json": sa.null() if result.value is None else result.value,
-            "display_value": result.display_value if result.display_value is not None else display_for(result.value),
+            "display_value": result.display_value
+            if result.display_value is not None
+            else display_for(result.value),
             "confidence": result.confidence,
             "source_id": result.source_id,
             "source_url": result.source_url,
@@ -793,7 +1039,11 @@ class _Batch:
         }
         async with session_scope() as s:
             stmt = pg_insert(CustomFieldValue).values(
-                id=uuid7(), workspace_id=self.ws, column_id=self.column.id, entity_type=self.etype, entity_id=eid,
+                id=uuid7(),
+                workspace_id=self.ws,
+                column_id=self.column.id,
+                entity_type=self.etype,
+                entity_id=eid,
                 **values,
             )
             stmt = stmt.on_conflict_do_update(
@@ -804,23 +1054,53 @@ class _Batch:
             await s.execute(stmt)
             if status in (CellStatus.success, CellStatus.unknown):
                 company_id = company.id if company is not None else None
-                s.add(LeadExposure(workspace_id=self.ws, entity_type=self.etype, entity_id=eid, company_id=company_id,
-                                   exposure_type=ExposureType.ENRICHED, campaign_id=self.campaign_id))
-                if self.etype == EntityType.person and company_id and company_id not in self._exposed_companies:
+                s.add(
+                    LeadExposure(
+                        workspace_id=self.ws,
+                        entity_type=self.etype,
+                        entity_id=eid,
+                        company_id=company_id,
+                        exposure_type=ExposureType.ENRICHED,
+                        campaign_id=self.campaign_id,
+                    )
+                )
+                if (
+                    self.etype == EntityType.person
+                    and company_id
+                    and company_id not in self._exposed_companies
+                ):
                     self._exposed_companies.add(company_id)
-                    s.add(LeadExposure(workspace_id=self.ws, entity_type=EntityType.company, entity_id=company_id,
-                                       company_id=company_id, exposure_type=ExposureType.ENRICHED,
-                                       campaign_id=self.campaign_id))
+                    s.add(
+                        LeadExposure(
+                            workspace_id=self.ws,
+                            entity_type=EntityType.company,
+                            entity_id=company_id,
+                            company_id=company_id,
+                            exposure_type=ExposureType.ENRICHED,
+                            campaign_id=self.campaign_id,
+                        )
+                    )
                 model = Company if self.etype == EntityType.company else Person
-                await s.execute(sa.update(model).where(model.id == eid).values(last_enriched_at=sa.func.now()))
+                await s.execute(
+                    sa.update(model).where(model.id == eid).values(last_enriched_at=sa.func.now())
+                )
         self.stats["processed"] += 1
         self.stats[status.value if status.value in self.stats else "failed"] += 1
         await self._event(eid, status, values["display_value"], result.confidence)
 
-    async def _event(self, eid: uuid.UUID, status: CellStatus, display: str | None, confidence: float | None) -> None:
+    async def _event(
+        self, eid: uuid.UUID, status: CellStatus, display: str | None, confidence: float | None
+    ) -> None:
         async with self._event_lock:
-            self._events.append({"entity_type": self.etype.value, "entity_id": str(eid), "status": status.value,
-                                 "display_value": display, "confidence": confidence})
+            self._events.append(
+                {
+                    "entity_type": self.etype.value,
+                    "entity_id": str(eid),
+                    "status": status.value,
+                    "display_value": display,
+                    "confidence": confidence,
+                }
+            )
         await self._flush_events()
 
     async def _flush_events(self, *, force: bool = False) -> None:
@@ -830,8 +1110,13 @@ class _Batch:
             if not self._events or (not force and len(self._events) < EVENT_FLUSH_EVERY):
                 return
             cells, self._events = self._events, []
-        await emit(self.ws, "cell.updated", {"column_id": str(self.column.id), "cells": cells},
-                   campaign_id=self.campaign_id, job_id=self.job_id)
+        await emit(
+            self.ws,
+            "cell.updated",
+            {"column_id": str(self.column.id), "cells": cells},
+            campaign_id=self.campaign_id,
+            job_id=self.job_id,
+        )
 
 
 async def run_batch(
@@ -848,14 +1133,24 @@ async def run_batch(
 ) -> dict[str, Any]:
     """Compute cells for `entity_ids` (the body of an `enrichment.batch` job; also callable inline)."""
     async with session_scope() as s:
-        col = await s.scalar(sa.select(CustomColumn).where(CustomColumn.id == column_id,
-                                                           CustomColumn.workspace_id == workspace_id))
+        col = await s.scalar(
+            sa.select(CustomColumn).where(
+                CustomColumn.id == column_id, CustomColumn.workspace_id == workspace_id
+            )
+        )
     if col is None:
         return {"skipped": "column_deleted"}
     if checkpoint is not None:
         await checkpoint()  # cooperative campaign pause/cancel before any work
-    batch = _Batch(workspace_id, col, force=force, refresh=refresh, max_page_age_days=max_page_age_days,
-                   campaign_id=campaign_id, job_id=job_id)
+    batch = _Batch(
+        workspace_id,
+        col,
+        force=force,
+        refresh=refresh,
+        max_page_age_days=max_page_age_days,
+        campaign_id=campaign_id,
+        job_id=job_id,
+    )
     ids = list(dict.fromkeys(entity_ids))
     await batch.load(ids)
     stats = await batch.run(ids)
@@ -883,24 +1178,55 @@ async def set_user_value(
         col = await _get_column(s, workspace_id, column_id)
         if value is None:
             values: dict[str, Any] = {
-                "value_json": sa.null(), "display_value": None, "confidence": None, "source_id": None,
-                "source_url": None, "evidence": None, "resolver": None, "status": CellStatus.not_started,
-                "error": None, "input_hash": None, "is_user_override": False, "model": None,
-                "cost_usd": Decimal("0"), "observed_at": None,
+                "value_json": sa.null(),
+                "display_value": None,
+                "confidence": None,
+                "source_id": None,
+                "source_url": None,
+                "evidence": None,
+                "resolver": None,
+                "status": CellStatus.not_started,
+                "error": None,
+                "input_hash": None,
+                "is_user_override": False,
+                "model": None,
+                "cost_usd": Decimal("0"),
+                "observed_at": None,
             }
         else:
             coerced = coerce_user_value(value, col.data_type, plan_of(col).enum_values)
             values = {
-                "value_json": coerced, "display_value": display_for(coerced, col.data_type), "confidence": 1.0,
-                "source_id": "user", "source_url": None, "evidence": f"Entered by {user_id}", "resolver": "user",
-                "status": CellStatus.success, "error": None, "input_hash": None, "is_user_override": True,
-                "model": None, "cost_usd": Decimal("0"), "observed_at": sa.func.now(),
+                "value_json": coerced,
+                "display_value": display_for(coerced, col.data_type),
+                "confidence": 1.0,
+                "source_id": "user",
+                "source_url": None,
+                "evidence": f"Entered by {user_id}",
+                "resolver": "user",
+                "status": CellStatus.success,
+                "error": None,
+                "input_hash": None,
+                "is_user_override": True,
+                "model": None,
+                "cost_usd": Decimal("0"),
+                "observed_at": sa.func.now(),
             }
-        stmt = pg_insert(CustomFieldValue).values(
-            id=uuid7(), workspace_id=workspace_id, column_id=column_id, entity_type=etype, entity_id=entity_id, **values
-        ).on_conflict_do_update(
-            index_elements=["column_id", "entity_type", "entity_id"], set_={**values, "updated_at": sa.func.now()}
-        ).returning(CustomFieldValue.id)
+        stmt = (
+            pg_insert(CustomFieldValue)
+            .values(
+                id=uuid7(),
+                workspace_id=workspace_id,
+                column_id=column_id,
+                entity_type=etype,
+                entity_id=entity_id,
+                **values,
+            )
+            .on_conflict_do_update(
+                index_elements=["column_id", "entity_type", "entity_id"],
+                set_={**values, "updated_at": sa.func.now()},
+            )
+            .returning(CustomFieldValue.id)
+        )
         cell_id = (await s.execute(stmt)).scalar_one()
         cell = await s.get(CustomFieldValue, cell_id, populate_existing=True)
     assert cell is not None
@@ -940,23 +1266,35 @@ async def refresh_column(
         col = await _get_column(s, workspace_id, column_id)
         stmt = (
             sa.update(CustomFieldValue)
-            .where(CustomFieldValue.column_id == column_id, CustomFieldValue.workspace_id == workspace_id,
-                   CustomFieldValue.is_user_override.is_(False),
-                   CustomFieldValue.status.in_([CellStatus.success, CellStatus.unknown, CellStatus.failed,
-                                                CellStatus.stale]))
+            .where(
+                CustomFieldValue.column_id == column_id,
+                CustomFieldValue.workspace_id == workspace_id,
+                CustomFieldValue.is_user_override.is_(False),
+                CustomFieldValue.status.in_(
+                    [CellStatus.success, CellStatus.unknown, CellStatus.failed, CellStatus.stale]
+                ),
+            )
             .values(status=CellStatus.stale, updated_at=sa.func.now())
             .returning(CustomFieldValue.entity_id)
         )
         if older_than_days is not None:
-            stmt = stmt.where(sa.or_(
-                CustomFieldValue.observed_at.is_(None),
-                CustomFieldValue.observed_at < datetime.now(UTC) - timedelta(days=int(older_than_days)),
-            ))
+            stmt = stmt.where(
+                sa.or_(
+                    CustomFieldValue.observed_at.is_(None),
+                    CustomFieldValue.observed_at < datetime.now(UTC) - timedelta(days=int(older_than_days)),
+                )
+            )
         if entity_ids is not None:
             stmt = stmt.where(CustomFieldValue.entity_id.in_(list(entity_ids)))
         stale_ids = list((await s.execute(stmt)).scalars().all())
     targets = list(dict.fromkeys([*stale_ids, *(entity_ids or [])]))
     if not targets:
         return 0
-    return await enqueue_column(workspace_id, col.id, entity_ids=targets, only_missing=True, refresh=True,
-                                max_page_age_days=older_than_days)
+    return await enqueue_column(
+        workspace_id,
+        col.id,
+        entity_ids=targets,
+        only_missing=True,
+        refresh=True,
+        max_page_age_days=older_than_days,
+    )

@@ -72,7 +72,11 @@ async def test_crashed_worker_lease_is_reaped(workspace):
         jid = await queue.enqueue(s, workspace_id=ws, type="t.long")
     await queue.claim("dead-worker", ["t.long"], 1, 60)
     async with session_scope() as s:
-        await s.execute(sa.update(Job).where(Job.id == jid).values(lease_expires_at=sa.func.now() - sa.text("interval '1 minute'")))
+        await s.execute(
+            sa.update(Job)
+            .where(Job.id == jid)
+            .values(lease_expires_at=sa.func.now() - sa.text("interval '1 minute'"))
+        )
     assert await queue.reap_expired_leases() == 1
     assert await _status(jid) == JobStatus.retrying
     again = await queue.claim("w2", ["t.long"], 1, 60)

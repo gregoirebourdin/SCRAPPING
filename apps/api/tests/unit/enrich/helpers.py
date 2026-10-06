@@ -80,13 +80,20 @@ def fake_crawl_module(state: dict[str, Any] | None = None) -> types.ModuleType:
     async def get_cached_pages(workspace_id: uuid.UUID, company_id: uuid.UUID) -> list[WebsitePage]:
         async with session_scope() as s:
             rows = await s.scalars(
-                sa.select(WebsitePage).where(WebsitePage.workspace_id == workspace_id,
-                                             WebsitePage.company_id == company_id)
+                sa.select(WebsitePage).where(
+                    WebsitePage.workspace_id == workspace_id, WebsitePage.company_id == company_id
+                )
             )
             return list(rows.all())
 
-    async def ensure_crawled(workspace_id: uuid.UUID, company_id: uuid.UUID, *, max_age_days: int = 30,
-                             force: bool = False, max_pages: int | None = None) -> list[WebsitePage]:
+    async def ensure_crawled(
+        workspace_id: uuid.UUID,
+        company_id: uuid.UUID,
+        *,
+        max_age_days: int = 30,
+        force: bool = False,
+        max_pages: int | None = None,
+    ) -> list[WebsitePage]:
         state["ensure_calls"].append(company_id)
         return await get_cached_pages(workspace_id, company_id)
 
@@ -131,8 +138,14 @@ async def seed_agencies(workspace_id: uuid.UUID) -> dict[str, Any]:
             ("thomas", "Thomas Bernard", "Directeur général", out["ruche"], Seniority.c_level),
         ]
         for key, name, title, company_id, seniority in people:
-            p = Person(workspace_id=workspace_id, company_id=company_id, full_name=name,
-                       normalized_name=normalize_person_name(name), job_title=title, seniority=seniority)
+            p = Person(
+                workspace_id=workspace_id,
+                company_id=company_id,
+                full_name=name,
+                normalized_name=normalize_person_name(name),
+                job_title=title,
+                seniority=seniority,
+            )
             s.add(p)
             await s.flush()
             out["people"][key] = p.id

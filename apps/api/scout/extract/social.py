@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -18,23 +18,113 @@ LINKEDIN_PERSON = "linkedin_profile"
 _HANDLE_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,100}$")
 
 _FACEBOOK_RESERVED = {
-    "sharer", "sharer.php", "share", "share.php", "dialog", "plugins", "tr", "login", "login.php", "home.php",
-    "watch", "photo", "photo.php", "photos", "story.php", "permalink.php", "hashtag", "events", "groups",
-    "gaming", "marketplace", "help", "privacy", "policies", "legal", "settings", "notes", "media", "l.php",
-    "business", "ads", "pg", "public", "search", "people", "messages", "video.php", "reel", "reels", "stories",
+    "sharer",
+    "sharer.php",
+    "share",
+    "share.php",
+    "dialog",
+    "plugins",
+    "tr",
+    "login",
+    "login.php",
+    "home.php",
+    "watch",
+    "photo",
+    "photo.php",
+    "photos",
+    "story.php",
+    "permalink.php",
+    "hashtag",
+    "events",
+    "groups",
+    "gaming",
+    "marketplace",
+    "help",
+    "privacy",
+    "policies",
+    "legal",
+    "settings",
+    "notes",
+    "media",
+    "l.php",
+    "business",
+    "ads",
+    "pg",
+    "public",
+    "search",
+    "people",
+    "messages",
+    "video.php",
+    "reel",
+    "reels",
+    "stories",
 }
 _INSTAGRAM_RESERVED = {
-    "p", "reel", "reels", "tv", "explore", "stories", "accounts", "direct", "about", "legal", "developer",
-    "web", "emails", "share", "s",
+    "p",
+    "reel",
+    "reels",
+    "tv",
+    "explore",
+    "stories",
+    "accounts",
+    "direct",
+    "about",
+    "legal",
+    "developer",
+    "web",
+    "emails",
+    "share",
+    "s",
 }
 _X_RESERVED = {
-    "intent", "share", "home", "search", "hashtag", "i", "explore", "settings", "login", "signup",
-    "messages", "notifications", "privacy", "tos", "about", "compose", "widgets.js", "status",
+    "intent",
+    "share",
+    "home",
+    "search",
+    "hashtag",
+    "i",
+    "explore",
+    "settings",
+    "login",
+    "signup",
+    "messages",
+    "notifications",
+    "privacy",
+    "tos",
+    "about",
+    "compose",
+    "widgets.js",
+    "status",
 }
-_PINTEREST_RESERVED = {"pin", "search", "ideas", "today", "categories", "explore", "business", "_", "login", "settings"}
+_PINTEREST_RESERVED = {
+    "pin",
+    "search",
+    "ideas",
+    "today",
+    "categories",
+    "explore",
+    "business",
+    "_",
+    "login",
+    "settings",
+}
 _YOUTUBE_RESERVED = {
-    "watch", "embed", "playlist", "shorts", "results", "feed", "live", "redirect", "about", "t", "gaming",
-    "premium", "account", "subscription_center", "attribution_link", "share",
+    "watch",
+    "embed",
+    "playlist",
+    "shorts",
+    "results",
+    "feed",
+    "live",
+    "redirect",
+    "about",
+    "t",
+    "gaming",
+    "premium",
+    "account",
+    "subscription_center",
+    "attribution_link",
+    "share",
 }
 
 
@@ -59,7 +149,7 @@ def _host(url: str) -> tuple[str, str, dict[str, list[str]]] | None:
     host = (parts.hostname or "").lower().strip(".")
     for prefix in ("www.", "m.", "mobile.", "web.", "business.", "l.", "lm.", "touch."):
         if host.startswith(prefix):
-            host = host[len(prefix):]
+            host = host[len(prefix) :]
             break
     # Localized subdomains: fr-fr.facebook.com, fr.linkedin.com, fr.pinterest.com …
     host = re.sub(r"^[a-z]{2}(?:-[a-z]{2})?\.(facebook|linkedin|pinterest)\.", r"\1.", host)
@@ -158,11 +248,16 @@ def _same_as_urls(structured: Iterable[Any]) -> list[str]:
 
 def _page_rank(page: PageLike) -> int:
     pt = str(page.page_type)
-    order = {PageType.home.value: 0, PageType.contact.value: 1, PageType.about.value: 2, PageType.team.value: 3}
+    order = {
+        PageType.home.value: 0,
+        PageType.contact.value: 1,
+        PageType.about.value: 2,
+        PageType.team.value: 3,
+    }
     return order.get(pt, 9)
 
 
-def extract_social_profiles(pages: list[PageLike]) -> dict[str, tuple[str, str]]:
+def extract_social_profiles(pages: Sequence[PageLike]) -> dict[str, tuple[str, str]]:
     """Company social profiles: ``{network: (profile_url, source_page_url)}``; home page links win."""
     found: dict[str, tuple[str, str]] = {}
     for page in sorted(pages, key=_page_rank):

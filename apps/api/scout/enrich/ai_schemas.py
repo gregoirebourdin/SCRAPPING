@@ -45,7 +45,12 @@ class GeneratedText(_Out):
 
 
 PlannerStrategy = Literal[
-    "semantic_classifier", "ai_extraction", "web_research", "generated_text", "website_field", "deterministic_field"
+    "semantic_classifier",
+    "ai_extraction",
+    "web_research",
+    "generated_text",
+    "website_field",
+    "deterministic_field",
 ]
 
 
@@ -57,8 +62,21 @@ class ColumnPlanDraft(_Out):
     concept: str = Field(description="What to determine or extract, in plain English")
     keywords: list[str] = Field(default_factory=list, max_length=10)
     input_sources: list[
-        Literal["home", "about", "team", "services", "solutions", "contact", "pricing", "careers", "blog",
-                "news", "legal", "case_studies", "other"]
+        Literal[
+            "home",
+            "about",
+            "team",
+            "services",
+            "solutions",
+            "contact",
+            "pricing",
+            "careers",
+            "blog",
+            "news",
+            "legal",
+            "case_studies",
+            "other",
+        ]
     ] = Field(default_factory=list)
     field: str | None = None
     enum_values: list[str] = Field(default_factory=list, max_length=20)

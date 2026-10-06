@@ -110,11 +110,16 @@ def filter_companies(
     for c in companies:
         if (c.get("status") or "").lower() != "active" or not c.get("website"):
             continue
-        labels = {str(x).lower() for x in [*(c.get("industries") or []), *(c.get("tags") or []), c.get("industry") or ""]}
+        labels = {
+            str(x).lower()
+            for x in [*(c.get("industries") or []), *(c.get("tags") or []), c.get("industry") or ""]
+        }
         if want_tags and not (labels & want_tags):
             continue
         if not want_tags and want_kw:
-            text = normalize_key(" ".join([c.get("one_liner") or "", c.get("long_description") or "", *labels]))
+            text = normalize_key(
+                " ".join([c.get("one_liner") or "", c.get("long_description") or "", *labels])
+            )
             if not any(k in text for k in want_kw):
                 continue
         if not _matches_geo(c, countries, cities):
@@ -130,7 +135,9 @@ def _pick_location(c: dict[str, Any], countries: list[str], cities: list[str]) -
     chosen = parts[0] if parts else ""
     for p in parts:
         k = normalize_key(p)
-        if any(normalize_key(city) in k for city in cities) or any(n in k for cc in countries for n in _country_names(cc)):
+        if any(normalize_key(city) in k for city in cities) or any(
+            n in k for cc in countries for n in _country_names(cc)
+        ):
             chosen = p
             break
     segs = [s.strip() for s in chosen.split(",") if s.strip()]
@@ -226,6 +233,10 @@ class YCSource:
             bounds=(p.get("min"), p.get("max")),
         )
         window = matches[offset : offset + PAGE_SIZE]
-        candidates = [c for c in (to_candidate(x, p.get("countries") or [], p.get("cities") or []) for x in window) if c]
+        candidates = [
+            c for c in (to_candidate(x, p.get("countries") or [], p.get("cities") or []) for x in window) if c
+        ]
         nxt = offset + PAGE_SIZE
-        return DiscoveryPage(candidates=candidates, next_cursor={"offset": nxt} if nxt < len(matches) else None)
+        return DiscoveryPage(
+            candidates=candidates, next_cursor={"offset": nxt} if nxt < len(matches) else None
+        )

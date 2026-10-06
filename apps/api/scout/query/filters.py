@@ -17,9 +17,25 @@ from pydantic import BaseModel, ConfigDict, Field
 from scout.errors import ValidationFailed
 
 Operator = Literal[
-    "eq", "neq", "contains", "not_contains", "starts_with", "is_empty", "not_empty",
-    "gt", "gte", "lt", "lte", "between", "in", "not_in", "before", "after",
-    "is_true", "is_false", "is_unknown",
+    "eq",
+    "neq",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "is_empty",
+    "not_empty",
+    "gt",
+    "gte",
+    "lt",
+    "lte",
+    "between",
+    "in",
+    "not_in",
+    "before",
+    "after",
+    "is_true",
+    "is_false",
+    "is_unknown",
 ]
 
 FieldType = Literal["text", "number", "enum", "date", "boolean", "percent"]
@@ -48,7 +64,7 @@ class SortSpec(BaseModel):
 class FieldDef:
     key: str
     label: str
-    sql: str              # SQL expression over the base query aliases
+    sql: str  # SQL expression over the base query aliases
     type: FieldType
     enum_values: tuple[str, ...] = ()
     sortable: bool = True
@@ -83,7 +99,9 @@ class Compiler:
     def field(self, key: str) -> FieldDef:
         f = self.fields.get(key)
         if f is None:
-            raise ValidationFailed(f"Unknown field '{key}'", hint="Use one of: " + ", ".join(sorted(self.fields)[:40]))
+            raise ValidationFailed(
+                f"Unknown field '{key}'", hint="Use one of: " + ", ".join(sorted(self.fields)[:40])
+            )
         return f
 
     # ----------------------------------------------------------------------------------- where
@@ -142,8 +160,16 @@ class Compiler:
             expr = f"lower(CAST({x} AS text)) LIKE {self.bind(pat)} ESCAPE '\\'"
             return f"({expr})" if op != "not_contains" else f"(NOT ({expr}) OR {x} IS NULL)"
         val = self._coerce(f, v)
-        sqlop = {"eq": "=", "neq": "IS DISTINCT FROM", "gt": ">", "gte": ">=", "lt": "<", "lte": "<=",
-                 "before": "<", "after": ">"}[op]
+        sqlop = {
+            "eq": "=",
+            "neq": "IS DISTINCT FROM",
+            "gt": ">",
+            "gte": ">=",
+            "lt": "<",
+            "lte": "<=",
+            "before": "<",
+            "after": ">",
+        }[op]
         if f.type == "text" and op in ("eq", "neq"):
             return f"(lower(CAST({x} AS text)) {sqlop} {self.bind(str(val).lower())})"
         return f"({x} {sqlop} {self.bind(val)})"
@@ -165,9 +191,13 @@ class Compiler:
                 sv = str(v)
                 if f.enum_values and sv not in f.enum_values:
                     # tolerate case differences (e.g. 'safe' → 'SAFE')
-                    match = next((e for e in f.enum_values if e.lower() == sv.lower().replace("-", "_")), None)
+                    match = next(
+                        (e for e in f.enum_values if e.lower() == sv.lower().replace("-", "_")), None
+                    )
                     if match is None:
-                        raise ValidationFailed(f"Invalid value '{v}' for {f.key}; expected one of {list(f.enum_values)}")
+                        raise ValidationFailed(
+                            f"Invalid value '{v}' for {f.key}; expected one of {list(f.enum_values)}"
+                        )
                     return match
                 return sv
         except (TypeError, ValueError) as exc:

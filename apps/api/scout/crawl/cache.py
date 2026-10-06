@@ -7,7 +7,9 @@ it crawls (no DB transaction is held during network I/O), records a crawl run, u
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+import weakref
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -107,7 +109,9 @@ async def _persist(
                 unchanged += 1
                 await s.execute(
                     sa.update(WebsitePage)
-                    .where(WebsitePage.company_id == company.id, WebsitePage.canonical_url == page.canonical_url)
+                    .where(
+                        WebsitePage.company_id == company.id, WebsitePage.canonical_url == page.canonical_url
+                    )
                     .values(
                         fetched_at=now,
                         crawl_run_id=run_id,
@@ -167,7 +171,22 @@ async def _persist(
                 except IntegrityError:
                     log.info("crawl_domain_taken", company_id=str(company.id), domain=domain)
             else:
-                log.info("crawl_domain_owned_by_other", company_id=str(company.id), domain=domain, owner=str(owner))
+                log.info(
+                    "crawl_domain_owned_by_other", company_id=str(company.id), domain=domain, owner=str(owner)
+                )
+
+
+# One crawl per company at a time in this process: concurrent campaigns / columns needing the same site
+# wait for the first crawl and then reuse its cache instead of fetching the site twice.
+_crawl_locks: weakref.WeakValueDictionary[uuid.UUID, asyncio.Lock] = weakref.WeakValueDictionary()
+
+
+def _crawl_lock(company_id: uuid.UUID) -> asyncio.Lock:
+    lock = _crawl_locks.get(company_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _crawl_locks[company_id] = lock
+    return lock
 
 
 async def ensure_crawled(
@@ -183,6 +202,21 @@ async def ensure_crawled(
     Site-level failures (unreachable / parked / blocked) are recorded, not raised; the cached
     pages (often none) are returned. Unexpected database errors propagate.
     """
+    lock = _crawl_lock(company_id)
+    async with lock:
+        return await _ensure_crawled(
+            workspace_id, company_id, max_age_days=max_age_days, force=force, max_pages=max_pages
+        )
+
+
+async def _ensure_crawled(
+    workspace_id: uuid.UUID,
+    company_id: uuid.UUID,
+    *,
+    max_age_days: int,
+    force: bool,
+    max_pages: int | None,
+) -> list[WebsitePage]:
     now = _now()
     async with session_scope() as s:
         company = await s.scalar(
@@ -193,7 +227,9 @@ async def ensure_crawled(
         latest = await s.scalar(
             sa.select(sa.func.max(WebsitePage.fetched_at)).where(WebsitePage.company_id == company_id)
         )
-        cached_rows = (await s.scalars(sa.select(WebsitePage).where(WebsitePage.company_id == company_id))).all()
+        cached_rows = (
+            await s.scalars(sa.select(WebsitePage).where(WebsitePage.company_id == company_id))
+        ).all()
         if not company.website_url:
             if company.website_status != WebsiteStatus.none:
                 company.website_status = WebsiteStatus.none
@@ -223,12 +259,20 @@ async def ensure_crawled(
             await s.execute(
                 sa.update(WebsiteCrawlRun)
                 .where(WebsiteCrawlRun.id == run_id)
-                .values(status="error", error=repr(exc)[:500], error_category=ErrorCategory.internal, finished_at=_now())
+                .values(
+                    status="error",
+                    error=repr(exc)[:500],
+                    error_category=ErrorCategory.internal,
+                    finished_at=_now(),
+                )
             )
         raise
     await _persist(workspace_id, company, run_id, result, cached)
     log.info(
-        "website_crawled", company_id=str(company_id), status=result.status.value, pages=len(result.pages),
+        "website_crawled",
+        company_id=str(company_id),
+        status=result.status.value,
+        pages=len(result.pages),
         failed=result.pages_failed,
     )
     if result.status != WebsiteStatus.ok:

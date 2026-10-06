@@ -94,8 +94,37 @@ niels pieter roel ruud sanne sem stijn thijs wim wouter
 FIRST_NAMES: frozenset[str] = frozenset(t for t in _FIRST_NAMES_RAW.split() if t)
 
 # Lowercase name particles (do not count as name tokens, never start a name).
-PARTICLES = frozenset({"de", "du", "des", "la", "le", "van", "von", "der", "den", "di", "da", "del", "dos", "das",
-                       "d", "ter", "ten", "zu", "y", "e", "bin", "ben", "al", "el", "st", "saint", "sainte"})
+PARTICLES = frozenset(
+    {
+        "de",
+        "du",
+        "des",
+        "la",
+        "le",
+        "van",
+        "von",
+        "der",
+        "den",
+        "di",
+        "da",
+        "del",
+        "dos",
+        "das",
+        "d",
+        "ter",
+        "ten",
+        "zu",
+        "y",
+        "e",
+        "bin",
+        "ben",
+        "al",
+        "el",
+        "st",
+        "saint",
+        "sainte",
+    }
+)
 
 # Business / UI / title vocabulary that never appears in a person's name.
 _STOPWORDS = frozenset(
@@ -177,7 +206,9 @@ def _token_ok(tok: str) -> bool:
         if not part[0].isupper() and _fold(part) not in PARTICLES:
             return False
         # Reject mIxEd garbage like "PoWeR"; accept "McDonald", "DeVito", "DUPONT".
-        if not (part.isupper() or part[1:].islower() or re.match(r"^(Mc|Mac|De|Di|Le|La|O)[A-Z][a-z]+$", part)):
+        if not (
+            part.isupper() or part[1:].islower() or re.match(r"^(Mc|Mac|De|Di|Le|La|O)[A-Z][a-z]+$", part)
+        ):
             return False
     return True
 
@@ -213,7 +244,24 @@ def is_plausible_person_name(s: str, *, require_known_first_name: bool = False) 
     for tok in toks:
         folded = _fold(tok).strip(".'’")
         if folded in PARTICLES:
-            if tok[0].isupper() and tok not in ("De", "Van", "Von", "Da", "Di", "Del", "Le", "La", "Du", "Des", "Der", "Den", "El", "Al", "Ben", "Bin"):
+            if tok[0].isupper() and tok not in (
+                "De",
+                "Van",
+                "Von",
+                "Da",
+                "Di",
+                "Del",
+                "Le",
+                "La",
+                "Du",
+                "Des",
+                "Der",
+                "Den",
+                "El",
+                "Al",
+                "Ben",
+                "Bin",
+            ):
                 return False
             continue
         if not _token_ok(tok):
@@ -234,6 +282,36 @@ def is_plausible_person_name(s: str, *, require_known_first_name: bool = False) 
         if len(core) > 3 or any(len(t.strip(".")) < 2 for t in core):
             return False
     return True
+
+
+# Words that make a "name" a business: legal forms and unambiguous organisation nouns (deliberately narrower
+# than _STOPWORDS so real surnames such as "Bois" or "Paris" are never rejected).
+_COMPANY_MARKERS = frozenset(
+    """
+agence agency studio studios group groupe holding consulting conseil conseils solutions services cabinet
+association institut institute company compagnie societe entreprise enterprises entreprises labs lab
+marketing digital communication media medias production productions editions academy academie
+""".split()
+)
+
+
+def looks_like_company_name(name: str, company_name: str | None = None) -> bool:
+    """True when ``name`` is an organisation rather than a person: a legal form or organisation noun,
+    or the company's own name ("Agence Lumière", "Lumière SAS", "Lumière"). A sole proprietorship named
+    after its owner ("Jean Dupont") still yields the person, because that name is a plausible person name."""
+    from scout.util.text import LEGAL_FORMS, normalize_company_name, normalize_key
+
+    key = normalize_key(name)
+    if not key:
+        return False
+    tokens = set(key.split())
+    if tokens & _COMPANY_MARKERS or tokens & {f for f in LEGAL_FORMS if len(f) >= 3}:
+        return True
+    if company_name:
+        company = normalize_company_name(company_name)
+        if company and normalize_company_name(name) == company and not is_plausible_person_name(name):
+            return True
+    return False
 
 
 def person_name_score(s: str) -> float:
@@ -273,7 +351,7 @@ def split_name(full: str) -> tuple[str | None, str | None]:
             caps_prefix.append(t)
         else:
             break
-    rest = toks[len(caps_prefix):]
+    rest = toks[len(caps_prefix) :]
     if caps_prefix and rest and all(not t.isupper() for t in rest if len(t) > 1):
         if not is_known_first_name(caps_prefix[0]) or any(is_known_first_name(t) for t in rest):
             return _case(rest[0]), _case(" ".join(caps_prefix))
@@ -281,8 +359,10 @@ def split_name(full: str) -> tuple[str | None, str | None]:
     first = toks[0]
     idx = 1
     # "Jean Pierre Dupont": a second known first name is a middle name, unless it is the last token.
-    while idx < len(toks) - 1 and _fold(toks[idx]) not in PARTICLES and (
-        _INITIAL_RE.match(toks[idx]) or (is_known_first_name(toks[idx]) and not toks[idx].isupper())
+    while (
+        idx < len(toks) - 1
+        and _fold(toks[idx]) not in PARTICLES
+        and (_INITIAL_RE.match(toks[idx]) or (is_known_first_name(toks[idx]) and not toks[idx].isupper()))
     ):
         idx += 1
     surname = " ".join(toks[idx:]) if idx < len(toks) else ""

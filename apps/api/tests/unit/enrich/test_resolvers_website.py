@@ -71,7 +71,9 @@ async def test_follow_us_mention_is_keyword_true_but_not_instagram_management(lo
 
 
 async def test_heuristic_detects_real_service(local_ai):
-    res = await _run("IG mgmt", "Add whether the agency actually offers Instagram management", "agency_instagram")
+    res = await _run(
+        "IG mgmt", "Add whether the agency actually offers Instagram management", "agency_instagram"
+    )
     assert res.status == CellStatus.success and res.value is True
     assert res.resolver == "heuristic_semantic" and res.confidence <= 0.7
     assert res.source_url == "https://larushesociale.fr/services"
@@ -169,10 +171,26 @@ def fake_detector(monkeypatch):
 
     async def detect_technologies(workspace_id, company_id, *, force=False, max_age_days=30):
         calls.append(company_id)
-        return [Technology(company_id=company_id, workspace_id=workspace_id, name="WordPress", category="CMS",
-                           confidence=1.0, detector="html", source_url="https://studiolumiere.fr/"),
-                Technology(company_id=company_id, workspace_id=workspace_id, name="Google Analytics",
-                           category="Analytics", confidence=0.9, detector="scripts", source_url=None)]
+        return [
+            Technology(
+                company_id=company_id,
+                workspace_id=workspace_id,
+                name="WordPress",
+                category="CMS",
+                confidence=1.0,
+                detector="html",
+                source_url="https://studiolumiere.fr/",
+            ),
+            Technology(
+                company_id=company_id,
+                workspace_id=workspace_id,
+                name="Google Analytics",
+                category="Analytics",
+                confidence=0.9,
+                detector="scripts",
+                source_url=None,
+            ),
+        ]
 
     mod = types.ModuleType("scout.tech.detector")
     mod.detect_technologies = detect_technologies  # type: ignore[attr-defined]
@@ -197,7 +215,12 @@ async def test_tech_detection_script_fallback(fake_detector, local_ai):
 
 
 async def test_unsupported_field_fails_cleanly(local_ai):
-    plan = EnrichmentPlan(name="x", data_type=ColumnDataType.text, resolver="CACHED_WEBSITE",
-                          strategy="website_field", field="nope")
+    plan = EnrichmentPlan(
+        name="x",
+        data_type=ColumnDataType.text,
+        resolver="CACHED_WEBSITE",
+        strategy="website_field",
+        field="nope",
+    )
     res = await resolve(_ctx(plan, None))
     assert res.status == CellStatus.failed and "Unsupported" in res.error

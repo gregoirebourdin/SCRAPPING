@@ -11,7 +11,11 @@ CASES = [
     # (name, instruction, strategy)
     ("Mentions ManyChat", "Add a column showing whether their site mentions ManyChat", "keyword"),
     ("ManyChat", None, "keyword"),
-    ("Instagram management", "Add whether the agency actually offers Instagram management", "semantic_classifier"),
+    (
+        "Instagram management",
+        "Add whether the agency actually offers Instagram management",
+        "semantic_classifier",
+    ),
     ("Shopify", "Add whether they use Shopify", "tech_detection"),
     ("Instagram", "Find their Instagram account", "social_profile"),
     ("Target customer", "Add their main target customer", "ai_extraction"),
@@ -24,7 +28,11 @@ CASES = [
     ("Pricing", "Find their pricing", "ai_extraction"),
     # French
     ("ManyChat FR", "Ajoute une colonne indiquant si leur site mentionne ManyChat", "keyword"),
-    ("Gestion Instagram", "Est-ce que l'agence propose vraiment la gestion Instagram ?", "semantic_classifier"),
+    (
+        "Gestion Instagram",
+        "Est-ce que l'agence propose vraiment la gestion Instagram ?",
+        "semantic_classifier",
+    ),
     ("Instagram FR", "Trouve leur compte Instagram", "social_profile"),
     ("Shopify FR", "Ajoute s'ils utilisent Shopify", "tech_detection"),
     ("Résumé", "Ajoute un résumé en une phrase", "generated_text"),
@@ -74,7 +82,9 @@ async def test_semantic_plan_fields(local_ai):
     assert plan.data_type == ColumnDataType.boolean
     assert plan.concept and "Instagram management" in plan.concept
     assert "Instagram" in plan.keywords
-    assert {PageType.services, PageType.home, PageType.about, PageType.case_studies} <= set(plan.input_sources)
+    assert {PageType.services, PageType.home, PageType.about, PageType.case_studies} <= set(
+        plan.input_sources
+    )
 
 
 async def test_generated_and_research_plans(local_ai):
@@ -88,7 +98,11 @@ async def test_generated_and_research_plans(local_ai):
 
 async def test_social_tech_field_details(local_ai):
     social = await plan_column("IG", "Find their Instagram account")
-    assert social.field == "instagram" and social.data_type == ColumnDataType.url and social.cost_class == CostClass.FREE
+    assert (
+        social.field == "instagram"
+        and social.data_type == ColumnDataType.url
+        and social.cost_class == CostClass.FREE
+    )
     tech = await plan_column("Shopify", "Add whether they use Shopify")
     assert tech.technologies == ["Shopify"] and tech.cost_class == CostClass.CHEAP
     testimonials = await plan_column("T", "Add whether their homepage has testimonials")
@@ -106,10 +120,17 @@ async def test_keyword_rule_beats_service_wording(local_ai):
 
 
 async def test_ambiguous_ask_uses_ai_planner(fake_ai):
-    fake_ai.on("ColumnPlanDraft", lambda prompt: {
-        "strategy": "ai_extraction", "data_type": "number", "concept": "Number of office locations",
-        "keywords": ["offices", "agences"], "input_sources": ["about", "contact"], "explanation": "Stated on site",
-    })
+    fake_ai.on(
+        "ColumnPlanDraft",
+        lambda prompt: {
+            "strategy": "ai_extraction",
+            "data_type": "number",
+            "concept": "Number of office locations",
+            "keywords": ["offices", "agences"],
+            "input_sources": ["about", "contact"],
+            "explanation": "Stated on site",
+        },
+    )
     plan = await plan_column("Offices", "Office locations count")
     assert len(fake_ai.calls) == 1
     assert plan.strategy == "ai_extraction" and plan.data_type == ColumnDataType.number

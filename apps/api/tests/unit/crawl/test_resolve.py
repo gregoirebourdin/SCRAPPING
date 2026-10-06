@@ -64,7 +64,10 @@ async def test_resolve_by_phone_and_by_name_city(fixture_server, monkeypatch):
 async def test_resolve_rejects_name_only_and_wrong_siren(fixture_server, monkeypatch):
     await _setup(fixture_server, monkeypatch, {"agence-lumiere.fr"})
     assert await resolve_website("Agence Lumière", city="Lyon", postal_code="69002", country="FR") is None
-    assert await resolve_website("Agence Lumière", city="Bordeaux", country="FR", registry_id="853456788") is None
+    assert (
+        await resolve_website("Agence Lumière", city="Bordeaux", country="FR", registry_id="853456788")
+        is None
+    )
 
 
 async def test_resolve_without_live_domains(fixture_server, monkeypatch):

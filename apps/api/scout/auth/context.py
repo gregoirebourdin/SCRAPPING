@@ -54,7 +54,9 @@ def decode_service_token(token: str) -> Principal:
     return Principal(user_id=str(claims["sub"]), email=claims.get("email"), name=claims.get("name"))
 
 
-def issue_service_token(user_id: str, *, email: str | None = None, name: str | None = None, ttl_s: int = 60) -> str:
+def issue_service_token(
+    user_id: str, *, email: str | None = None, name: str | None = None, ttl_s: int = 60
+) -> str:
     """Used by tests/CLI. In production the Next.js BFF signs the same claims."""
     import time
 

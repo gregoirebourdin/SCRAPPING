@@ -56,7 +56,9 @@ async def test_429_is_rate_limited(site):
 
 
 async def test_503_cloudflare_challenge_is_blocked(site):
-    site.add(HOST, "/", "<html><head><title>Just a moment...</title></head><body>cf</body></html>", status=503)
+    site.add(
+        HOST, "/", "<html><head><title>Just a moment...</title></head><body>cf</body></html>", status=503
+    )
     with pytest.raises(BlockedError):
         await crawl_http.fetch(f"http://{HOST}/")
     site.add(HOST, "/cf", "<html>challenge</html>", status=200, headers={"cf-mitigated": "challenge"})
@@ -115,7 +117,9 @@ async def test_binary_content_is_not_downloaded(site):
 
 
 async def test_latin1_page_is_decoded(site):
-    body = "<html><head><meta charset='iso-8859-1'></head><body>Équipe créative</body></html>".encode("latin-1")
+    body = "<html><head><meta charset='iso-8859-1'></head><body>Équipe créative</body></html>".encode(
+        "latin-1"
+    )
     site.add(HOST, "/latin", body, content_type="text/html")
     resp = await crawl_http.fetch(f"http://{HOST}/latin")
     assert "Équipe créative" in resp.text

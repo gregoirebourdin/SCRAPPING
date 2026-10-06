@@ -63,9 +63,13 @@ class HandlerSpec:
 _handlers: dict[str, HandlerSpec] = {}
 
 
-def job_handler(type_: str, *, timeout_s: float = 600.0, max_concurrency: int | None = None) -> Callable[[Handler], Handler]:
+def job_handler(
+    type_: str, *, timeout_s: float = 600.0, max_concurrency: int | None = None
+) -> Callable[[Handler], Handler]:
     def deco(fn: Handler) -> Handler:
-        _handlers[type_] = HandlerSpec(type=type_, fn=fn, timeout_s=timeout_s, max_concurrency=max_concurrency)
+        _handlers[type_] = HandlerSpec(
+            type=type_, fn=fn, timeout_s=timeout_s, max_concurrency=max_concurrency
+        )
         return fn
 
     return deco

@@ -36,7 +36,11 @@ async def test_pages_filtered_by_country_and_industry(settings_env) -> None:
     assert "No Category Co" in names  # unknown category passes the loose filter
 
     first = p1.candidates[0]
-    assert first.source == "fixture" and first.registry_id == "812345678" and first.registry_source == "fr_sirene"
+    assert (
+        first.source == "fixture"
+        and first.registry_id == "812345678"
+        and first.registry_source == "fr_sirene"
+    )
     assert first.domain == "agence-lumiere.fr" and first.website == "https://agence-lumiere.fr/"
     assert (first.employee_min, first.employee_max) == (2, 10)
     assert first.people[0]["full_name"] == "Claire Dubois" and first.people[0]["source_url"] == first.website

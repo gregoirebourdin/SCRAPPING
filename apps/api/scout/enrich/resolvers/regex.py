@@ -77,7 +77,9 @@ async def resolve(rc: ResolveContext) -> CellResult:
     if found:
         url, text, s, e, raw = found
         value = True if boolean else _normalize(raw, plan.field)
-        return ok(plan, value, resolver=RESOLVER, confidence=0.95, evidence=excerpt(text, s, e, 160), source_url=url)
+        return ok(
+            plan, value, resolver=RESOLVER, confidence=0.95, evidence=excerpt(text, s, e, 160), source_url=url
+        )
     evidence = f"No match across {len(rc.pages)} crawled pages"
     if boolean:
         return ok(plan, False, resolver=RESOLVER, confidence=0.85, evidence=evidence)

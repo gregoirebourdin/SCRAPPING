@@ -24,9 +24,18 @@ SEARCH = {
         {"login": "some-user", "id": 3, "type": "User", "url": f"{GH}/users/some-user"},
     ],
 }
-ACME = {"login": "acme-saas", "name": "Acme SaaS", "blog": "https://www.acme-saas.com", "location": "Austin, TX",
-        "email": "Hello@acme-saas.com", "description": "B2B billing APIs", "public_repos": 42, "followers": 120,
-        "html_url": "https://github.com/acme-saas", "created_at": "2019-04-02T10:00:00Z"}
+ACME = {
+    "login": "acme-saas",
+    "name": "Acme SaaS",
+    "blog": "https://www.acme-saas.com",
+    "location": "Austin, TX",
+    "email": "Hello@acme-saas.com",
+    "description": "B2B billing APIs",
+    "public_repos": 42,
+    "followers": 120,
+    "html_url": "https://github.com/acme-saas",
+    "created_at": "2019-04-02T10:00:00Z",
+}
 HOBBY = {"login": "hobby-org", "name": "Hobby", "blog": "https://hobby-org.github.io", "location": "Austin"}
 
 
@@ -48,8 +57,14 @@ async def test_orgs_with_company_websites(src: GitHubSource, settings_env) -> No
     page = await src.discover(query(), None)
     assert [c.name for c in page.candidates] == ["Acme SaaS"]  # github.io blog is not a company site
     c = page.candidates[0]
-    assert c.website == "https://acme-saas.com/" and c.domain == "acme-saas.com" and c.emails == ["hello@acme-saas.com"]
-    assert c.location == {"city": "Austin", "country": "US"} and c.source_url == "https://github.com/acme-saas"
+    assert (
+        c.website == "https://acme-saas.com/"
+        and c.domain == "acme-saas.com"
+        and c.emails == ["hello@acme-saas.com"]
+    )
+    assert (
+        c.location == {"city": "Austin", "country": "US"} and c.source_url == "https://github.com/acme-saas"
+    )
     req = search.calls.last.request
     assert req.url.params["q"] == 'saas type:org location:"Austin"'
     assert req.headers["authorization"] == "Bearer ghp_test"
@@ -59,8 +74,11 @@ async def test_orgs_with_company_websites(src: GitHubSource, settings_env) -> No
 @respx.mock
 async def test_rate_limit(src: GitHubSource) -> None:
     respx.get(f"{GH}/search/users").mock(
-        return_value=httpx.Response(403, json={"message": "API rate limit exceeded"},
-                                    headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": "9999999999"})
+        return_value=httpx.Response(
+            403,
+            json={"message": "API rate limit exceeded"},
+            headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": "9999999999"},
+        )
     )
     with pytest.raises(RateLimitedError):
         await src.discover(query(), None)

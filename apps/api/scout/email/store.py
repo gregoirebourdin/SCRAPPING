@@ -91,7 +91,9 @@ async def _bump_pattern(
     await _set_confidence(s, *row)
 
 
-async def _set_confidence(s: AsyncSession, row_id: uuid.UUID, samples: int, successes: int, failures: int) -> None:
+async def _set_confidence(
+    s: AsyncSession, row_id: uuid.UUID, samples: int, successes: int, failures: int
+) -> None:
     await s.execute(
         sa.update(DomainEmailPattern)
         .where(DomainEmailPattern.id == row_id)
@@ -153,7 +155,9 @@ def _apply_verification(row: Email, v: VerificationResult | None) -> None:
     row.free_provider = v.free_provider
 
 
-def _check_row(workspace_id: uuid.UUID, email_id: uuid.UUID, status: EmailStatus, v: VerificationResult) -> EmailCheck:
+def _check_row(
+    workspace_id: uuid.UUID, email_id: uuid.UUID, status: EmailStatus, v: VerificationResult
+) -> EmailCheck:
     return EmailCheck(
         workspace_id=workspace_id,
         email_id=email_id,
@@ -232,9 +236,14 @@ async def save_finding(
     v = finding.verification
     async with session_scope() as s:
         row = await _locked_email(
-            s, workspace_id, addr,
-            person_id=person_id, company_id=company_id, kind=EmailKind.person,
-            discovery_method=method, status=finding.status,
+            s,
+            workspace_id,
+            addr,
+            person_id=person_id,
+            company_id=company_id,
+            kind=EmailKind.person,
+            discovery_method=method,
+            status=finding.status,
         )
         if row.person_id not in (None, person_id):
             log.warning("email.save.owned_by_other_person", address=addr, person_id=str(person_id))
@@ -273,10 +282,17 @@ async def save_company_email(
     kind = EmailKind.role if is_role_local_part(local) else EmailKind.generic
     async with session_scope() as s:
         row = await _locked_email(
-            s, workspace_id, addr,
-            company_id=company_id, kind=kind, discovery_method=EmailDiscoveryMethod.published,
-            source_url=source_url, status=EmailStatus.UNKNOWN, role_address=kind == EmailKind.role,
-            free_provider=is_free_provider(domain), disposable=is_disposable_domain(domain),
+            s,
+            workspace_id,
+            addr,
+            company_id=company_id,
+            kind=kind,
+            discovery_method=EmailDiscoveryMethod.published,
+            source_url=source_url,
+            status=EmailStatus.UNKNOWN,
+            role_address=kind == EmailKind.role,
+            free_provider=is_free_provider(domain),
+            disposable=is_disposable_domain(domain),
         )
         if row.person_id is None and not row.is_user_confirmed:
             row.company_id = row.company_id or company_id
@@ -292,7 +308,9 @@ async def reverify(workspace_id: uuid.UUID, email_ids: Sequence[uuid.UUID]) -> i
         return 0
     async with session_scope() as s:
         rows = (
-            await s.scalars(sa.select(Email).where(Email.workspace_id == workspace_id, Email.id.in_(list(email_ids))))
+            await s.scalars(
+                sa.select(Email).where(Email.workspace_id == workspace_id, Email.id.in_(list(email_ids)))
+            )
         ).all()
     verifier = get_verifier()
     sem = asyncio.Semaphore(REVERIFY_CONCURRENCY)
@@ -301,7 +319,10 @@ async def reverify(workspace_id: uuid.UUID, email_ids: Sequence[uuid.UUID]) -> i
         async with sem:
             v = await verifier.verify(snapshot.address)
         evidence = 0
-        if snapshot.discovery_method in (EmailDiscoveryMethod.known_pattern, EmailDiscoveryMethod.inferred_pattern):
+        if snapshot.discovery_method in (
+            EmailDiscoveryMethod.known_pattern,
+            EmailDiscoveryMethod.inferred_pattern,
+        ):
             evidence = next(
                 (n for p, _, n in await load_domain_patterns(snapshot.domain) if p == snapshot.pattern), 0
             )
@@ -350,8 +371,14 @@ def _page_emails(pages: Sequence[tuple[str, list[Any] | None]]) -> list[tuple[st
     out: dict[str, str | None] = {}
     for url, emails in pages:
         for item in emails or []:
-            raw = item if isinstance(item, str) else (
-                (item.get("address") or item.get("email") or item.get("value")) if isinstance(item, dict) else None
+            raw = (
+                item
+                if isinstance(item, str)
+                else (
+                    (item.get("address") or item.get("email") or item.get("value"))
+                    if isinstance(item, dict)
+                    else None
+                )
             )
             addr = normalize_address(raw) if isinstance(raw, str) else None
             if addr and addr not in out:
@@ -381,7 +408,9 @@ def _domain_evidence(
     return samples, observed
 
 
-async def _learn_from_finding(domain: str, first: str | None, last: str | None, finding: EmailFinding) -> None:
+async def _learn_from_finding(
+    domain: str, first: str | None, last: str | None, finding: EmailFinding
+) -> None:
     """Idempotent learning: each address teaches the global pattern memory at most once."""
     addresses = [a.candidate.address for a in finding.attempts]
     if not addresses:
@@ -389,7 +418,9 @@ async def _learn_from_finding(domain: str, first: str | None, last: str | None, 
     async with session_scope() as s:
         known = (
             await s.execute(
-                sa.select(Email.address, Email.status, Email.discovery_method).where(Email.address.in_(addresses))
+                sa.select(Email.address, Email.status, Email.discovery_method).where(
+                    Email.address.in_(addresses)
+                )
             )
         ).all()
     published_known = {a for a, _, m in known if m == EmailDiscoveryMethod.published}
@@ -418,7 +449,11 @@ async def find_and_save_for_person(workspace_id: uuid.UUID, person_id: uuid.UUID
             raise NotFound("Person not found", person_id=str(person_id))
         confirmed = await s.scalar(
             sa.select(Email)
-            .where(Email.workspace_id == workspace_id, Email.person_id == person_id, Email.is_user_confirmed.is_(True))
+            .where(
+                Email.workspace_id == workspace_id,
+                Email.person_id == person_id,
+                Email.is_user_confirmed.is_(True),
+            )
             .order_by(Email.is_primary.desc(), Email.updated_at.desc())
             .limit(1)
         )
@@ -438,7 +473,9 @@ async def find_and_save_for_person(workspace_id: uuid.UUID, person_id: uuid.UUID
                 _person_names(p)
                 for p in await s.scalars(
                     sa.select(Person).where(
-                        Person.workspace_id == workspace_id, Person.company_id == company.id, Person.id != person_id
+                        Person.workspace_id == workspace_id,
+                        Person.company_id == company.id,
+                        Person.id != person_id,
                     )
                 )
             ]
@@ -447,7 +484,9 @@ async def find_and_save_for_person(workspace_id: uuid.UUID, person_id: uuid.UUID
         return EmailFinding(
             address=confirmed.address,
             status=confirmed.status,
-            overall_confidence=confirmed.overall_confidence if confirmed.overall_confidence is not None else 1.0,
+            overall_confidence=confirmed.overall_confidence
+            if confirmed.overall_confidence is not None
+            else 1.0,
             method=confirmed.discovery_method,
             pattern=confirmed.pattern,
             pattern_confidence=confirmed.pattern_confidence,
@@ -477,7 +516,11 @@ async def find_and_save_for_person(workspace_id: uuid.UUID, person_id: uuid.UUID
         await save_finding(workspace_id, person_id=person_id, company_id=person.company_id, finding=finding)
     log.info(
         "email.find_and_save",
-        person_id=str(person_id), domain=domain, status=finding.status, method=finding.method,
-        tried=len(finding.candidates_tried), reason=finding.reason,
+        person_id=str(person_id),
+        domain=domain,
+        status=finding.status,
+        method=finding.method,
+        tried=len(finding.candidates_tried),
+        reason=finding.reason,
     )
     return finding

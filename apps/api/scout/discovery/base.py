@@ -13,12 +13,14 @@ from scout.schemas.campaign import CampaignDefinition
 class RawCandidate:
     """Canonical raw structure returned by every adapter."""
 
-    source: str                         # adapter key, e.g. "fr_registry"
-    source_entity_id: str | None        # stable id at the source (SIREN, place_id, URL…)
+    source: str  # adapter key, e.g. "fr_registry"
+    source_entity_id: str | None  # stable id at the source (SIREN, place_id, URL…)
     name: str
     website: str | None = None
-    domain: str | None = None           # registrable domain if known (adapters may leave None; pipeline canonicalizes)
-    location: dict[str, Any] = field(default_factory=dict)  # {"country","region","city","postal_code","address","lat","lng"}
+    domain: str | None = None  # registrable domain if known (adapters may leave None; pipeline canonicalizes)
+    location: dict[str, Any] = field(
+        default_factory=dict
+    )  # {"country","region","city","postal_code","address","lat","lng"}
     category: str | None = None
     source_url: str | None = None
     raw_data: dict[str, Any] = field(default_factory=dict)
@@ -28,9 +30,11 @@ class RawCandidate:
     employee_min: int | None = None
     employee_max: int | None = None
     registry_source: str | None = None  # e.g. "fr_sirene"
-    registry_id: str | None = None      # e.g. SIREN
-    status: str | None = None           # "active" | "closed"
-    people: list[dict[str, Any]] = field(default_factory=list)  # e.g. registry directors [{"full_name","title","source_url"}]
+    registry_id: str | None = None  # e.g. SIREN
+    status: str | None = None  # "active" | "closed"
+    people: list[dict[str, Any]] = field(
+        default_factory=list
+    )  # e.g. registry directors [{"full_name","title","source_url"}]
     emails: list[str] = field(default_factory=list)
 
 
@@ -38,7 +42,7 @@ class RawCandidate:
 class DiscoveryQuery:
     """One unit of the source's query plan (serializable to JSON for campaign_sources.query_plan)."""
 
-    key: str                            # stable id within the plan, e.g. "naf:73.11Z|dep:75"
+    key: str  # stable id within the plan, e.g. "naf:73.11Z|dep:75"
     params: dict[str, Any]
     weight: float = 1.0
 
@@ -54,8 +58,8 @@ class DiscoveryPage:
 class DiscoverySource(Protocol):
     key: str
     name: str
-    quality: float          # source quality (0–1), feeds confidence
-    cost_class: str         # FREE | CHEAP | WEB_SEARCH | EXPENSIVE
+    quality: float  # source quality (0–1), feeds confidence
+    cost_class: str  # FREE | CHEAP | WEB_SEARCH | EXPENSIVE
 
     def is_configured(self) -> bool: ...
 

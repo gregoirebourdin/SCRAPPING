@@ -1,9 +1,9 @@
 """Command line: `python -m scout.cli <command>`.
 
-  openapi <path>                 write the OpenAPI document (packages/schemas)
-  worker                         run a dedicated job worker process
-  seed --workspace <uuid>        load clearly-marked demo data into a workspace
-  migrate                        alembic upgrade head
+openapi <path>                 write the OpenAPI document (packages/schemas)
+worker                         run a dedicated job worker process
+seed --workspace <uuid>        load clearly-marked demo data into a workspace
+migrate                        alembic upgrade head
 """
 
 from __future__ import annotations

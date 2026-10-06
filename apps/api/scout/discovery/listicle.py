@@ -24,10 +24,38 @@ _LIST_TAGS = {"li", "h2", "h3", "h4", "td", "dt", "dd"}
 _SKIP_TAGS = {"nav", "header", "footer", "aside", "form"}
 _CARD_CLASS = re.compile(r"(list|item|card|entry|agency|company|provider|listing|result)", re.I)
 _GENERIC_ANCHORS = {
-    "site web", "site internet", "voir le site", "visiter le site", "visit website", "website", "visit site",
-    "leur site", "son site", "le site", "their website", "site", "voir", "visiter", "visit", "official website",
-    "en savoir plus", "learn more", "read more", "lire la suite", "plus d infos", "more info", "cliquez ici",
-    "click here", "ici", "here", "link", "lien", "webseite", "sitio web", "sito web", "go to website",
+    "site web",
+    "site internet",
+    "voir le site",
+    "visiter le site",
+    "visit website",
+    "website",
+    "visit site",
+    "leur site",
+    "son site",
+    "le site",
+    "their website",
+    "site",
+    "voir",
+    "visiter",
+    "visit",
+    "official website",
+    "en savoir plus",
+    "learn more",
+    "read more",
+    "lire la suite",
+    "plus d infos",
+    "more info",
+    "cliquez ici",
+    "click here",
+    "ici",
+    "here",
+    "link",
+    "lien",
+    "webseite",
+    "sitio web",
+    "sito web",
+    "go to website",
 }
 _ORDINAL = re.compile(r"^\s*(#?\d{1,3}[.)\-–:]?\s+)")
 
@@ -109,7 +137,11 @@ def extract_listicle_links(html: str, page_url: str, *, max_links: int = 60) -> 
         if _in_skipped_region(a) or not _in_list_structure(a):
             continue
         anchor = collapse_ws(a.text(separator=" "))
-        name = anchor if anchor and normalize_key(anchor) not in _GENERIC_ANCHORS else (_preceding_heading(a) or "")
+        name = (
+            anchor
+            if anchor and normalize_key(anchor) not in _GENERIC_ANCHORS
+            else (_preceding_heading(a) or "")
+        )
         name = _clean_name(name) or dom.split(".")[0].capitalize()
         seen.add(dom)
         out.append(

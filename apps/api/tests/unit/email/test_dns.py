@@ -42,10 +42,12 @@ def resolver(monkeypatch):
 
 
 async def test_mx_hosts_sorted_by_preference(resolver):
-    resolver({
-        ("agence-x.fr", "MX"): mx((20, "MX2.Agence-X.fr."), (10, "mx1.agence-x.fr.")),
-        ("agence-x.fr", "A"): ["192.0.2.1"],
-    })
+    resolver(
+        {
+            ("agence-x.fr", "MX"): mx((20, "MX2.Agence-X.fr."), (10, "mx1.agence-x.fr.")),
+            ("agence-x.fr", "A"): ["192.0.2.1"],
+        }
+    )
     info = await edns.mx_lookup("Agence-X.FR", use_cache=False)
     assert info.has_mx and info.mx_hosts == ["mx1.agence-x.fr", "mx2.agence-x.fr"]
     assert info.has_a and info.accepts_mail and not info.transient

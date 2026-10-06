@@ -35,8 +35,8 @@ from scout.util.text import collapse_ws, title_case_name
 log = structlog.get_logger(__name__)
 
 PER_PAGE = 25
-MAX_PAGE = 400            # the API serves at most 10,000 results per query
-TOP_DEPARTMENTS = 20      # no geographic restriction: biggest departments first, all of them on expansion
+MAX_PAGE = 400  # the API serves at most 10,000 results per query
+TOP_DEPARTMENTS = 20  # no geographic restriction: biggest departments first, all of them on expansion
 ANNUAIRE_URL = "https://annuaire-entreprises.data.gouv.fr/entreprise/{siren}"
 
 _PAREN_SUFFIX = re.compile(r"\s*\([^()]*\)\s*$")
@@ -92,14 +92,16 @@ def _people(item: dict[str, Any], source_url: str) -> list[dict[str, Any]]:
             continue
         first = prenoms.split(" ")[0] if prenoms else ""
         full = title_case_name(f"{first} {nom}".strip())
-        out.append({
-            "full_name": full,
-            "first_name": title_case_name(first) if first else None,
-            "last_name": title_case_name(nom),
-            "title": qualite or None,
-            "source_url": source_url,
-            "raw": {"prenoms": prenoms, "nom": d.get("nom"), "qualite": qualite},
-        })
+        out.append(
+            {
+                "full_name": full,
+                "first_name": title_case_name(first) if first else None,
+                "last_name": title_case_name(nom),
+                "title": qualite or None,
+                "source_url": source_url,
+                "raw": {"prenoms": prenoms, "nom": d.get("nom"), "qualite": qualite},
+            }
+        )
     return out
 
 
@@ -127,7 +129,10 @@ def map_result(item: dict[str, Any], *, departments: list[str] | None = None) ->
     }
     etat = item.get("etat_administratif") or siege.get("etat_administratif")
     matching = [
-        {k: e.get(k) for k in ("siret", "adresse", "code_postal", "libelle_commune", "est_siege", "etat_administratif")}
+        {
+            k: e.get(k)
+            for k in ("siret", "adresse", "code_postal", "libelle_commune", "est_siege", "etat_administratif")
+        }
         for e in (item.get("matching_etablissements") or [])[:5]
     ]
     raw = {
@@ -216,8 +221,14 @@ class FrRegistrySource:
             for rank, dep in enumerate(departments):
                 queries.append(
                     DiscoveryQuery(
-                        key=f"naf:{','.join(naf)}|dep:{dep}" + (f"|t:{','.join(tranches)}" if tranches else ""),
-                        params={"naf": naf, "departement": dep, "tranches": tranches, "restricted": bool(restricted)},
+                        key=f"naf:{','.join(naf)}|dep:{dep}"
+                        + (f"|t:{','.join(tranches)}" if tranches else ""),
+                        params={
+                            "naf": naf,
+                            "departement": dep,
+                            "tranches": tranches,
+                            "restricted": bool(restricted),
+                        },
                         weight=round((1.0 if gi == 0 else 0.6) / (1 + rank * 0.05), 4),
                     )
                 )
@@ -251,7 +262,11 @@ class FrRegistrySource:
         total_pages = int(body.get("total_pages") or 0)
         exhausted = page >= min(total_pages, MAX_PAGE) or not candidates
         log.debug(
-            "fr_registry.page", query=query.key, page=page, total_pages=total_pages, n=len(candidates),
+            "fr_registry.page",
+            query=query.key,
+            page=page,
+            total_pages=total_pages,
+            n=len(candidates),
             ms=int((time.monotonic() - started) * 1000),
         )
         return DiscoveryPage(candidates=candidates, next_cursor=None if exhausted else {"page": page + 1})

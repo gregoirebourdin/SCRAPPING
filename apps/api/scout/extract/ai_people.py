@@ -8,6 +8,7 @@ deterministic person-name checks. Anything else is dropped. Returns [] when AI i
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 
 import structlog
 from pydantic import BaseModel, Field
@@ -79,7 +80,9 @@ def _ptype(page: PageLike) -> str:
     return str(pt.value if isinstance(pt, PageType) else pt or "other")
 
 
-async def ai_extract_people(pages: list[PageLike], *, company_name: str, max_pages: int = 3) -> list[PersonCandidate]:
+async def ai_extract_people(
+    pages: Sequence[PageLike], *, company_name: str, max_pages: int = 3
+) -> list[PersonCandidate]:
     """AI extraction over team/about/home pages with strict verbatim post-validation."""
     ai = get_ai()
     if not ai.available:
@@ -122,7 +125,9 @@ async def ai_extract_people(pages: list[PageLike], *, company_name: str, max_pag
             if key in seen:
                 continue
             seen.add(key)
-            confidence = MAX_CONFIDENCE if (title and is_job_title(title) and appears_verbatim(name, quote)) else 0.7
+            confidence = (
+                MAX_CONFIDENCE if (title and is_job_title(title) and appears_verbatim(name, quote)) else 0.7
+            )
             shown = display_name(name)
             first, last = split_name(shown)
             out.append(

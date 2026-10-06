@@ -54,7 +54,12 @@ PERSON_FIELDS: list[FieldDef] = [
     FieldDef("times_exported", "Times exported", "p.times_exported", "number"),
     FieldDef("last_exported_at", "Last exported", "p.last_exported_at", "date"),
     FieldDef("contacted_at", "Contacted", "p.contacted_at", "date"),
-    FieldDef("needs_review", "Needs review", "CASE WHEN p.needs_review OR c.needs_review THEN 'true' ELSE 'false' END", "boolean"),
+    FieldDef(
+        "needs_review",
+        "Needs review",
+        "CASE WHEN p.needs_review OR c.needs_review THEN 'true' ELSE 'false' END",
+        "boolean",
+    ),
 ]
 
 COMPANY_FIELDS: list[FieldDef] = [
@@ -73,13 +78,26 @@ COMPANY_FIELDS: list[FieldDef] = [
     FieldDef("phone", "Phone", "c.phone", "text"),
     FieldDef("registry_id", "Registry ID", "c.registry_id", "text"),
     FieldDef("company_confidence", "Company confidence", "c.company_confidence", "percent"),
-    FieldDef("people_count", "People found", "(SELECT count(*) FROM people px WHERE px.company_id = c.id)", "number"),
-    FieldDef("website_status", "Website status", "c.website_status", "enum", ("unknown", "ok", "unreachable", "parked", "blocked", "none")),
+    FieldDef(
+        "people_count",
+        "People found",
+        "(SELECT count(*) FROM people px WHERE px.company_id = c.id)",
+        "number",
+    ),
+    FieldDef(
+        "website_status",
+        "Website status",
+        "c.website_status",
+        "enum",
+        ("unknown", "ok", "unreachable", "parked", "blocked", "none"),
+    ),
     FieldDef("first_seen_at", "First seen", "c.first_seen_at", "date"),
     FieldDef("updated_at", "Updated", "c.updated_at", "date"),
     FieldDef("last_crawled_at", "Last crawled", "c.last_crawled_at", "date"),
     FieldDef("times_exported", "Times exported", "c.times_exported", "number"),
-    FieldDef("needs_review", "Needs review", "CASE WHEN c.needs_review THEN 'true' ELSE 'false' END", "boolean"),
+    FieldDef(
+        "needs_review", "Needs review", "CASE WHEN c.needs_review THEN 'true' ELSE 'false' END", "boolean"
+    ),
 ]
 
 ScopeKind = Literal["list", "people", "companies", "campaign", "review"]
@@ -114,10 +132,14 @@ def custom_field_def(col: CustomColumn) -> FieldDef:
     return FieldDef(f"cf:{col.id}", col.name, sql, ftype, custom_column_id=col.id)  # type: ignore[arg-type]
 
 
-async def load_columns(s: AsyncSession, workspace_id: uuid.UUID, list_id: uuid.UUID | None) -> list[CustomColumn]:
+async def load_columns(
+    s: AsyncSession, workspace_id: uuid.UUID, list_id: uuid.UUID | None
+) -> list[CustomColumn]:
     q = sa.select(CustomColumn).where(CustomColumn.workspace_id == workspace_id)
-    q = q.where(sa.or_(CustomColumn.list_id.is_(None), CustomColumn.list_id == list_id)) if list_id else q.where(
-        CustomColumn.list_id.is_(None)
+    q = (
+        q.where(sa.or_(CustomColumn.list_id.is_(None), CustomColumn.list_id == list_id))
+        if list_id
+        else q.where(CustomColumn.list_id.is_(None))
     )
     return list((await s.scalars(q.order_by(CustomColumn.position, CustomColumn.created_at))).all())
 
@@ -143,7 +165,10 @@ def _from_clause(scope: RowScope) -> tuple[str, str]:
             "  WHERE qs.person_id = p.id ORDER BY qs.computed_at DESC LIMIT 1) q ON TRUE "
         )
         if scope.kind == "list":
-            return base + "JOIN list_memberships m ON m.person_id = p.id AND m.list_id = :scope_list ", "p.workspace_id = :ws"
+            return (
+                base + "JOIN list_memberships m ON m.person_id = p.id AND m.list_id = :scope_list ",
+                "p.workspace_id = :ws",
+            )
         if scope.kind == "campaign":
             return base, (
                 "p.workspace_id = :ws AND EXISTS (SELECT 1 FROM lead_exposures le WHERE le.entity_type = 'person' "
@@ -161,7 +186,10 @@ def _from_clause(scope: RowScope) -> tuple[str, str]:
         )
     base = "FROM companies c "
     if scope.kind == "list":
-        return base + "JOIN list_memberships m ON m.company_id = c.id AND m.list_id = :scope_list ", "c.workspace_id = :ws"
+        return (
+            base + "JOIN list_memberships m ON m.company_id = c.id AND m.list_id = :scope_list ",
+            "c.workspace_id = :ws",
+        )
     if scope.kind == "campaign":
         return base, (
             "c.workspace_id = :ws AND EXISTS (SELECT 1 FROM lead_exposures le WHERE le.entity_type = 'company' "
@@ -177,24 +205,67 @@ def _from_clause(scope: RowScope) -> tuple[str, str]:
 def _select_list(scope: RowScope) -> str:
     if scope.entity_type == EntityType.person:
         cols = [
-            "p.id AS id", "p.company_id", "p.full_name", "p.first_name", "p.last_name", "p.job_title AS title",
-            "p.normalized_title", "p.seniority", "p.role_family", "p.decision_power",
-            "p.public_profile_url AS profile_url", "p.identity_confidence AS person_confidence",
-            "c.name AS company", "c.normalized_domain AS domain", "c.website_url AS website", "c.city", "c.region",
-            "c.country", "c.industry", "c.employee_min", "c.employee_max", "c.company_confidence",
-            "coalesce(p.phone, c.phone) AS phone", "e.address AS email", "e.status AS email_status",
-            "e.overall_confidence AS email_confidence", "e.last_checked_at AS email_checked_at",
-            "q.icp_score", "q.overall_confidence", "q.qualified", "p.first_seen_at",
-            "greatest(p.updated_at, c.updated_at) AS updated_at", "p.times_exported", "p.last_exported_at",
-            "(p.needs_review OR coalesce(c.needs_review, false)) AS needs_review", "c.last_crawled_at",
+            "p.id AS id",
+            "p.company_id",
+            "p.full_name",
+            "p.first_name",
+            "p.last_name",
+            "p.job_title AS title",
+            "p.normalized_title",
+            "p.seniority",
+            "p.role_family",
+            "p.decision_power",
+            "p.public_profile_url AS profile_url",
+            "p.identity_confidence AS person_confidence",
+            "c.name AS company",
+            "c.normalized_domain AS domain",
+            "c.website_url AS website",
+            "c.city",
+            "c.region",
+            "c.country",
+            "c.industry",
+            "c.employee_min",
+            "c.employee_max",
+            "c.company_confidence",
+            "coalesce(p.phone, c.phone) AS phone",
+            "e.address AS email",
+            "e.status AS email_status",
+            "e.overall_confidence AS email_confidence",
+            "e.last_checked_at AS email_checked_at",
+            "q.icp_score",
+            "q.overall_confidence",
+            "q.qualified",
+            "p.first_seen_at",
+            "greatest(p.updated_at, c.updated_at) AS updated_at",
+            "p.times_exported",
+            "p.last_exported_at",
+            "(p.needs_review OR coalesce(c.needs_review, false)) AS needs_review",
+            "c.last_crawled_at",
         ]
     else:
         cols = [
-            "c.id AS id", "c.id AS company_id", "c.name AS company", "c.normalized_domain AS domain",
-            "c.website_url AS website", "c.description", "c.city", "c.region", "c.country", "c.industry",
-            "c.employee_min", "c.employee_max", "c.phone", "c.registry_id", "c.company_confidence",
-            "c.website_status", "c.first_seen_at", "c.updated_at", "c.last_crawled_at", "c.times_exported",
-            "c.needs_review", "(SELECT count(*) FROM people px WHERE px.company_id = c.id) AS people_count",
+            "c.id AS id",
+            "c.id AS company_id",
+            "c.name AS company",
+            "c.normalized_domain AS domain",
+            "c.website_url AS website",
+            "c.description",
+            "c.city",
+            "c.region",
+            "c.country",
+            "c.industry",
+            "c.employee_min",
+            "c.employee_max",
+            "c.phone",
+            "c.registry_id",
+            "c.company_confidence",
+            "c.website_status",
+            "c.first_seen_at",
+            "c.updated_at",
+            "c.last_crawled_at",
+            "c.times_exported",
+            "c.needs_review",
+            "(SELECT count(*) FROM people px WHERE px.company_id = c.id) AS people_count",
         ]
     if scope.kind == "list":
         cols += ["m.added_at", "m.id AS membership_id"]
@@ -219,7 +290,7 @@ def decode_cursor(cursor: str) -> tuple[list[Any], uuid.UUID]:
     try:
         pad = "=" * (-len(cursor) % 4)
         data = orjson.loads(base64.urlsafe_b64decode(cursor + pad))
-        values = []
+        values: list[Any] = []
         for v in data["v"]:
             if isinstance(v, dict) and v.get("t") == "dt":
                 values.append(datetime.fromisoformat(v["v"]))
@@ -312,7 +383,11 @@ async def query_rows(
     total = 0
     if with_total:
         total = int(
-            (await s.execute(sa.text(f"SELECT count(*) {from_sql} WHERE {base_where}"), {**params, **comp.params})).scalar()
+            (
+                await s.execute(
+                    sa.text(f"SELECT count(*) {from_sql} WHERE {base_where}"), {**params, **comp.params}
+                )
+            ).scalar()
             or 0
         )
     # keyset predicate
@@ -338,7 +413,9 @@ async def query_rows(
             after = f"({_sort_sql_expr(f)} {op} CAST({comp.bind(vi)} AS {_cast_for(f)}) OR {_sort_sql_expr(f)} IS NULL)"
             ors.append("(" + " AND ".join([*eqs, after]) + ")")
         eq_all = [
-            f"({_sort_sql_expr(f)} IS NULL)" if v is None else f"({_sort_sql_expr(f)} = CAST({comp.bind(v)} AS {_cast_for(f)}))"
+            f"({_sort_sql_expr(f)} IS NULL)"
+            if v is None
+            else f"({_sort_sql_expr(f)} = CAST({comp.bind(v)} AS {_cast_for(f)}))"
             for (f, _), v in zip(sort_keys, values, strict=True)
         ]
         ors.append("(" + " AND ".join([*eq_all, f"{id_col} > {comp.bind(last_id)}"]) + ")")
@@ -380,8 +457,14 @@ async def _attach_cells(
     q = sa.select(CustomFieldValue).where(
         CustomFieldValue.column_id.in_(col_ids),
         sa.or_(
-            sa.and_(CustomFieldValue.entity_type == EntityType.person, CustomFieldValue.entity_id.in_(person_ids or [uuid.uuid4()])),
-            sa.and_(CustomFieldValue.entity_type == EntityType.company, CustomFieldValue.entity_id.in_(company_ids or [uuid.uuid4()])),
+            sa.and_(
+                CustomFieldValue.entity_type == EntityType.person,
+                CustomFieldValue.entity_id.in_(person_ids or [uuid.uuid4()]),
+            ),
+            sa.and_(
+                CustomFieldValue.entity_type == EntityType.company,
+                CustomFieldValue.entity_id.in_(company_ids or [uuid.uuid4()]),
+            ),
         ),
     )
     by_key: dict[tuple[uuid.UUID, str, uuid.UUID], CustomFieldValue] = {}
@@ -392,16 +475,16 @@ async def _attach_cells(
             ent_id = r["company_id"] if col.entity_type == EntityType.company else r["id"]
             if ent_id is None:
                 continue
-            v = by_key.get((col.id, col.entity_type.value, ent_id))
-            if v is None:
+            cell = by_key.get((col.id, col.entity_type.value, ent_id))
+            if cell is None:
                 continue
             r["cells"][str(col.id)] = {
-                "v": v.value_json,
-                "d": v.display_value,
-                "s": v.status.value,
-                "c": v.confidence,
-                "u": v.is_user_override,
-                "e": v.error,
+                "v": cell.value_json,
+                "d": cell.display_value,
+                "s": cell.status.value,
+                "c": cell.confidence,
+                "u": cell.is_user_override,
+                "e": cell.error,
             }
 
 
@@ -436,7 +519,8 @@ async def _attach_sources(s: AsyncSession, rows: list[dict[str, Any]], entity_ty
         for pid, key in res:
             psrcs.setdefault(pid, set()).add(key)
         for r in rows:
-            r["sources"] = sorted(psrcs.get(r["id"], set()) | srcs.get(r.get("company_id"), set()))
+            cid = r.get("company_id")
+            r["sources"] = sorted(psrcs.get(r["id"], set()) | (srcs.get(cid, set()) if cid else set()))
     else:
         for r in rows:
             r["sources"] = sorted(srcs.get(r["id"], set()))
@@ -477,6 +561,7 @@ async def select_ids(
         )
     id_col = "p.id" if scope.entity_type == EntityType.person else "c.id"
     res = await s.execute(
-        sa.text(f"SELECT {id_col} {from_sql} WHERE {' AND '.join(where)} LIMIT :lim"), {**params, **comp.params}
+        sa.text(f"SELECT {id_col} {from_sql} WHERE {' AND '.join(where)} LIMIT :lim"),
+        {**params, **comp.params},
     )
     return [r[0] for r in res]

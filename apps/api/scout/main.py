@@ -8,9 +8,10 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import JSONResponse
 
 from scout.config import get_settings
 from scout.db.engine import dispose_engine
@@ -69,8 +70,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             from scout.crawl.http import close_client
 
             await close_client()
-        except Exception:
-            pass
+        except Exception as exc:  # shutdown must continue
+            log.info("http.close_failed", error=str(exc))
         await dispose_engine()
 
 
@@ -80,24 +81,30 @@ def create_app() -> FastAPI:
         title="Scout API",
         version="0.1.0",
         description="AI-native B2B lead intelligence — REST API (SSE for progress and chat).",
-        default_response_class=ORJSONResponse,
         lifespan=lifespan,
         openapi_url="/v1/openapi.json",
         docs_url="/v1/docs" if not s.is_production else None,
         redoc_url=None,
     )
     app.add_middleware(
-        CORSMiddleware, allow_origins=s.cors_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+        CORSMiddleware,
+        allow_origins=s.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     @app.exception_handler(AppError)
-    async def app_error(_: Request, exc: AppError) -> ORJSONResponse:
-        return ORJSONResponse(exc.to_dict(), status_code=exc.status_code)
+    async def app_error(_: Request, exc: AppError) -> JSONResponse:
+        return JSONResponse(jsonable_encoder(exc.to_dict()), status_code=exc.status_code)
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(_: Request, exc: RequestValidationError) -> ORJSONResponse:
+    async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
         errs = [{"loc": list(e.get("loc", [])), "msg": e.get("msg")} for e in exc.errors()[:10]]
-        return ORJSONResponse({"error": {"code": "validation_failed", "message": "Invalid request", "details": errs}}, status_code=422)
+        return JSONResponse(
+            {"error": {"code": "validation_failed", "message": "Invalid request", "details": errs}},
+            status_code=422,
+        )
 
     from scout.api import (
         routes_activity,
@@ -110,7 +117,16 @@ def create_app() -> FastAPI:
         routes_lists,
     )
 
-    for r in (routes_core, routes_lists, routes_leads, routes_campaigns, routes_columns, routes_io, routes_activity, routes_chat):
+    for r in (
+        routes_core,
+        routes_lists,
+        routes_leads,
+        routes_campaigns,
+        routes_columns,
+        routes_io,
+        routes_activity,
+        routes_chat,
+    ):
         app.include_router(r.router, prefix="/v1")
     return app
 

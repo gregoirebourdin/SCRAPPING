@@ -27,8 +27,15 @@ class PageHit:
 
 
 def _texts(page: Any) -> list[str]:
-    return [t for t in (getattr(page, "content_text", None), getattr(page, "title", None),
-                        getattr(page, "meta_description", None)) if t]
+    return [
+        t
+        for t in (
+            getattr(page, "content_text", None),
+            getattr(page, "title", None),
+            getattr(page, "meta_description", None),
+        )
+        if t
+    ]
 
 
 def term_groups(terms: Sequence[str]) -> dict[str, list[str]]:
@@ -57,7 +64,7 @@ def scan_pages(pages: Sequence[Any], terms: Sequence[str]) -> dict[str, PageHit]
 
 @dataclass
 class KeywordOutcome:
-    passed: bool | None          # None → site not crawled
+    passed: bool | None  # None → site not crawled
     hits: list[PageHit]
     missing: list[str]
 
@@ -94,8 +101,14 @@ async def resolve(rc: ResolveContext) -> CellResult:
         first = out.hits[0]
         evidence = " | ".join(h.snippet for h in out.hits[:3]) if match_all else first.snippet
         value: Any = True if boolean else first.snippet
-        return ok(plan, value, resolver=RESOLVER, confidence=1.0, evidence=evidence,
-                  source_url=getattr(first.page, "url", None))
+        return ok(
+            plan,
+            value,
+            resolver=RESOLVER,
+            confidence=1.0,
+            evidence=evidence,
+            source_url=getattr(first.page, "url", None),
+        )
     names = ", ".join(f"“{t}”" for t in (out.missing or terms)[:4])
     evidence = f"No mention of {names} across {len(rc.pages)} crawled pages"
     if match_all and out.hits:

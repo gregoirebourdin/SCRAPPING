@@ -66,8 +66,11 @@ async def _cached(rc: ResolveContext, key: str) -> GroundedResearch | None:
     async with session_scope() as s:
         return await s.scalar(
             sa.select(GroundedResearch)
-            .where(GroundedResearch.workspace_id == rc.workspace_id, GroundedResearch.cache_key == key,
-                   GroundedResearch.created_at >= since)
+            .where(
+                GroundedResearch.workspace_id == rc.workspace_id,
+                GroundedResearch.cache_key == key,
+                GroundedResearch.created_at >= since,
+            )
             .order_by(GroundedResearch.created_at.desc())
             .limit(1)
         )
@@ -86,18 +89,30 @@ def _matching_source(url: str | None, sources: list[dict[str, Any]]) -> bool:
     return False
 
 
-def research_cell(rc: ResolveContext, answer: ResearchAnswer, sources: list[dict[str, Any]], *,
-                  model: str | None, cost: float) -> CellResult:
+def research_cell(
+    rc: ResolveContext,
+    answer: ResearchAnswer,
+    sources: list[dict[str, Any]],
+    *,
+    model: str | None,
+    cost: float,
+) -> CellResult:
     """Turn a (possibly cached) research answer into a cell, enforcing source and confidence rules."""
     plan = rc.plan
     common: dict[str, Any] = {"resolver": RESOLVER, "model": model, "cost_usd": cost, "source_id": SOURCE_ID}
     value = coerce_value(answer.value, plan.data_type, plan.enum_values)
     if value is None:
-        return unknown(plan, evidence="No reliable answer found in web sources", confidence=answer.confidence, **common)
+        return unknown(
+            plan, evidence="No reliable answer found in web sources", confidence=answer.confidence, **common
+        )
     uris = [s["uri"] for s in sources if isinstance(s, dict) and s.get("uri")]
     if not uris:
-        return unknown(plan, evidence=f"Unsourced answer discarded: “{display_for(value)}”",
-                       confidence=min(answer.confidence, UNSOURCED_CAP), **common)
+        return unknown(
+            plan,
+            evidence=f"Unsourced answer discarded: “{display_for(value)}”",
+            confidence=min(answer.confidence, UNSOURCED_CAP),
+            **common,
+        )
     conf = answer.confidence
     if _matching_source(answer.source_url, sources):
         url = answer.source_url
@@ -105,8 +120,14 @@ def research_cell(rc: ResolveContext, answer: ResearchAnswer, sources: list[dict
         url, conf = uris[0], min(conf, UNMATCHED_SOURCE_CAP)
     evidence = answer.evidence_quote.strip() or f"Sources: {', '.join(uris[:3])}"
     if conf < plan.confidence_threshold:
-        return unknown(plan, evidence=f"Below confidence threshold ({conf:.2f} < {plan.confidence_threshold:.2f}): "
-                                      f"{display_for(value)}", confidence=conf, source_url=url, **common)
+        return unknown(
+            plan,
+            evidence=f"Below confidence threshold ({conf:.2f} < {plan.confidence_threshold:.2f}): "
+            f"{display_for(value)}",
+            confidence=conf,
+            source_url=url,
+            **common,
+        )
     return ok(plan, value, confidence=conf, evidence=evidence, source_url=url, **common)
 
 
@@ -128,22 +149,28 @@ async def resolve(rc: ResolveContext) -> CellResult:
         return unknown(plan, resolver=RESOLVER, error="Budget limit reached: web research skipped")
     query = _query(rc)
     res = await ai.grounded_search(query=query, instructions=INSTRUCTIONS, schema=ResearchAnswer)
-    answer = res.value if res.value is not None else ResearchAnswer(
-        value=(res.text or "").strip()[:500] or None, confidence=UNSOURCED_CAP
+    answer = (
+        res.value
+        if res.value is not None
+        else ResearchAnswer(value=(res.text or "").strip()[:500] or None, confidence=UNSOURCED_CAP)
     )
     sources = [{"uri": s.uri, "title": s.title, "domain": s.domain} for s in res.sources]
     async with session_scope() as s:
-        s.add(GroundedResearch(
-            workspace_id=rc.workspace_id,
-            company_id=rc.company.id if rc.company is not None else None,
-            person_id=rc.person.id if rc.person is not None else None,
-            purpose=f"enrichment:{plan.name}"[:200],
-            query=query,
-            search_queries=list(res.search_queries),
-            sources=sources,
-            result=answer.model_dump(mode="json"),
-            selected_evidence=[{"text": sp.text, "sources": sp.source_indices} for sp in res.supports[:10]],
-            model=res.usage.model,
-            cache_key=key,
-        ))
+        s.add(
+            GroundedResearch(
+                workspace_id=rc.workspace_id,
+                company_id=rc.company.id if rc.company is not None else None,
+                person_id=rc.person.id if rc.person is not None else None,
+                purpose=f"enrichment:{plan.name}"[:200],
+                query=query,
+                search_queries=list(res.search_queries),
+                sources=sources,
+                result=answer.model_dump(mode="json"),
+                selected_evidence=[
+                    {"text": sp.text, "sources": sp.source_indices} for sp in res.supports[:10]
+                ],
+                model=res.usage.model,
+                cache_key=key,
+            )
+        )
     return research_cell(rc, answer, sources, model=res.usage.model, cost=res.usage.cost_usd)

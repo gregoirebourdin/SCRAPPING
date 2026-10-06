@@ -18,10 +18,25 @@ BASE = "http://email-verifier.railway.internal:8080"
 
 def payload(email="marie.dupont@agence-x.fr", *, smtp=None, **over):
     body = {
-        "email": email, "syntax_valid": True, "has_mx": True, "mx_hosts": ["mx1.agence-x.fr"],
-        "smtp": {"enabled": True, "host_exists": True, "deliverable": False, "full_inbox": False,
-                 "catch_all": False, "disabled": False, "error": None, **(smtp or {})},
-        "disposable": False, "role_account": False, "free": False, "reachable": "unknown", "error": None,
+        "email": email,
+        "syntax_valid": True,
+        "has_mx": True,
+        "mx_hosts": ["mx1.agence-x.fr"],
+        "smtp": {
+            "enabled": True,
+            "host_exists": True,
+            "deliverable": False,
+            "full_inbox": False,
+            "catch_all": False,
+            "disabled": False,
+            "error": None,
+            **(smtp or {}),
+        },
+        "disposable": False,
+        "role_account": False,
+        "free": False,
+        "reachable": "unknown",
+        "error": None,
     }
     body.update(over)
     return body
@@ -98,8 +113,12 @@ async def test_flags_are_complemented_by_local_lists(sv):
 async def test_invalid_syntax_and_disposable(sv):
     respx.post(f"{BASE}/v1/verify").mock(
         side_effect=[
-            httpx.Response(200, json=payload("bad", syntax_valid=False, has_mx=False, smtp={"enabled": False})),
-            httpx.Response(200, json=payload("x@yopmail.com", disposable=True, has_mx=False, smtp={"enabled": False})),
+            httpx.Response(
+                200, json=payload("bad", syntax_valid=False, has_mx=False, smtp={"enabled": False})
+            ),
+            httpx.Response(
+                200, json=payload("x@yopmail.com", disposable=True, has_mx=False, smtp={"enabled": False})
+            ),
         ]
     )
     bad = await sv.verify("bad")
@@ -119,8 +138,13 @@ async def test_no_mx_confirmed_locally_with_a_record(sv, monkeypatch):
     monkeypatch.setattr(edns, "mx_lookup", fake_lookup)
     respx.post(f"{BASE}/v1/verify").mock(
         side_effect=lambda req: httpx.Response(
-            200, json=payload(req.read().decode().split('"')[3], has_mx=False, error="lookup: no such host",
-                              smtp={"enabled": False})
+            200,
+            json=payload(
+                req.read().decode().split('"')[3],
+                has_mx=False,
+                error="lookup: no such host",
+                smtp={"enabled": False},
+            ),
         )
     )
     assert (await sv.verify("a.b@aonly.fr")).mx_valid is True
@@ -131,14 +155,20 @@ async def test_no_mx_confirmed_locally_with_a_record(sv, monkeypatch):
 @respx.mock
 async def test_dns_error_is_not_a_definitive_no_mx(sv):
     respx.post(f"{BASE}/v1/verify").mock(
-        return_value=httpx.Response(200, json=payload(has_mx=False, error="i/o timeout", smtp={"enabled": False}))
+        return_value=httpx.Response(
+            200, json=payload(has_mx=False, error="i/o timeout", smtp={"enabled": False})
+        )
     )
     assert (await sv.verify("marie.dupont@agence-x.fr")).mx_valid is None
 
 
 @pytest.mark.parametrize(
     "side_effect",
-    [httpx.Response(500, json={"error": "boom"}), httpx.ConnectError("refused"), httpx.Response(200, text="nope")],
+    [
+        httpx.Response(500, json={"error": "boom"}),
+        httpx.ConnectError("refused"),
+        httpx.Response(200, text="nope"),
+    ],
     ids=["http_500", "connect_error", "bad_json"],
 )
 @respx.mock

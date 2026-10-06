@@ -155,7 +155,9 @@ class GeminiSearchSource:
                     website=normalize_website(c.website),
                     domain=dom,
                     location=location,
-                    source_url=next((s["uri"] for s in sources if s.get("domain") and dom in str(s["domain"])), None),
+                    source_url=next(
+                        (s["uri"] for s in sources if s.get("domain") and dom in str(s["domain"])), None
+                    ),
                     raw_data={
                         "evidence": c.evidence,
                         "question": query.params["question"],

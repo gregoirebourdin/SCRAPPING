@@ -66,7 +66,8 @@ PSL, lowercase, IDNA), `website_url`, `description`, `country` (ISO-2), `region`
 `employee_min`, `employee_max`, `employee_confidence`, `phone`, `registry_source`
 (e.g. `fr_sirene`), `registry_id` (e.g. SIREN), `status` (active/closed/unknown),
 `company_confidence`, `has_conflicts`, `needs_review`, `website_status` (unknown/ok/unreachable/parked/redirected),
-discovery-history columns (below), `last_crawled_at`, `last_enriched_at`, timestamps.
+discovery-history columns (below), `last_crawled_at`, `last_enriched_at`, `last_tech_scan_at` (last technology
+scan, also when nothing was detected — zero-tech sites are not re-scanned within the freshness window), timestamps.
 
 Unique: `(workspace_id, normalized_domain)` where not null;
 `(workspace_id, registry_source, registry_id)` where not null.
@@ -160,7 +161,7 @@ fields, `duration_ms`, `error`).
 `confidence`, `supporting_samples`, `successful_checks`, `failed_checks`, `last_verified_at`.
 Unique `(domain, pattern)`.
 
-`domain_dns_cache` (global): `domain` PK, `has_mx`, `mx_hosts jsonb`, `catch_all`,
+`domain_dns_cache` (global): `domain` PK, `has_mx`, `mx_hosts jsonb`, `has_a`, `null_mx` (RFC 7505), `catch_all`,
 `catch_all_checked_at`, `checked_at`, `error`.
 
 ## 6. Website cache
@@ -273,7 +274,8 @@ web_search), `resolver`, `model`, `source_key`, `quantity`, `tokens_in`, `tokens
 * `workspace_id` leading column on every business index.
 * `companies(workspace_id, normalized_domain)` unique, trigram `normalized_name`.
 * `people(workspace_id, company_id, normalized_name)` unique, trigram `normalized_name`.
-* `emails(workspace_id, address)` unique, `(person_id)`, `(workspace_id, status)`.
+* `emails(workspace_id, address)` unique, `(address)` (global pattern-memory lookups), `(person_id)`, `(workspace_id, status)`.
+* `grounded_research(workspace_id, cache_key, created_at)` for the research cache lookup.
 * `list_memberships(list_id, added_at, id)` for cursor pagination.
 * `campaigns(workspace_id, status)`.
 * Job queue partial indexes (above).

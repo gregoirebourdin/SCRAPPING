@@ -35,13 +35,59 @@ HEURISTIC_MAX_CONFIDENCE = 0.7
 HEURISTIC_ABSENCE_CONFIDENCE = 0.6
 
 SERVICE_VOCAB = [
-    "services", "service", "we offer", "we provide", "we help", "we deliver", "we manage", "we create", "we build",
-    "our offer", "our expertise", "our services", "what we do", "accompagnement", "accompagnons", "accompagne",
-    "gestion", "management", "strategie", "strategy", "creation de contenu", "content creation", "campagnes",
-    "campaigns", "agence", "agency", "prestations", "prestation", "offre", "offres", "expertise", "expertises",
-    "nous proposons", "nous gerons", "nous creons", "nous accompagnons", "nos services", "ce que nous faisons",
-    "consulting", "conseil", "audit", "formation", "pilotage", "optimisation", "production", "we specialize",
-    "specialistes", "specialisee", "specialise", "experts", "notre offre", "nos offres", "solutions",
+    "services",
+    "service",
+    "we offer",
+    "we provide",
+    "we help",
+    "we deliver",
+    "we manage",
+    "we create",
+    "we build",
+    "our offer",
+    "our expertise",
+    "our services",
+    "what we do",
+    "accompagnement",
+    "accompagnons",
+    "accompagne",
+    "gestion",
+    "management",
+    "strategie",
+    "strategy",
+    "creation de contenu",
+    "content creation",
+    "campagnes",
+    "campaigns",
+    "agence",
+    "agency",
+    "prestations",
+    "prestation",
+    "offre",
+    "offres",
+    "expertise",
+    "expertises",
+    "nous proposons",
+    "nous gerons",
+    "nous creons",
+    "nous accompagnons",
+    "nos services",
+    "ce que nous faisons",
+    "consulting",
+    "conseil",
+    "audit",
+    "formation",
+    "pilotage",
+    "optimisation",
+    "production",
+    "we specialize",
+    "specialistes",
+    "specialisee",
+    "specialise",
+    "experts",
+    "notre offre",
+    "nos offres",
+    "solutions",
 ]
 SERVICE_PAGES = {"services", "solutions", "home", "about", "case_studies"}
 # Words too generic to anchor a concept on their own ("TikTok ads" is anchored on "tiktok", not "ads").
@@ -95,7 +141,9 @@ def core_terms(plan: EnrichmentPlan) -> list[str]:
 
 
 def _counting_hits(passage: Passage, terms: Sequence[str]) -> list[TermHit]:
-    return [h for h in find_terms(passage.text, terms) if not _is_follow_context(line_at(passage.text, h.start))]
+    return [
+        h for h in find_terms(passage.text, terms) if not _is_follow_context(line_at(passage.text, h.start))
+    ]
 
 
 def heuristic_classify(plan: EnrichmentPlan, pages: Sequence[Any]) -> CellResult:
@@ -104,7 +152,9 @@ def heuristic_classify(plan: EnrichmentPlan, pages: Sequence[Any]) -> CellResult
         return unknown(plan, resolver=RESOLVER_HEURISTIC, error=NOT_CRAWLED)
     terms = core_terms(plan)
     if not terms:
-        return unknown(plan, resolver=RESOLVER_HEURISTIC, evidence="Concept too generic for the offline classifier")
+        return unknown(
+            plan, resolver=RESOLVER_HEURISTIC, evidence="Concept too generic for the offline classifier"
+        )
     service_like = bool(_SERVICE_LIKE.search(fold(plan.concept or plan.name)))
     preferred = {str(getattr(t, "value", t)) for t in plan.input_sources} or SERVICE_PAGES
     positives: list[tuple[Passage, TermHit]] = []
@@ -119,24 +169,45 @@ def heuristic_classify(plan: EnrichmentPlan, pages: Sequence[Any]) -> CellResult
             has_vocab = bool(find_terms(passage.text, SERVICE_VOCAB, first_only=True))
             if (has_vocab and passage.page_type in SERVICE_PAGES) or in_service_page:
                 positives.append((passage, hits[0]))
-        elif passage.page_type in preferred:  # non-service concepts (e.g. hiring): a real mention on a relevant page
+        elif (
+            passage.page_type in preferred
+        ):  # non-service concepts (e.g. hiring): a real mention on a relevant page
             positives.append((passage, hits[0]))
     if positives:
         positives.sort(key=lambda x: (x[0].page_type not in {"services", "solutions"}, x[0].idx))
         best, hit = positives[0]
         pages_with = {p.page_url for p, _ in positives}
-        conf = 0.55 + 0.05 * min(2, len(pages_with) - 1) + (0.05 if best.page_type in {"services", "solutions"} else 0)
+        conf = (
+            0.55
+            + 0.05 * min(2, len(pages_with) - 1)
+            + (0.05 if best.page_type in {"services", "solutions"} else 0)
+        )
         if not service_like:
             conf = min(conf, 0.6)
-        return ok(plan, True, resolver=RESOLVER_HEURISTIC, confidence=min(HEURISTIC_MAX_CONFIDENCE, conf),
-                  evidence=excerpt(best.text, hit.start, hit.end, 240), source_url=best.page_url)
-    types = {str(getattr(getattr(p, "page_type", None), "value", getattr(p, "page_type", None))) for p in pages}
+        return ok(
+            plan,
+            True,
+            resolver=RESOLVER_HEURISTIC,
+            confidence=min(HEURISTIC_MAX_CONFIDENCE, conf),
+            evidence=excerpt(best.text, hit.start, hit.end, 240),
+            source_url=best.page_url,
+        )
+    types = {
+        str(getattr(getattr(p, "page_type", None), "value", getattr(p, "page_type", None))) for p in pages
+    }
     if service_like and not mentioned and len(pages) >= 3 and types & {"home", "services"}:
         label = plan.concept or plan.name
-        return ok(plan, False, resolver=RESOLVER_HEURISTIC, confidence=HEURISTIC_ABSENCE_CONFIDENCE,
-                  evidence=f"No mention of “{label}” outside social-follow links across {len(pages)} crawled pages "
-                           "(including the home/services pages)")
-    reason = ("Mentioned without a service context" if mentioned else "Too few relevant pages crawled to conclude")
+        return ok(
+            plan,
+            False,
+            resolver=RESOLVER_HEURISTIC,
+            confidence=HEURISTIC_ABSENCE_CONFIDENCE,
+            evidence=f"No mention of “{label}” outside social-follow links across {len(pages)} crawled pages "
+            "(including the home/services pages)",
+        )
+    reason = (
+        "Mentioned without a service context" if mentioned else "Too few relevant pages crawled to conclude"
+    )
     return unknown(plan, resolver=RESOLVER_HEURISTIC, evidence=reason, source_id="website")
 
 
@@ -176,8 +247,9 @@ async def resolve(rc: ResolveContext) -> CellResult:
     if not ai.available:
         return heuristic_classify(plan, rc.pages)
     passages = relevant_passages(rc, include_unmatched=True)  # matched passages first, padded with key pages
-    res = await ai.structured(role=ModelRole.fast, system=EXTRACTION_SYSTEM, prompt=_prompt(rc, passages),
-                              schema=SemanticVerdict)
+    res = await ai.structured(
+        role=ModelRole.fast, system=EXTRACTION_SYSTEM, prompt=_prompt(rc, passages), schema=SemanticVerdict
+    )
     v: SemanticVerdict = res.value
     model, cost = res.usage.model, res.usage.cost_usd
     common: dict[str, Any] = {"resolver": RESOLVER_AI, "model": model, "cost_usd": cost}
@@ -185,13 +257,25 @@ async def resolve(rc: ResolveContext) -> CellResult:
         return unknown(plan, evidence=INSUFFICIENT, confidence=v.confidence, **common)
     valid, url = verify_quote(v.evidence_quote, v.source_url, passages)
     if not valid:
-        return unknown(plan, evidence=f"{INSUFFICIENT} — the quoted text was not found on the website",
-                       confidence=min(v.confidence, UNVERIFIED_CAP), **common)
+        return unknown(
+            plan,
+            evidence=f"{INSUFFICIENT} — the quoted text was not found on the website",
+            confidence=min(v.confidence, UNVERIFIED_CAP),
+            **common,
+        )
     if v.confidence < plan.confidence_threshold:
-        return unknown(plan, evidence=f"Below confidence threshold ({v.confidence:.2f} < "
-                                      f"{plan.confidence_threshold:.2f}): “{v.evidence_quote.strip()}”",
-                       confidence=v.confidence, source_url=url, source_id="website", **common)
+        return unknown(
+            plan,
+            evidence=f"Below confidence threshold ({v.confidence:.2f} < "
+            f"{plan.confidence_threshold:.2f}): “{v.evidence_quote.strip()}”",
+            confidence=v.confidence,
+            source_url=url,
+            source_id="website",
+            **common,
+        )
     value: Any = v.verdict == "true"
     if plan.data_type != ColumnDataType.boolean:
         value = "true" if value else "false"
-    return ok(plan, value, confidence=v.confidence, evidence=v.evidence_quote.strip(), source_url=url, **common)
+    return ok(
+        plan, value, confidence=v.confidence, evidence=v.evidence_quote.strip(), source_url=url, **common
+    )

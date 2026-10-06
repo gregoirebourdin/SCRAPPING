@@ -30,24 +30,106 @@ MAX_EXTERNAL_LINKS = 50
 MAX_JSONLD_OBJECTS = 60
 
 _SKIP_TAGS = frozenset(
-    {"script", "style", "noscript", "svg", "iframe", "template", "head", "object", "embed", "canvas",
-     "select", "datalist", "math", "video", "audio", "picture", "map", "dialog"}
+    {
+        "script",
+        "style",
+        "noscript",
+        "svg",
+        "iframe",
+        "template",
+        "head",
+        "object",
+        "embed",
+        "canvas",
+        "select",
+        "datalist",
+        "math",
+        "video",
+        "audio",
+        "picture",
+        "map",
+        "dialog",
+    }
 )
 _BLOCK_TAGS = frozenset(
-    {"address", "article", "aside", "blockquote", "body", "dd", "details", "div", "dl", "dt", "fieldset",
-     "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li",
-     "main", "nav", "ol", "p", "pre", "section", "summary", "table", "tr", "td", "th", "caption", "ul",
-     "option", "legend", "label", "button", "center", "tbody", "thead", "tfoot", "menu", "hgroup", "html"}
+    {
+        "address",
+        "article",
+        "aside",
+        "blockquote",
+        "body",
+        "dd",
+        "details",
+        "div",
+        "dl",
+        "dt",
+        "fieldset",
+        "figcaption",
+        "figure",
+        "footer",
+        "form",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "hr",
+        "li",
+        "main",
+        "nav",
+        "ol",
+        "p",
+        "pre",
+        "section",
+        "summary",
+        "table",
+        "tr",
+        "td",
+        "th",
+        "caption",
+        "ul",
+        "option",
+        "legend",
+        "label",
+        "button",
+        "center",
+        "tbody",
+        "thead",
+        "tfoot",
+        "menu",
+        "hgroup",
+        "html",
+    }
 )
 _CHROME_TAGS = frozenset({"header", "nav", "footer"})
 _SOCIAL_HOST_DOMAINS = frozenset(
-    {"facebook.com", "fb.com", "fb.me", "instagram.com", "linkedin.com", "twitter.com", "x.com", "tiktok.com",
-     "youtube.com", "youtu.be", "pinterest.com", "pinterest.fr", "pin.it", "threads.net", "whatsapp.com"}
+    {
+        "facebook.com",
+        "fb.com",
+        "fb.me",
+        "instagram.com",
+        "linkedin.com",
+        "twitter.com",
+        "x.com",
+        "tiktok.com",
+        "youtube.com",
+        "youtu.be",
+        "pinterest.com",
+        "pinterest.fr",
+        "pin.it",
+        "threads.net",
+        "whatsapp.com",
+    }
 )
 
 # ---- emails ---------------------------------------------------------------------------------
 
-EMAIL_RE = re.compile(r"(?<![\w.+-])[a-z0-9][a-z0-9._%+\-]{0,63}@[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}(?![\w-])", re.IGNORECASE)
+EMAIL_RE = re.compile(
+    r"(?<![\w.+-])[a-z0-9][a-z0-9._%+\-]{0,63}@[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}(?![\w-])",
+    re.IGNORECASE,
+)
 _OBFUSCATED_EMAIL_RE = re.compile(
     r"([a-z0-9][a-z0-9._%+\-]{0,63})\s*[\[\(\{<]\s*(?:at|arobase|@)\s*[\]\)\}>]\s*"
     r"([a-z0-9\-]+(?:\s*(?:[\[\(\{<]\s*(?:dot|point|\.)\s*[\]\)\}>]|\.)\s*[a-z0-9\-]+)+)",
@@ -57,20 +139,95 @@ _SPACED_EMAIL_RE = re.compile(
     r"\b([a-z0-9][a-z0-9._\-]{0,63})\s+(?:at|arobase)\s+([a-z0-9\-]+(?:\s+(?:dot|point)\s+[a-z0-9\-]+)+)\b",
     re.IGNORECASE,
 )
-_DOT_TOKEN_RE = re.compile(r"\s*(?:[\[\(\{<]\s*(?:dot|point|\.)\s*[\]\)\}>]|\s(?:dot|point)\s|\.)\s*", re.IGNORECASE)
+_DOT_TOKEN_RE = re.compile(
+    r"\s*(?:[\[\(\{<]\s*(?:dot|point|\.)\s*[\]\)\}>]|\s(?:dot|point)\s|\.)\s*", re.IGNORECASE
+)
 _FILE_EXTS = frozenset(
-    {"png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "ico", "bmp", "tif", "tiff", "css", "js", "mjs", "json",
-     "map", "woff", "woff2", "ttf", "eot", "otf", "mp4", "webm", "mov", "mp3", "wav", "pdf", "zip", "php", "html", "htm"}
+    {
+        "png",
+        "jpg",
+        "jpeg",
+        "gif",
+        "svg",
+        "webp",
+        "avif",
+        "ico",
+        "bmp",
+        "tif",
+        "tiff",
+        "css",
+        "js",
+        "mjs",
+        "json",
+        "map",
+        "woff",
+        "woff2",
+        "ttf",
+        "eot",
+        "otf",
+        "mp4",
+        "webm",
+        "mov",
+        "mp3",
+        "wav",
+        "pdf",
+        "zip",
+        "php",
+        "html",
+        "htm",
+    }
 )
 _NOISE_EMAIL_DOMAINS = (
-    "sentry.io", "wixpress.com", "sentry-next.wixpress.com", "example.com", "example.org", "example.net",
-    "example.fr", "domain.com", "domaine.com", "domaine.fr", "yourdomain.com", "votredomaine.fr",
-    "votredomaine.com", "mysite.com", "monsite.fr", "test.com", "email.com", "sentry.com", "ingest.sentry.io",
+    "sentry.io",
+    "wixpress.com",
+    "sentry-next.wixpress.com",
+    "example.com",
+    "example.org",
+    "example.net",
+    "example.fr",
+    "domain.com",
+    "domaine.com",
+    "domaine.fr",
+    "yourdomain.com",
+    "votredomaine.fr",
+    "votredomaine.com",
+    "mysite.com",
+    "monsite.fr",
+    "test.com",
+    "email.com",
+    "sentry.com",
+    "ingest.sentry.io",
 )
 _PLACEHOLDER_LOCALS = frozenset(
-    {"prenom.nom", "nom.prenom", "firstname.lastname", "first.last", "john.doe", "jane.doe", "johndoe", "you",
-     "your.name", "yourname", "votre.nom", "votrenom", "name", "username", "user", "exemple", "example", "email",
-     "votremail", "votre-email", "votreemail", "votre.email", "your-email", "youremail", "mail", "nom", "prenom"}
+    {
+        "prenom.nom",
+        "nom.prenom",
+        "firstname.lastname",
+        "first.last",
+        "john.doe",
+        "jane.doe",
+        "johndoe",
+        "you",
+        "your.name",
+        "yourname",
+        "votre.nom",
+        "votrenom",
+        "name",
+        "username",
+        "user",
+        "exemple",
+        "example",
+        "email",
+        "votremail",
+        "votre-email",
+        "votreemail",
+        "votre.email",
+        "your-email",
+        "youremail",
+        "mail",
+        "nom",
+        "prenom",
+    }
 )
 
 # ---- phones ---------------------------------------------------------------------------------
@@ -85,11 +242,21 @@ _INTL_PHONE_RE = re.compile(
 # ---- language ---------------------------------------------------------------------------------
 
 _STOPWORDS: dict[str, frozenset[str]] = {
-    "fr": frozenset("les des est une pour dans nous vous avec sur qui sont pas plus par cette notre nos votre vos aux du au et le la".split()),
-    "en": frozenset("the and is are for with our your we you to of that this from by at as be have will".split()),
-    "de": frozenset("der die das und ist mit für wir sie nicht von zu den dem ein eine auf unsere ihre sind".split()),
-    "es": frozenset("el los las y es para con nuestro nuestra nuestros que por una del se su sus somos".split()),
-    "it": frozenset("il lo gli e è per con nostro nostra che di un una del della sono siamo nel alla".split()),
+    "fr": frozenset(
+        "les des est une pour dans nous vous avec sur qui sont pas plus par cette notre nos votre vos aux du au et le la".split()
+    ),
+    "en": frozenset(
+        "the and is are for with our your we you to of that this from by at as be have will".split()
+    ),
+    "de": frozenset(
+        "der die das und ist mit für wir sie nicht von zu den dem ein eine auf unsere ihre sind".split()
+    ),
+    "es": frozenset(
+        "el los las y es para con nuestro nuestra nuestros que por una del se su sus somos".split()
+    ),
+    "it": frozenset(
+        "il lo gli e è per con nostro nostra che di un una del della sono siamo nel alla".split()
+    ),
 }
 _AMBIGUOUS_STOPWORDS = frozenset({"la", "de", "en", "le", "in", "e", "a", "se", "che"})
 
@@ -471,7 +638,9 @@ def parse_html(html: str, url: str, *, is_home: bool = False) -> ParsedPage:
     page.generator = "; ".join(dict.fromkeys(g for g in generators if g)) or None
     if not page.title:
         page.title = meta.get("og:title") or meta.get("twitter:title") or None
-    page.meta_description = meta.get("description") or meta.get("og:description") or meta.get("twitter:description") or None
+    page.meta_description = (
+        meta.get("description") or meta.get("og:description") or meta.get("twitter:description") or None
+    )
 
     base_url = url
     base = tree.css_first("base[href]")
@@ -494,13 +663,18 @@ def parse_html(html: str, url: str, *, is_home: bool = False) -> ParsedPage:
             log.debug("head_html_failed", url=url, error=str(exc))
 
     # --- JSON-LD ------------------------------------------------------------------------------
-    for script in tree.css('script[type="application/ld+json"], script[type="application/ld+json; charset=utf-8"]'):
+    for script in tree.css(
+        'script[type="application/ld+json"], script[type="application/ld+json; charset=utf-8"]'
+    ):
         page.structured_data.extend(_parse_jsonld(script.text(deep=True) or ""))
         if len(page.structured_data) >= MAX_JSONLD_OBJECTS:
             break
 
     # --- SPA hints ---------------------------------------------------------------------------
-    page.spa_root = tree.css_first("#root, #__next, #app, #__nuxt, #___gatsby, [ng-app], [ng-version], app-root") is not None
+    page.spa_root = (
+        tree.css_first("#root, #__next, #app, #__nuxt, #___gatsby, [ng-app], [ng-version], app-root")
+        is not None
+    )
     page.noscript_text = collapse_ws(" ".join((n.text(deep=True) or "") for n in tree.css("noscript")))[:500]
 
     # --- links, mailto, tel, cloudflare emails ---------------------------------------------
@@ -575,7 +749,11 @@ def parse_html(html: str, url: str, *, is_home: bool = False) -> ParsedPage:
     page.content_text = text
     page.word_count = len(text.split())
     page.headings = [
-        h for h in dict.fromkeys(collapse_ws(n.text(deep=True, separator=" ") or "") for n in tree.css("h1, h2, h3")) if h
+        h
+        for h in dict.fromkeys(
+            collapse_ws(n.text(deep=True, separator=" ") or "") for n in tree.css("h1, h2, h3")
+        )
+        if h
     ][:60]
 
     # --- emails / phones -------------------------------------------------------------------

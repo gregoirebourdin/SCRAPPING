@@ -13,9 +13,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scout.db.engine import session_scope
-from scout.db.enums import ErrorCategory, JobStatus
+from scout.db.enums import CAMPAIGN_TERMINAL, ErrorCategory, JobStatus
 from scout.db.ids import uuid7
-from scout.db.models import Job, JobAttempt, JobDependency
+from scout.db.models import Campaign, Job, JobAttempt, JobDependency
 
 JOBS_CHANNEL = "scout_jobs"
 BACKOFF_BASE_S = 5.0
@@ -97,7 +97,9 @@ async def enqueue(
         for d in open_deps:
             session.add(JobDependency(job_id=job_id, depends_on_job_id=d))
         if open_deps:
-            await session.execute(sa.update(Job).where(Job.id == job_id).values(blocked_by_count=len(open_deps)))
+            await session.execute(
+                sa.update(Job).where(Job.id == job_id).values(blocked_by_count=len(open_deps))
+            )
     await session.execute(sa.text("SELECT pg_notify(:ch, :t)"), {"ch": JOBS_CHANNEL, "t": type})
     return job_id
 
@@ -172,7 +174,11 @@ async def heartbeat(job_ids: list[uuid.UUID], worker_id: str, lease_seconds: int
     async with session_scope() as s:
         await s.execute(
             sa.update(Job)
-            .where(Job.id.in_(job_ids), Job.locked_by == worker_id, Job.status.in_([JobStatus.claimed, JobStatus.running]))
+            .where(
+                Job.id.in_(job_ids),
+                Job.locked_by == worker_id,
+                Job.status.in_([JobStatus.claimed, JobStatus.running]),
+            )
             .values(
                 heartbeat_at=sa.func.now(),
                 lease_expires_at=sa.func.now() + timedelta(seconds=lease_seconds),
@@ -180,17 +186,27 @@ async def heartbeat(job_ids: list[uuid.UUID], worker_id: str, lease_seconds: int
         )
 
 
-async def _close_attempt(s: AsyncSession, job_id: uuid.UUID, attempt_no: int, status: str, error: str | None,
-                         category: ErrorCategory | None) -> None:
+async def _close_attempt(
+    s: AsyncSession,
+    job_id: uuid.UUID,
+    attempt_no: int,
+    status: str,
+    error: str | None,
+    category: ErrorCategory | None,
+) -> None:
     await s.execute(
         sa.update(JobAttempt)
-        .where(JobAttempt.job_id == job_id, JobAttempt.attempt_no == attempt_no, JobAttempt.finished_at.is_(None))
+        .where(
+            JobAttempt.job_id == job_id, JobAttempt.attempt_no == attempt_no, JobAttempt.finished_at.is_(None)
+        )
         .values(
             status=status,
             error=error,
             error_category=category,
             finished_at=sa.func.now(),
-            duration_ms=sa.cast(sa.func.extract("epoch", sa.func.now() - JobAttempt.started_at) * 1000, sa.Integer),
+            duration_ms=sa.cast(
+                sa.func.extract("epoch", sa.func.now() - JobAttempt.started_at) * 1000, sa.Integer
+            ),
         )
     )
 
@@ -200,7 +216,9 @@ async def complete(job: ClaimedJob, worker_id: str, result: dict[str, Any] | Non
         updated = await s.execute(
             sa.update(Job)
             .where(Job.id == job.id, Job.locked_by == worker_id)
-            .values(status=JobStatus.completed, result=result, finished_at=sa.func.now(), lease_expires_at=None)
+            .values(
+                status=JobStatus.completed, result=result, finished_at=sa.func.now(), lease_expires_at=None
+            )
             .returning(Job.id)
         )
         if updated.scalar_one_or_none() is None:
@@ -252,18 +270,33 @@ async def fail(
     return status
 
 
-async def requeue_paused(job: ClaimedJob, worker_id: str) -> None:
-    """Cooperative pause: hand the job back without consuming an attempt."""
+async def requeue_paused(job: ClaimedJob, worker_id: str) -> JobStatus:
+    """Cooperative pause: hand the job back without consuming an attempt. When the campaign was stopped
+    (completed / cancelled / …) rather than paused, the job is cancelled — a resume can never happen."""
     async with session_scope() as s:
-        await s.execute(
-            sa.update(Job)
-            .where(Job.id == job.id, Job.locked_by == worker_id)
-            .values(status=JobStatus.paused, attempts=Job.attempts - 1, locked_by=None, lease_expires_at=None)
+        campaign_status = (
+            await s.scalar(sa.select(Campaign.status).where(Campaign.id == job.campaign_id))
+            if job.campaign_id
+            else None
         )
-        await _close_attempt(s, job.id, job.attempts, "paused", None, None)
+        terminal = campaign_status is not None and campaign_status in CAMPAIGN_TERMINAL
+        status = JobStatus.cancelled if terminal else JobStatus.paused
+        values: dict[str, Any] = {
+            "status": status,
+            "attempts": Job.attempts - 1,
+            "locked_by": None,
+            "lease_expires_at": None,
+        }
+        if terminal:
+            values["finished_at"] = sa.func.now()
+        await s.execute(sa.update(Job).where(Job.id == job.id, Job.locked_by == worker_id).values(**values))
+        await _close_attempt(s, job.id, job.attempts, status.value, None, None)
+    return status
 
 
-async def reschedule(job: ClaimedJob, worker_id: str, *, delay_s: float, payload: dict[str, Any] | None = None) -> None:
+async def reschedule(
+    job: ClaimedJob, worker_id: str, *, delay_s: float, payload: dict[str, Any] | None = None
+) -> None:
     """Handler-requested re-run later (e.g. back-pressure) without consuming an attempt."""
     async with session_scope() as s:
         values: dict[str, Any] = {
@@ -300,7 +333,9 @@ async def reap_expired_leases() -> int:
             await s.execute(
                 sa.update(JobAttempt)
                 .where(JobAttempt.job_id.in_(ids), JobAttempt.finished_at.is_(None))
-                .values(status="lease_expired", finished_at=sa.func.now(), error_category=ErrorCategory.internal)
+                .values(
+                    status="lease_expired", finished_at=sa.func.now(), error_category=ErrorCategory.internal
+                )
             )
     return len(ids)
 
@@ -337,7 +372,9 @@ async def cancel_campaign_jobs(s: AsyncSession, campaign_id: uuid.UUID) -> None:
 async def job_counts(s: AsyncSession, campaign_id: uuid.UUID) -> dict[str, int]:
     rows = (
         await s.execute(
-            sa.select(Job.type, Job.status, sa.func.count()).where(Job.campaign_id == campaign_id).group_by(Job.type, Job.status)
+            sa.select(Job.type, Job.status, sa.func.count())
+            .where(Job.campaign_id == campaign_id)
+            .group_by(Job.type, Job.status)
         )
     ).all()
     out: dict[str, int] = {}

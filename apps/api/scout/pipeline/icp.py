@@ -12,7 +12,9 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field
+from unidecode import unidecode
 
 from scout.ai.factory import get_ai
 from scout.ai.models import ModelRole
@@ -31,9 +33,9 @@ from scout.schemas.campaign import (
     TechnologyCondition,
 )
 from scout.services.exclusion import default_exclusion_for_prompt
-from unidecode import unidecode
-
 from scout.util.text import normalize_key
+
+log = structlog.get_logger("icp")
 
 
 @dataclass
@@ -59,7 +61,10 @@ class AIWebsiteCondition(BaseModel):
         "offers/does/specializes in something (needs evidence). technology = uses a technology like Shopify."
     )
     terms: list[str] = Field(default_factory=list, description="Words for keyword conditions / technologies")
-    concept: str | None = Field(default=None, description="For semantic: what must be true, e.g. 'offers Instagram marketing services'")
+    concept: str | None = Field(
+        default=None,
+        description="For semantic: what must be true, e.g. 'offers Instagram marketing services'",
+    )
 
 
 class AIExclusion(BaseModel):
@@ -77,7 +82,9 @@ class AIParsedCampaign(BaseModel):
     name: str = Field(description="Short campaign name, e.g. 'FR marketing agencies · Instagram'")
     mode: CampaignMode = CampaignMode.people
     target_count: int = Field(ge=1, le=100000)
-    industries: list[str] = Field(default_factory=list, description="English industry names, singular, e.g. 'marketing agency'")
+    industries: list[str] = Field(
+        default_factory=list, description="English industry names, singular, e.g. 'marketing agency'"
+    )
     keywords: list[str] = Field(default_factory=list)
     countries: list[str] = Field(default_factory=list, description="ISO alpha-2")
     regions: list[str] = Field(default_factory=list)
@@ -93,7 +100,9 @@ class AIParsedCampaign(BaseModel):
     minimum_icp_score: int | None = None
     exclusion: AIExclusion = Field(default_factory=AIExclusion)
     enrichments: list[EnrichmentRequest] = Field(default_factory=list)
-    seed_from_current_list: bool = Field(default=False, description="True when the request targets companies already in the current list")
+    seed_from_current_list: bool = Field(
+        default=False, description="True when the request targets companies already in the current list"
+    )
     seed_from_selection: bool = False
 
 
@@ -120,45 +129,174 @@ intelligence app. Rules:
 _NUM = r"(\d{1,3}(?:[ ,.  ]\d{3})+|\d+(?:\.\d+)?\s*[kK]?)"
 
 COUNTRY_WORDS: dict[str, str] = {
-    "france": "FR", "french": "FR", "francais": "FR", "francaises": "FR", "francaise": "FR", "français": "FR",
-    "française": "FR", "françaises": "FR", "belgium": "BE", "belgian": "BE", "belgique": "BE", "belges": "BE",
-    "switzerland": "CH", "swiss": "CH", "suisse": "CH", "suisses": "CH", "germany": "DE", "german": "DE",
-    "allemagne": "DE", "spain": "ES", "spanish": "ES", "espagne": "ES", "italy": "IT", "italian": "IT", "italie": "IT",
-    "uk": "GB", "united kingdom": "GB", "british": "GB", "england": "GB", "royaume uni": "GB", "us": "US", "usa": "US",
-    "united states": "US", "american": "US", "etats unis": "US", "canada": "CA", "canadian": "CA", "quebec": "CA",
-    "netherlands": "NL", "dutch": "NL", "pays bas": "NL", "portugal": "PT", "ireland": "IE", "luxembourg": "LU",
-    "morocco": "MA", "maroc": "MA", "australia": "AU",
+    "france": "FR",
+    "french": "FR",
+    "francais": "FR",
+    "francaises": "FR",
+    "francaise": "FR",
+    "français": "FR",
+    "française": "FR",
+    "françaises": "FR",
+    "belgium": "BE",
+    "belgian": "BE",
+    "belgique": "BE",
+    "belges": "BE",
+    "switzerland": "CH",
+    "swiss": "CH",
+    "suisse": "CH",
+    "suisses": "CH",
+    "germany": "DE",
+    "german": "DE",
+    "allemagne": "DE",
+    "spain": "ES",
+    "spanish": "ES",
+    "espagne": "ES",
+    "italy": "IT",
+    "italian": "IT",
+    "italie": "IT",
+    "uk": "GB",
+    "united kingdom": "GB",
+    "british": "GB",
+    "england": "GB",
+    "royaume uni": "GB",
+    "us": "US",
+    "usa": "US",
+    "united states": "US",
+    "american": "US",
+    "etats unis": "US",
+    "canada": "CA",
+    "canadian": "CA",
+    "quebec": "CA",
+    "netherlands": "NL",
+    "dutch": "NL",
+    "pays bas": "NL",
+    "portugal": "PT",
+    "ireland": "IE",
+    "luxembourg": "LU",
+    "morocco": "MA",
+    "maroc": "MA",
+    "australia": "AU",
 }
 
 FR_CITIES = [
-    "paris", "lyon", "marseille", "toulouse", "nice", "nantes", "montpellier", "strasbourg", "bordeaux", "lille",
-    "rennes", "reims", "toulon", "grenoble", "dijon", "angers", "nimes", "clermont ferrand", "aix en provence", "brest",
-    "tours", "amiens", "limoges", "annecy", "perpignan", "metz", "besancon", "orleans", "rouen", "caen", "nancy",
-    "avignon", "la rochelle", "pau", "biarritz", "bayonne", "cannes", "antibes", "le mans", "saint etienne",
+    "paris",
+    "lyon",
+    "marseille",
+    "toulouse",
+    "nice",
+    "nantes",
+    "montpellier",
+    "strasbourg",
+    "bordeaux",
+    "lille",
+    "rennes",
+    "reims",
+    "toulon",
+    "grenoble",
+    "dijon",
+    "angers",
+    "nimes",
+    "clermont ferrand",
+    "aix en provence",
+    "brest",
+    "tours",
+    "amiens",
+    "limoges",
+    "annecy",
+    "perpignan",
+    "metz",
+    "besancon",
+    "orleans",
+    "rouen",
+    "caen",
+    "nancy",
+    "avignon",
+    "la rochelle",
+    "pau",
+    "biarritz",
+    "bayonne",
+    "cannes",
+    "antibes",
+    "le mans",
+    "saint etienne",
 ]
 
 TITLE_WORDS: list[tuple[str, list[str], list[RoleFamily]]] = [
     (r"co[- ]?founders?|co[- ]?fondat\w*", ["Co-Founder"], [RoleFamily.founder]),
     (r"founders?|fondat\w*", ["Founder"], [RoleFamily.founder]),
     (r"\bceos?\b|chief executive|pdg|directeur g[ée]n[ée]ral|\bdg\b", ["CEO"], [RoleFamily.executive]),
-    (r"owners?|propri[ée]taires?|g[ée]rant\w*|dirigeant\w*", ["Owner"], [RoleFamily.founder, RoleFamily.executive]),
+    (
+        r"owners?|propri[ée]taires?|g[ée]rant\w*|dirigeant\w*",
+        ["Owner"],
+        [RoleFamily.founder, RoleFamily.executive],
+    ),
     (r"managing directors?", ["Managing Director"], [RoleFamily.executive]),
     (r"pr[ée]sident\w*", ["President"], [RoleFamily.executive]),
-    (r"head of marketing|marketing directors?|directeur marketing|directrice marketing|\bcmo\b|responsable marketing|marketing decision makers?", ["Head of Marketing", "Marketing Director", "CMO"], [RoleFamily.marketing]),
+    (
+        r"head of marketing|marketing directors?|directeur marketing|directrice marketing|\bcmo\b|responsable marketing|marketing decision makers?",
+        ["Head of Marketing", "Marketing Director", "CMO"],
+        [RoleFamily.marketing],
+    ),
     (r"head of growth", ["Head of Growth"], [RoleFamily.marketing]),
-    (r"head of sales|sales directors?|directeur commercial|\bcso\b", ["Head of Sales", "Sales Director"], [RoleFamily.sales]),
+    (
+        r"head of sales|sales directors?|directeur commercial|\bcso\b",
+        ["Head of Sales", "Sales Director"],
+        [RoleFamily.sales],
+    ),
     (r"\bcto\b|head of engineering|directeur technique", ["CTO"], [RoleFamily.technology]),
-    (r"decision[- ]makers?|d[ée]cideurs?", ["Founder", "CEO", "Owner", "Managing Director"], [RoleFamily.founder, RoleFamily.executive]),
+    (
+        r"decision[- ]makers?|d[ée]cideurs?",
+        ["Founder", "CEO", "Owner", "Managing Director"],
+        [RoleFamily.founder, RoleFamily.executive],
+    ),
 ]
 
 _STOP_TERMS = {
-    "the", "and", "for", "with", "services", "service", "offer", "offers", "gestion", "management", "de", "la", "le",
-    "les", "des", "du", "en", "et", "pour", "their", "they", "real", "really",
+    "the",
+    "and",
+    "for",
+    "with",
+    "services",
+    "service",
+    "offer",
+    "offers",
+    "gestion",
+    "management",
+    "de",
+    "la",
+    "le",
+    "les",
+    "des",
+    "du",
+    "en",
+    "et",
+    "pour",
+    "their",
+    "they",
+    "real",
+    "really",
 }
 
 TECH_NAMES = [
-    "shopify", "wordpress", "woocommerce", "webflow", "wix", "squarespace", "hubspot", "klaviyo", "mailchimp",
-    "salesforce", "prestashop", "magento", "framer", "bubble", "intercom", "calendly", "stripe", "next.js", "react",
+    "shopify",
+    "wordpress",
+    "woocommerce",
+    "webflow",
+    "wix",
+    "squarespace",
+    "hubspot",
+    "klaviyo",
+    "mailchimp",
+    "salesforce",
+    "prestashop",
+    "magento",
+    "framer",
+    "bubble",
+    "intercom",
+    "calendly",
+    "stripe",
+    "next.js",
+    "react",
 ]
 
 
@@ -179,11 +317,14 @@ def _industries_from_text(text: str) -> list[str]:
         found = match_industries(text)
         if found:
             return [p.key.replace("_", " ") for p in found[:2]]
-    except Exception:  # taxonomy optional at parse time
-        pass
+    except Exception as exc:  # taxonomy optional at parse time
+        log.debug("icp.taxonomy_unavailable", error=str(exc))
     t = normalize_key(text)
     table = [
-        (r"(marketing|communication|digital|web|social media|seo|advertising|ad|pub\w*|growth) (agenc\w+|agence\w*)|agences? (de )?(marketing|communication|web|digitale?s?|social media|seo|pub\w*)", None),
+        (
+            r"(marketing|communication|digital|web|social media|seo|advertising|ad|pub\w*|growth) (agenc\w+|agence\w*)|agences? (de )?(marketing|communication|web|digitale?s?|social media|seo|pub\w*)",
+            None,
+        ),
         (r"saas|software compan\w+|startups?", "software company"),
         (r"dentist\w*|dentistes?", "dentist"),
         (r"restaurants?", "restaurant"),
@@ -202,7 +343,23 @@ def _industries_from_text(text: str) -> list[str]:
             continue
         if label is None:
             words = m.group(0)
-            kind = next((k for k in ("social media", "seo", "web", "digital", "communication", "advertising", "marketing", "growth") if k in words), "marketing")
+            kind = next(
+                (
+                    k
+                    for k in (
+                        "social media",
+                        "seo",
+                        "web",
+                        "digital",
+                        "communication",
+                        "advertising",
+                        "marketing",
+                        "growth",
+                    )
+                    if k in words
+                ),
+                "marketing",
+            )
             if "pub" in words:
                 kind = "advertising"
             label = f"{kind} agency"
@@ -218,7 +375,11 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
     low = raw.lower()
     # target count
     count = 100
-    m = re.search(rf"\b(?:find|get|give|trouve\w*|donne\w*|cherche\w*|want|veux|besoin de|another|more|encore)?\D{{0,20}}?{_NUM}\s*(?:more |new |nouveaux |nouvelles |autres )?(?:[a-zA-Zéèàç]+\s){{0,4}}?(?:leads?|contacts?|agenc|compan|companies|entreprises?|soci|people|personnes|prospects?|startups?|founders?|fondat|dentist|restaurants?|businesses|firms?|cabinets?|brands?|marques?|ceos?|owners?)", raw, re.I)
+    m = re.search(
+        rf"\b(?:find|get|give|trouve\w*|donne\w*|cherche\w*|want|veux|besoin de|another|more|encore)?\D{{0,20}}?{_NUM}\s*(?:more |new |nouveaux |nouvelles |autres )?(?:[a-zA-Zéèàç]+\s){{0,4}}?(?:leads?|contacts?|agenc|compan|companies|entreprises?|soci|people|personnes|prospects?|startups?|founders?|fondat|dentist|restaurants?|businesses|firms?|cabinets?|brands?|marques?|ceos?|owners?)",
+        raw,
+        re.I,
+    )
     if m:
         try:
             count = _to_int(m.group(1))
@@ -233,7 +394,10 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
                 count = 100
     count = max(1, min(count, 100_000))
     mode = CampaignMode.people
-    if re.search(r"\b(companies only|only companies|company list|no contacts?|without (contacts?|people)|juste les entreprises|seulement les entreprises|uniquement les entreprises|sans contact)\b", low):
+    if re.search(
+        r"\b(companies only|only companies|company list|no contacts?|without (contacts?|people)|juste les entreprises|seulement les entreprises|uniquement les entreprises|sans contact)\b",
+        low,
+    ):
         mode = CampaignMode.companies
     industries = _industries_from_text(raw)
     countries = []
@@ -246,14 +410,23 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
     # employee range
     emin = emax = None
     folded = unidecode(raw).lower()
-    rm = re.search(r"(\d+)\s*(?:-|to|a|and|et)\s*(\d+)\s*(?:employees|employ\w*|salari\w+|people|personnes|staff|collaborat\w+|emp)", folded)
+    rm = re.search(
+        r"(\d+)\s*(?:-|to|a|and|et)\s*(\d+)\s*(?:employees|employ\w*|salari\w+|people|personnes|staff|collaborat\w+|emp)",
+        folded,
+    )
     if rm:
         emin, emax = int(rm.group(1)), int(rm.group(2))
     else:
-        rm = re.search(r"(?:under|less than|fewer than|moins de|max(?:imum)?)\s*(\d+)\s*(?:employees|salari\w+|people|personnes|staff)", t)
+        rm = re.search(
+            r"(?:under|less than|fewer than|moins de|max(?:imum)?)\s*(\d+)\s*(?:employees|salari\w+|people|personnes|staff)",
+            t,
+        )
         if rm:
             emax = int(rm.group(1))
-        rm2 = re.search(r"(?:over|more than|plus de|at least|au moins|min(?:imum)?)\s*(\d+)\s*(?:employees|salari\w+|people|personnes|staff)", t)
+        rm2 = re.search(
+            r"(?:over|more than|plus de|at least|au moins|min(?:imum)?)\s*(\d+)\s*(?:employees|salari\w+|people|personnes|staff)",
+            t,
+        )
         if rm2:
             emin = int(rm2.group(1))
         rm3 = re.search(r"(\d+)\s*\+\s*(?:employees|salari\w+|people)", t)
@@ -273,19 +446,36 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
         families = [RoleFamily.founder, RoleFamily.executive]
     # website conditions
     conds: list[AIWebsiteCondition] = []
-    sm = re.search(r"(?:actually|really|vraiment|r[ée]ellement)?\s*(?:offer|offers|offering|sell|sells|provide|provides|specializ\w+ in|propos\w+|vend\w*|sp[ée]cialis\w+ (?:en|dans))\s+([^.;,]+?)(?:\s+services?|\s+management)?(?:[.;,]|$)", low)
+    sm = re.search(
+        r"(?:actually|really|vraiment|r[ée]ellement)?\s*(?:offer|offers|offering|sell|sells|provide|provides|specializ\w+ in|propos\w+|vend\w*|sp[ée]cialis\w+ (?:en|dans))\s+([^.;,]+?)(?:\s+services?|\s+management)?(?:[.;,]|$)",
+        low,
+    )
     if sm and re.search(r"actually|really|vraiment|r[ée]ellement|must|doivent|offer|propos", low):
         concept = re.sub(r"^(?:vraiment|r[ée]ellement|really|actually)\s+", "", sm.group(1).strip())
         concept = re.sub(r"^(?:de la|de l'|du|des|de|d')\s*", "", concept).strip()
         if concept and len(concept) < 80 and not re.search(r"\bemail|\bfounder|\bceo\b", concept):
             full = sm.group(0).strip(" .,;")
-            key_terms = [w for w in re.findall(r"[a-zà-ÿ0-9]+", concept) if w not in _STOP_TERMS and len(w) > 2]
-            conds.append(AIWebsiteCondition(kind="semantic", concept=f"offers {concept}" + (" services" if "service" in full and "service" not in concept else ""), terms=key_terms[:6] or [concept]))
-    km = re.search(r"(?:mention|mentions|mentioning|contain|contains|talks? about|mentionn\w+|parl\w+ de|contien\w+)\s+([^.;]+)", low)
+            key_terms = [
+                w for w in re.findall(r"[a-zà-ÿ0-9]+", concept) if w not in _STOP_TERMS and len(w) > 2
+            ]
+            conds.append(
+                AIWebsiteCondition(
+                    kind="semantic",
+                    concept=f"offers {concept}"
+                    + (" services" if "service" in full and "service" not in concept else ""),
+                    terms=key_terms[:6] or [concept],
+                )
+            )
+    km = re.search(
+        r"(?:mention|mentions|mentioning|contain|contains|talks? about|mentionn\w+|parl\w+ de|contien\w+)\s+([^.;]+)",
+        low,
+    )
     if km:
         part = km.group(1)
         joiner_all = " and " in part or " et " in part
-        terms = [x.strip(" '\"") for x in re.split(r",|\bor\b|\bou\b|\band\b|\bet\b", part) if x.strip(" '\"")]
+        terms = [
+            x.strip(" '\"") for x in re.split(r",|\bor\b|\bou\b|\band\b|\bet\b", part) if x.strip(" '\"")
+        ]
         terms = [x for x in terms if 0 < len(x) <= 40][:6]
         if terms:
             conds.append(AIWebsiteCondition(kind="keyword_all" if joiner_all else "keyword_any", terms=terms))
@@ -293,7 +483,9 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
         if re.search(rf"\b(use|uses|using|utilis\w+|built with|on)\s+{re.escape(tech)}\b", low):
             conds.append(AIWebsiteCondition(kind="technology", terms=[tech.title()]))
     # email
-    require_email = mode == CampaignMode.people and not re.search(r"\b(no email|email optional|sans email|pas besoin d.?email)\b", low)
+    require_email = mode == CampaignMode.people and not re.search(
+        r"\b(no email|email optional|sans email|pas besoin d.?email)\b", low
+    )
     statuses = [EmailStatus.SAFE]
     if re.search(r"\brisky\b.*\b(ok|fine|accept)|accept\w* risky|catch[- ]all ok", low):
         statuses = [EmailStatus.SAFE, EmailStatus.RISKY]
@@ -302,8 +494,15 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
     default_mode = default_exclusion_for_prompt(raw)
     if default_mode:
         ex.mode = default_mode
-    if re.search(r"(compan\w+|entreprises?|soci[ée]t[ée]s?) (i|que j)\w* (already|d[ée]j[àa])|only new compan|nouvelles entreprises|new companies|companies i already have|don.?t include companies", low):
-        ex.mode = ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE_AND_COMPANIES if mode == CampaignMode.people else ExclusionMode.EXCLUDE_PREVIOUS_COMPANIES
+    if re.search(
+        r"(compan\w+|entreprises?|soci[ée]t[ée]s?) (i|que j)\w* (already|d[ée]j[àa])|only new compan|nouvelles entreprises|new companies|companies i already have|don.?t include companies",
+        low,
+    ):
+        ex.mode = (
+            ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE_AND_COMPANIES
+            if mode == CampaignMode.people
+            else ExclusionMode.EXCLUDE_PREVIOUS_COMPANIES
+        )
         ex.exclude_existing_companies = True
         ex.allow_new_people_at_existing_companies = False
     if re.search(r"exported|export[ée]s? (before|avant|d[ée]j[àa])|d[ée]j[àa] export", low):
@@ -314,19 +513,34 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
     if cm and re.search(r"seen|vu|scrap|exclude|exclu", low):
         ex.mode = ExclusionMode.EXCLUDE_WITHIN_COOLDOWN
         ex.cooldown_days = int(cm.group(1))
-    if re.search(r"(uploaded|imported) (file|csv|list)|my (upload|import)|fichier (import|upload)\w*|mon (import|fichier)", low):
+    if re.search(
+        r"(uploaded|imported) (file|csv|list)|my (upload|import)|fichier (import|upload)\w*|mon (import|fichier)",
+        low,
+    ):
         ex.exclude_latest_import = True
         if ex.mode == ExclusionMode.NONE:
             ex.mode = ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE
     for name in sorted(ctx.lists, key=len, reverse=True):
-        if len(name) >= 3 and re.search(rf"\b{re.escape(name)}\b", low) and re.search(r"exclude|not|no one|anyone|sans|pas|aucun|except|hors|repeat", low):
+        if (
+            len(name) >= 3
+            and re.search(rf"\b{re.escape(name)}\b", low)
+            and re.search(r"exclude|not|no one|anyone|sans|pas|aucun|except|hors|repeat", low)
+        ):
             ex.exclude_list_names.append(name)
     if ex.exclude_list_names and ex.mode in (ExclusionMode.NONE, ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE):
         ex.mode = ExclusionMode.EXCLUDE_SPECIFIC_LISTS if ex.mode == ExclusionMode.NONE else ex.mode
-    if re.search(r"(ok|okay|fine|acceptable|d.?accord) if the company|company (was|is) already|entreprise (est )?d[ée]j[àa]", low):
+    if re.search(
+        r"(ok|okay|fine|acceptable|d.?accord) if the company|company (was|is) already|entreprise (est )?d[ée]j[àa]",
+        low,
+    ):
         ex.allow_new_people_at_existing_companies = True
         ex.exclude_existing_companies = False
-    seed_list = bool(re.search(r"(this|current|ce|cette) list|(companies|entreprises) (in|de|of) (this|my|cette|ma) list|my existing companies|mes entreprises existantes|existing companies", low))
+    seed_list = bool(
+        re.search(
+            r"(this|current|ce|cette) list|(companies|entreprises) (in|de|of) (this|my|cette|ma) list|my existing companies|mes entreprises existantes|existing companies",
+            low,
+        )
+    )
     if re.search(r"different|another|other|autre|nouveau|nouvelle", low) and seed_list:
         ex.mode = ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE
         ex.allow_new_people_at_existing_companies = True
@@ -338,17 +552,32 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
     if sm2:
         min_score = int(sm2.group(1))
     max_people = 1
-    pm = re.search(r"(\d+)\s*(?:people|contacts|personnes|decision makers?)\s*(?:per|par)\s*(?:company|entreprise)", low)
+    pm = re.search(
+        r"(\d+)\s*(?:people|contacts|personnes|decision makers?)\s*(?:per|par)\s*(?:company|entreprise)", low
+    )
     if pm:
         max_people = max(1, min(10, int(pm.group(1))))
     name_bits = [*(i.title() for i in industries[:1]), *(cities[:1] or countries[:1])]
     name = " · ".join(name_bits) or raw[:48]
     return AIParsedCampaign(
-        name=name, mode=mode, target_count=count, industries=industries, countries=countries, cities=cities,
-        employee_min=emin, employee_max=emax, website_conditions=conds, titles=titles if mode == CampaignMode.people else [],
-        role_families=families if mode == CampaignMode.people else [], require_email=require_email,
-        accepted_email_statuses=statuses, exclusion=ex, minimum_icp_score=min_score, max_people_per_company=max_people,
-        seed_from_current_list=seed_list, seed_from_selection=seed_selection,
+        name=name,
+        mode=mode,
+        target_count=count,
+        industries=industries,
+        countries=countries,
+        cities=cities,
+        employee_min=emin,
+        employee_max=emax,
+        website_conditions=conds,
+        titles=titles if mode == CampaignMode.people else [],
+        role_families=families if mode == CampaignMode.people else [],
+        require_email=require_email,
+        accepted_email_statuses=statuses,
+        exclusion=ex,
+        minimum_icp_score=min_score,
+        max_people_per_company=max_people,
+        seed_from_current_list=seed_list,
+        seed_from_selection=seed_selection,
     )
 
 
@@ -360,7 +589,11 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
             conds.append(KeywordCondition(type=c.kind, terms=[x.strip() for x in c.terms if x.strip()][:10]))
         elif c.kind == "semantic" and (c.concept or c.terms):
             concept = c.concept or " ".join(c.terms)
-            conds.append(SemanticCondition(type="semantic_service", concept=concept, keywords=[x for x in c.terms if x][:8]))
+            conds.append(
+                SemanticCondition(
+                    type="semantic_service", concept=concept, keywords=[x for x in c.terms if x][:8]
+                )
+            )
         elif c.kind == "technology" and c.terms:
             conds.append(TechnologyCondition(technologies=c.terms[:5]))
     ex_in = parsed.exclusion
@@ -373,13 +606,16 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
         mode = ExclusionMode.EXCLUDE_SPECIFIC_LISTS
     import_ids = [ctx.latest_import_id] if ex_in.exclude_latest_import and ctx.latest_import_id else []
     previous_companies = ex_in.exclude_existing_companies or mode in (
-        ExclusionMode.EXCLUDE_PREVIOUS_COMPANIES, ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE_AND_COMPANIES
+        ExclusionMode.EXCLUDE_PREVIOUS_COMPANIES,
+        ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE_AND_COMPANIES,
     )
     exclusion = ExclusionSpec(
         mode=mode,
-        previous_people=mode in (ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE, ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE_AND_COMPANIES),
+        previous_people=mode
+        in (ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE, ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE_AND_COMPANIES),
         previous_companies=previous_companies,
-        allow_new_people_at_existing_companies=not previous_companies and ex_in.allow_new_people_at_existing_companies,
+        allow_new_people_at_existing_companies=not previous_companies
+        and ex_in.allow_new_people_at_existing_companies,
         list_ids=list_ids,
         list_scope="both" if previous_companies else "people",
         import_ids=import_ids,
@@ -388,7 +624,9 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
     )
     seed = Seed()
     if parsed.seed_from_selection and (ctx.selected_company_ids or ctx.selected_person_ids):
-        seed = Seed(type="selection", company_ids=ctx.selected_company_ids, person_ids=ctx.selected_person_ids)
+        seed = Seed(
+            type="selection", company_ids=ctx.selected_company_ids, person_ids=ctx.selected_person_ids
+        )
     elif parsed.seed_from_current_list and ctx.current_list_id:
         seed = Seed(type="list", list_id=ctx.current_list_id)
     required: list[Any] = ["company"]
@@ -401,14 +639,20 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
         mode=parsed.mode,
         target_qualified_count=parsed.target_count,
         company_filters=CompanyFilters(
-            industries=parsed.industries, keywords=parsed.keywords, countries=parsed.countries,
-            regions=parsed.regions, cities=parsed.cities,
+            industries=parsed.industries,
+            keywords=parsed.keywords,
+            countries=parsed.countries,
+            regions=parsed.regions,
+            cities=parsed.cities,
             employee_range=EmployeeRange(min=parsed.employee_min, max=parsed.employee_max)
-            if parsed.employee_min is not None or parsed.employee_max is not None else None,
+            if parsed.employee_min is not None or parsed.employee_max is not None
+            else None,
         ),
         website_conditions=conds,
         people_filters=PeopleFilters(
-            titles=parsed.titles, role_families=parsed.role_families, max_people_per_company=parsed.max_people_per_company
+            titles=parsed.titles,
+            role_families=parsed.role_families,
+            max_people_per_company=parsed.max_people_per_company,
         ),
         required_fields=required,
         accepted_email_statuses=parsed.accepted_email_statuses or [EmailStatus.SAFE],
@@ -432,7 +676,9 @@ def _apply_like_profile(defn: CampaignDefinition, profile: dict[str, Any]) -> No
         cf.countries = profile["countries"][:3]
     if not cf.cities and profile.get("cities") and len(profile["cities"]) <= 5:
         cf.cities = profile["cities"]
-    if cf.employee_range is None and (profile.get("employee_min") is not None or profile.get("employee_max") is not None):
+    if cf.employee_range is None and (
+        profile.get("employee_min") is not None or profile.get("employee_max") is not None
+    ):
         cf.employee_range = EmployeeRange(min=profile.get("employee_min"), max=profile.get("employee_max"))
     if not defn.people_filters.titles and profile.get("titles"):
         defn.people_filters.titles = profile["titles"][:6]
@@ -457,7 +703,9 @@ async def parse_prompt(prompt: str, ctx: ParseContext | None = None) -> tuple[Ca
             f"{len(ctx.selected_person_ids) + len(ctx.selected_company_ids)}"
         )
         try:
-            res = await ai.structured(role=ModelRole.reasoning, system=ICP_SYSTEM, prompt=user, schema=AIParsedCampaign)
+            res = await ai.structured(
+                role=ModelRole.reasoning, system=ICP_SYSTEM, prompt=user, schema=AIParsedCampaign
+            )
             parsed = res.value
             parser = "gemini"
         except (AIUnavailable, RetryableError):

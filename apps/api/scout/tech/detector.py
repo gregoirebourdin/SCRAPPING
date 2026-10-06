@@ -29,7 +29,9 @@ log = structlog.get_logger(__name__)
 async def _technologies(company_id: uuid.UUID) -> list[Technology]:
     async with session_scope() as s:
         rows = (
-            await s.scalars(sa.select(Technology).where(Technology.company_id == company_id).order_by(Technology.name))
+            await s.scalars(
+                sa.select(Technology).where(Technology.company_id == company_id).order_by(Technology.name)
+            )
         ).all()
     return list(rows)
 
@@ -55,16 +57,28 @@ async def detect_technologies(
     force: bool = False,
     max_age_days: int = 30,
 ) -> list[Technology]:
-    """Current technologies of a company (cached rows when fresh, else a new scan)."""
+    """Current technologies of a company (cached rows when fresh, else a new scan).
+
+    Freshness is driven by ``companies.last_tech_scan_at`` so a site where nothing was detected is not
+    re-scanned on every call within ``max_age_days`` (rows' ``observed_at`` is the fallback for scans that
+    predate the column).
+    """
     now = datetime.now(UTC)
     async with session_scope() as s:
-        exists = await s.scalar(
-            sa.select(Company.id).where(Company.id == company_id, Company.workspace_id == workspace_id)
-        )
-        if exists is None:
+        last_scan = (
+            await s.execute(
+                sa.select(Company.id, Company.last_tech_scan_at).where(
+                    Company.id == company_id, Company.workspace_id == workspace_id
+                )
+            )
+        ).first()
+        if last_scan is None:
             raise PermanentError(f"company {company_id} not found", category=ErrorCategory.not_found)
-        latest = await s.scalar(sa.select(sa.func.max(Technology.observed_at)).where(Technology.company_id == company_id))
-    if not force and latest is not None and latest >= now - timedelta(days=max_age_days):
+        latest = await s.scalar(
+            sa.select(sa.func.max(Technology.observed_at)).where(Technology.company_id == company_id)
+        )
+    scanned_at = last_scan.last_tech_scan_at or latest
+    if not force and scanned_at is not None and scanned_at >= now - timedelta(days=max_age_days):
         return await _technologies(company_id)
 
     home = await _home_page(workspace_id, company_id)
@@ -83,6 +97,7 @@ async def detect_technologies(
         detector = "builtin"
 
     async with session_scope() as s:
+        await s.execute(sa.update(Company).where(Company.id == company_id).values(last_tech_scan_at=now))
         names = [t.name for t in detected]
         # Technologies no longer present on the site are removed; history stays in observations.
         await s.execute(
@@ -118,7 +133,12 @@ async def detect_technologies(
                     workspace_id=workspace_id,
                     company_id=company_id,
                     field_name="technology",
-                    value_json={"name": tech.name, "category": tech.category, "version": tech.version, "detector": detector},
+                    value_json={
+                        "name": tech.name,
+                        "category": tech.category,
+                        "version": tech.version,
+                        "detector": detector,
+                    },
                     source_type=SourceType.tech_scan,
                     source_key="tech_scan",
                     source_url=home.url,

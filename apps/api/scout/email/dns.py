@@ -81,9 +81,7 @@ async def resolve_mx(domain: str) -> MxInfo:
     except dns.exception.DNSException as exc:
         return MxInfo(domain, has_mx=False, error=f"dns_error:{type(exc).__name__}", transient=True)
     else:
-        records = sorted(
-            (int(r.preference), r.exchange.to_text().rstrip(".").lower()) for r in answer
-        )
+        records = sorted((int(r.preference), r.exchange.to_text().rstrip(".").lower()) for r in answer)
     has_a = await _has_address(resolver, domain)
     hosts = [h for _, h in records if h]
     if records and not hosts:  # "0 ." only → null MX
@@ -106,7 +104,7 @@ async def _cache_get(domain: str) -> MxInfo | None:
         mx_hosts=[str(h) for h in (row.mx_hosts or [])],
         has_a=bool(row.has_a),
         error=row.error,
-        null_mx=row.error == NULL_MX_ERROR,
+        null_mx=bool(row.null_mx) or row.error == NULL_MX_ERROR,
         cached=True,
     )
 
@@ -116,6 +114,7 @@ async def _cache_put(info: MxInfo) -> None:
         "has_mx": info.has_mx,
         "mx_hosts": info.mx_hosts,
         "has_a": info.has_a,
+        "null_mx": info.null_mx,
         "error": info.error,
         "checked_at": sa.func.now(),
     }
@@ -178,4 +177,3 @@ async def store_catch_all(domain: str, value: bool | None) -> None:
             await s.execute(stmt)
     except Exception as exc:
         log.warning("email.dns.catch_all_write_failed", domain=d, error=str(exc))
-

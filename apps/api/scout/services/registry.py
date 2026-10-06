@@ -7,6 +7,7 @@ discovery-history counters and lead exposures. Removing list memberships never t
 from __future__ import annotations
 
 import math
+import re
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -15,6 +16,7 @@ from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scout.db.enums import CompanyStatus, EntityType, ExposureType, SourceType
@@ -27,6 +29,7 @@ from scout.db.models import (
     PersonFieldObservation,
 )
 from scout.errors import ValidationFailed
+from scout.extract.names import looks_like_company_name
 from scout.util.text import normalize_company_name, normalize_person_name, title_case_name
 from scout.util.urls import is_company_domain, normalize_website, registrable_domain
 
@@ -49,9 +52,25 @@ SOURCE_TYPE_QUALITY: dict[SourceType, float] = {
 FRESHNESS_HALF_LIFE_DAYS = 180.0
 
 COMPANY_FIELDS = {
-    "name", "website_url", "description", "country", "region", "city", "postal_code", "address", "latitude",
-    "longitude", "industry", "sub_industry", "category_raw", "employee_count", "phone", "linkedin_url",
-    "registry_id", "founded_year", "status",
+    "name",
+    "website_url",
+    "description",
+    "country",
+    "region",
+    "city",
+    "postal_code",
+    "address",
+    "latitude",
+    "longitude",
+    "industry",
+    "sub_industry",
+    "category_raw",
+    "employee_count",
+    "phone",
+    "linkedin_url",
+    "registry_id",
+    "founded_year",
+    "status",
 }
 PERSON_FIELDS = {"full_name", "job_title", "public_profile_url", "location", "phone"}
 
@@ -135,17 +154,25 @@ async def find_company(
     """Identity resolution: domain > official identifier > fuzzy name + same city (only without stronger ids)."""
     if domain:
         c = await s.scalar(
-            sa.select(Company).where(Company.workspace_id == workspace_id, Company.normalized_domain == domain)
+            sa.select(Company).where(
+                Company.workspace_id == workspace_id, Company.normalized_domain == domain
+            )
         )
         if c:
             return c
     if registry_id:
+        # Same official identifier: the source must agree when both sides know it (a SIREN read on a legal
+        # notice before the registry saw the company has no source yet).
+        source_ok = (
+            sa.or_(Company.registry_source == registry_source, Company.registry_source.is_(None))
+            if registry_source
+            else sa.true()
+        )
         c = await s.scalar(
-            sa.select(Company).where(
-                Company.workspace_id == workspace_id,
-                Company.registry_source == registry_source,
-                Company.registry_id == registry_id,
-            )
+            sa.select(Company)
+            .where(Company.workspace_id == workspace_id, Company.registry_id == registry_id, source_ok)
+            .order_by(Company.registry_source.is_(None), Company.created_at)
+            .limit(1)
         )
         if c:
             return c
@@ -168,8 +195,24 @@ async def find_company(
 
 def _company_facts(data: CompanyInput) -> dict[str, Any]:
     facts: dict[str, Any] = {}
-    for f in ("name", "description", "country", "region", "city", "postal_code", "address", "latitude", "longitude",
-              "industry", "sub_industry", "category_raw", "phone", "linkedin_url", "registry_id", "founded_year"):
+    for f in (
+        "name",
+        "description",
+        "country",
+        "region",
+        "city",
+        "postal_code",
+        "address",
+        "latitude",
+        "longitude",
+        "industry",
+        "sub_industry",
+        "category_raw",
+        "phone",
+        "linkedin_url",
+        "registry_id",
+        "founded_year",
+    ):
         v = getattr(data, f)
         if v not in (None, ""):
             facts[f] = v
@@ -229,7 +272,9 @@ async def upsert_company(
                 company.first_campaign_id = campaign_id
         if domain and not company.normalized_domain:
             taken = await s.scalar(
-                sa.select(Company.id).where(Company.workspace_id == workspace_id, Company.normalized_domain == domain)
+                sa.select(Company.id).where(
+                    Company.workspace_id == workspace_id, Company.normalized_domain == domain
+                )
             )
             if taken is None:
                 company.domain = company.normalized_domain = domain
@@ -279,7 +324,9 @@ async def observe_company(
 
 def _values_agree(a: Any, b: Any) -> bool:
     if isinstance(a, str) and isinstance(b, str):
-        return normalize_company_name(a) == normalize_company_name(b) or a.strip().lower() == b.strip().lower()
+        return (
+            normalize_company_name(a) == normalize_company_name(b) or a.strip().lower() == b.strip().lower()
+        )
     return a == b
 
 
@@ -305,7 +352,9 @@ def _pick_best(observations: Sequence[Any]) -> tuple[Any, float, bool]:
     best_score, best = totals[0]
     # conflict: another credible observation disagrees
     conflict = any(
-        sc >= 0.6 and not _values_agree(o.value_json, best.value_json) and o.field_name not in ("description",)
+        sc >= 0.6
+        and not _values_agree(o.value_json, best.value_json)
+        and o.field_name not in ("description",)
         for sc, o in scored
     )
     return best.value_json, min(1.0, best_score), conflict
@@ -318,7 +367,8 @@ async def resolve_company_fields(s: AsyncSession, company: Company, fields: Iter
     rows = (
         await s.scalars(
             sa.select(CompanyFieldObservation).where(
-                CompanyFieldObservation.company_id == company.id, CompanyFieldObservation.field_name.in_(fields)
+                CompanyFieldObservation.company_id == company.id,
+                CompanyFieldObservation.field_name.in_(fields),
             )
         )
     ).all()
@@ -338,10 +388,12 @@ async def resolve_company_fields(s: AsyncSession, company: Company, fields: Iter
         elif f == "website_url":
             company.website_url = value
         elif f == "status":
-            company.status = CompanyStatus(value) if value in CompanyStatus._value2member_map_ else company.status
+            company.status = (
+                CompanyStatus(value) if value in CompanyStatus._value2member_map_ else company.status
+            )
         elif f == "registry_id":
             if not company.registry_id:
-                company.registry_id = str(value)
+                await _set_registry_id(s, company, str(value))
         elif f == "name":
             company.name = str(value)
             company.normalized_name = normalize_company_name(str(value))
@@ -359,6 +411,32 @@ async def resolve_company_fields(s: AsyncSession, company: Company, fields: Iter
     company.has_conflicts = any_conflict
     if any_conflict:
         company.needs_review = True
+
+
+def infer_registry_source(registry_id: str, country: str | None) -> str | None:
+    """Registry an identifier belongs to, when unambiguous (a 9-digit French SIREN)."""
+    if re.fullmatch(r"\d{9}", registry_id) and (country or "FR").upper() == "FR":
+        return "fr_sirene"
+    return None
+
+
+async def _set_registry_id(s: AsyncSession, company: Company, registry_id: str) -> None:
+    """Adopt an observed official identifier unless another company of the workspace already owns it
+    (that is a potential duplicate: flagged for review, never merged silently)."""
+    source = company.registry_source or infer_registry_source(registry_id, company.country)
+    owner = await s.scalar(
+        sa.select(Company.id).where(
+            Company.workspace_id == company.workspace_id,
+            Company.registry_id == registry_id,
+            Company.registry_source.is_not_distinct_from(source),
+            Company.id != company.id,
+        )
+    )
+    if owner is not None:
+        company.needs_review = True
+        return
+    company.registry_id = registry_id
+    company.registry_source = source
 
 
 # ---------------------------------------------------------------------------------------------
@@ -395,7 +473,9 @@ async def find_person(
             return p
     if profile_url:
         p = await s.scalar(
-            sa.select(Person).where(Person.workspace_id == workspace_id, Person.public_profile_url == profile_url)
+            sa.select(Person).where(
+                Person.workspace_id == workspace_id, Person.public_profile_url == profile_url
+            )
         )
         if p:
             return p
@@ -432,6 +512,13 @@ async def upsert_person(
     full_name = title_case_name(full_name) if full_name.isupper() else full_name.strip()
     if not full_name:
         raise ValidationFailed("Empty person name")
+    # Company ≠ person (spec §199): an organisation name is never stored as a person, whatever the path
+    # (extraction, registry directors, import, AI tool).
+    company_name = (
+        await s.scalar(sa.select(Company.name).where(Company.id == company_id)) if company_id else None
+    )
+    if looks_like_company_name(full_name, company_name):
+        raise ValidationFailed(f"'{full_name}' looks like a company name, not a person")
     person = await find_person(
         s, workspace_id, company_id=company_id, full_name=full_name, profile_url=profile_url, email=email
     )
@@ -439,7 +526,7 @@ async def upsert_person(
     now = datetime.now(UTC)
     if person is None:
         parts = full_name.split()
-        person = Person(
+        new = Person(
             workspace_id=workspace_id,
             company_id=company_id,
             full_name=full_name,
@@ -450,17 +537,35 @@ async def upsert_person(
             last_campaign_id=campaign_id,
             identity_confidence=round(evidence.confidence, 3),
         )
-        s.add(person)
-        await s.flush()
-        created = True
-    else:
+        await s.flush()  # nothing else pending may be caught in the savepoint below
+        try:
+            # Savepoint: a concurrent campaign may insert the same person (same company + name or profile)
+            # between our lookup and this insert; then we reuse its row instead of failing the job.
+            async with s.begin_nested():
+                s.add(new)
+                await s.flush()
+            person, created = new, True
+        except IntegrityError:
+            person = await find_person(
+                s,
+                workspace_id,
+                company_id=company_id,
+                full_name=full_name,
+                profile_url=profile_url,
+                email=email,
+            )
+            if person is None:
+                raise
+    if not created:
         person.last_seen_at = now
         if campaign_id:
             person.last_campaign_id = campaign_id
             person.first_campaign_id = person.first_campaign_id or campaign_id
         # corroboration raises identity confidence (bounded)
         prev = person.identity_confidence or 0.0
-        person.identity_confidence = round(min(0.98, max(prev, evidence.confidence) + (0.03 if prev else 0.0)), 3)
+        person.identity_confidence = round(
+            min(0.98, max(prev, evidence.confidence) + (0.03 if prev else 0.0)), 3
+        )
     if title_info is not None:
         person.normalized_title = title_info.normalized_title
         person.role_family = title_info.role_family
@@ -488,7 +593,10 @@ async def upsert_person(
             )
             .on_conflict_do_update(
                 index_elements=["person_id", "company_id"],
-                set_={"title": sa.func.coalesce(job_title, PersonEmployment.title), "observed_at": sa.func.now()},
+                set_={
+                    "title": sa.func.coalesce(job_title, PersonEmployment.title),
+                    "observed_at": sa.func.now(),
+                },
             )
         )
         await s.execute(stmt)
@@ -583,14 +691,24 @@ async def record_exposures(
     extra = {"campaign_id": campaign_id, "list_id": list_id, "import_id": import_id, "export_id": export_id}
     if person_ids:
         rows = (
-            await s.execute(sa.select(Person.id, Person.company_id).where(Person.workspace_id == workspace_id, Person.id.in_(person_ids)))
+            await s.execute(
+                sa.select(Person.id, Person.company_id).where(
+                    Person.workspace_id == workspace_id, Person.id.in_(person_ids)
+                )
+            )
         ).all()
         if rows:
             await s.execute(
                 sa.insert(LeadExposure),
                 [
-                    {"workspace_id": workspace_id, "entity_type": EntityType.person, "entity_id": pid,
-                     "company_id": cid, "exposure_type": exposure_type, **extra}
+                    {
+                        "workspace_id": workspace_id,
+                        "entity_type": EntityType.person,
+                        "entity_id": pid,
+                        "company_id": cid,
+                        "exposure_type": exposure_type,
+                        **extra,
+                    }
                     for pid, cid in rows
                 ],
             )
@@ -598,14 +716,22 @@ async def record_exposures(
             await _bump_history(s, Person, [pid for pid, _ in rows], exposure_type, campaign_id)
     if company_ids:
         owned = (
-            await s.scalars(sa.select(Company.id).where(Company.workspace_id == workspace_id, Company.id.in_(company_ids)))
+            await s.scalars(
+                sa.select(Company.id).where(Company.workspace_id == workspace_id, Company.id.in_(company_ids))
+            )
         ).all()
         if owned:
             await s.execute(
                 sa.insert(LeadExposure),
                 [
-                    {"workspace_id": workspace_id, "entity_type": EntityType.company, "entity_id": cid,
-                     "company_id": cid, "exposure_type": exposure_type, **extra}
+                    {
+                        "workspace_id": workspace_id,
+                        "entity_type": EntityType.company,
+                        "entity_id": cid,
+                        "company_id": cid,
+                        "exposure_type": exposure_type,
+                        **extra,
+                    }
                     for cid in owned
                 ],
             )
@@ -613,7 +739,10 @@ async def record_exposures(
 
 
 async def _bump_history(
-    s: AsyncSession, model: type[Company] | type[Person], ids: list[uuid.UUID], exposure_type: ExposureType,
+    s: AsyncSession,
+    model: type[Company] | type[Person],
+    ids: list[uuid.UUID],
+    exposure_type: ExposureType,
     campaign_id: uuid.UUID | None,
 ) -> None:
     if not ids:

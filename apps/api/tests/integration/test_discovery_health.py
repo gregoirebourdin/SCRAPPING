@@ -37,7 +37,9 @@ async def test_counters_are_accumulated(db) -> None:
     assert (row.requests, row.successes, row.failures, row.blocks) == (4, 2, 2, 1)
     assert (row.results, row.total_latency_ms, row.duplicates, row.qualified) == (30, 250, 6, 3)
     assert row.consecutive_failures == 2 and row.last_error == "blocked" and row.last_success_at is not None
-    assert row.name == SOURCE_CATALOG["fr_registry"].name and row.quality_score == 0.95  # created from the catalog
+    assert (
+        row.name == SOURCE_CATALOG["fr_registry"].name and row.quality_score == 0.95
+    )  # created from the catalog
     h = (await health_snapshot())["fr_registry"]
     assert h.success_rate == 0.5 and h.block_rate == 0.25 and h.avg_latency_ms == 62.5
     assert h.results_per_query == 7.5 and h.duplicate_rate == 0.2 and h.qualification_rate == 0.1
@@ -87,7 +89,9 @@ async def test_seed_sources_is_idempotent_and_preserves_operator_settings(db) ->
         count = await s.scalar(sa.select(sa.func.count()).select_from(Source))
         assert count == len(SOURCE_CATALOG)
         await s.execute(
-            sa.update(Source).where(Source.key == "github").values(enabled=False, priority=99, quality_score=0.1, requests=7)
+            sa.update(Source)
+            .where(Source.key == "github")
+            .values(enabled=False, priority=99, quality_score=0.1, requests=7)
         )
     await seed_sources()
     row = await _row("github")

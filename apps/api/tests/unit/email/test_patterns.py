@@ -61,10 +61,19 @@ def test_name_parts_compound_last_name():
 
 def test_render_basic_patterns():
     expected = {
-        "{first}.{last}": "marie.dupont", "{first}": "marie", "{f}{last}": "mdupont", "{first}{last}": "mariedupont",
-        "{f}.{last}": "m.dupont", "{last}.{first}": "dupont.marie", "{first}_{last}": "marie_dupont",
-        "{first}-{last}": "marie-dupont", "{last}": "dupont", "{first}{l}": "maried", "{last}{f}": "dupontm",
-        "{f}{l}": "md", "{first}.{l}": "marie.d",
+        "{first}.{last}": "marie.dupont",
+        "{first}": "marie",
+        "{f}{last}": "mdupont",
+        "{first}{last}": "mariedupont",
+        "{f}.{last}": "m.dupont",
+        "{last}.{first}": "dupont.marie",
+        "{first}_{last}": "marie_dupont",
+        "{first}-{last}": "marie-dupont",
+        "{last}": "dupont",
+        "{first}{l}": "maried",
+        "{last}{f}": "dupontm",
+        "{f}{l}": "md",
+        "{first}.{l}": "marie.d",
     }
     for pattern, local in expected.items():
         assert render(pattern, "Marie", "Dupont") == [local]
@@ -74,7 +83,10 @@ def test_render_variants_for_compounds_primary_first():
     out = render("{first}.{last}", "Jean-Pierre", "de la Fontaine")
     assert out[0] == "jean-pierre.delafontaine"
     assert set(out) == {
-        "jean-pierre.delafontaine", "jean-pierre.fontaine", "jeanpierre.delafontaine", "jeanpierre.fontaine",
+        "jean-pierre.delafontaine",
+        "jean-pierre.fontaine",
+        "jeanpierre.delafontaine",
+        "jeanpierre.fontaine",
     }
     assert render("{f}{last}", "Jean-Pierre", "Dupont") == ["jdupont", "jpdupont"]
 

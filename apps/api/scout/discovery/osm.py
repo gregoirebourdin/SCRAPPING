@@ -81,7 +81,8 @@ def parse_elements(body: dict[str, Any], *, query: DiscoveryQuery | None = None)
             "country": (tags.get("addr:country") or params.get("country") or "").upper() or None,
             "city": tags.get("addr:city") or params.get("city"),
             "postal_code": tags.get("addr:postcode"),
-            "address": ", ".join(x for x in (street, tags.get("addr:postcode"), tags.get("addr:city")) if x) or None,
+            "address": ", ".join(x for x in (street, tags.get("addr:postcode"), tags.get("addr:city")) if x)
+            or None,
             "lat": el.get("lat", center.get("lat")),
             "lng": el.get("lon", center.get("lon")),
         }
@@ -96,7 +97,11 @@ def parse_elements(body: dict[str, Any], *, query: DiscoveryQuery | None = None)
                 category=category,
                 source_url=f"https://www.openstreetmap.org/{osm_id}",
                 phone=tags.get("phone") or tags.get("contact:phone"),
-                emails=[e.strip().lower() for e in (tags.get("email") or tags.get("contact:email") or "").split(";") if "@" in e],
+                emails=[
+                    e.strip().lower()
+                    for e in (tags.get("email") or tags.get("contact:email") or "").split(";")
+                    if "@" in e
+                ],
                 status="active",
                 raw_data={"osm_tags": dict(list(tags.items())[:40])},
             )
@@ -139,7 +144,11 @@ class OsmSource:
                     queries.append(
                         DiscoveryQuery(
                             key=f"osm:{prof.key}:{cc or '-'}:{city.name}",
-                            params={"tags": [list(t) for t in prof.osm_tags], "city": city.name, "country": cc},
+                            params={
+                                "tags": [list(t) for t in prof.osm_tags],
+                                "city": city.name,
+                                "country": cc,
+                            },
                             weight=round(1.0 / (1 + 0.1 * rank), 4),
                         )
                     )
