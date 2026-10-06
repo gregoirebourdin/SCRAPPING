@@ -31,6 +31,17 @@ class EmailCandidate:
     pattern: str | None              # e.g. "{first}.{last}"
     pattern_confidence: float        # prior that this address is right before verification (0–1)
     source_url: str | None = None
+    supporting_samples: int = 0      # named samples backing `pattern` at this domain (known/inferred)
+
+
+@dataclass
+class EmailAttempt:
+    """One verified candidate inside the waterfall (kept for learning and audit)."""
+
+    candidate: EmailCandidate
+    verification: VerificationResult
+    status: EmailStatus
+    confidence: float
 
 
 @dataclass
@@ -47,3 +58,4 @@ class EmailFinding:
     candidates_tried: list[str] = field(default_factory=list)
     reason: str | None = None        # when address is None or status not acceptable
     source_url: str | None = None
+    attempts: list[EmailAttempt] = field(default_factory=list)

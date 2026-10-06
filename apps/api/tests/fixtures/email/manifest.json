@@ -1,0 +1,30 @@
+{
+  "companies": [],
+  "email": {
+    "domains": {
+      "agence-x.fr": {
+        "mx": true,
+        "catch_all": false,
+        "mailboxes": ["marie.dupont@agence-x.fr", "jean.martin@agence-x.fr", "contact@agence-x.fr"]
+      },
+      "studio-y.fr": {
+        "mx": true,
+        "catch_all": false,
+        "mailboxes": ["paul@studio-y.fr"]
+      },
+      "catchall.fr": {
+        "mx": true,
+        "catch_all": true,
+        "mailboxes": []
+      },
+      "nomx.fr": {
+        "mx": false
+      },
+      "nosmtp.fr": {
+        "mx": true,
+        "smtp": false,
+        "mailboxes": ["marie.dupont@nosmtp.fr"]
+      }
+    }
+  }
+}
