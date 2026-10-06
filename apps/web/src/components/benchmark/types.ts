@@ -11,6 +11,8 @@ export interface MetricValue {
   n: number | null;
   k: number | null;
   ci90: [number, number] | null;
+  /** Display order (JSONB does not keep key order). */
+  order?: number;
 }
 
 export type Metrics = Record<string, MetricValue>;

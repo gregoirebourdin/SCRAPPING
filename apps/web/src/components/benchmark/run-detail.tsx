@@ -112,7 +112,7 @@ export function RunDetailView({ id }: { id: string }) {
               ))}
             </ul>
           )}
-          <MeasurementNote className="mb-5 max-w-3xl" />
+          <MeasurementNote className="mb-5 max-w-3xl" suite={r.mode === "suite"} />
 
           {active && !Object.keys(r.metrics).length ? (
             <Panel className="mb-6 flex items-center gap-2 px-4 py-6 text-meta text-fg-3">

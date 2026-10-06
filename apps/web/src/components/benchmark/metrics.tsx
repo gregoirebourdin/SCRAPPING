@@ -40,7 +40,7 @@ export function groupMetrics(metrics: Metrics): { group: string; items: [string,
   const by: Record<string, [string, MetricValue][]> = {};
   for (const [k, m] of Object.entries(metrics)) (by[m.group] ??= []).push([k, m]);
   const groups = Object.keys(by).sort((a, b) => (GROUP_ORDER.indexOf(a) + 1 || 99) - (GROUP_ORDER.indexOf(b) + 1 || 99));
-  return groups.map((g) => ({ group: g, items: by[g] ?? [] }));
+  return groups.map((g) => ({ group: g, items: (by[g] ?? []).sort((a, b) => (a[1].order ?? 999) - (b[1].order ?? 999)) }));
 }
 
 export function MetricGroups({ metrics }: { metrics: Metrics }) {
@@ -72,7 +72,7 @@ export function ComparisonTable({
   rows: { key: string; label: string; unit: string; definition?: string; values: Cell[] }[];
 }) {
   return (
-    <Panel className="overflow-x-auto">
+    <Panel className="overflow-x-auto p-px">
       <table className="w-full min-w-[480px] text-table">
         <thead>
           <tr className="border-b border-line text-left text-meta text-fg-3">
@@ -118,6 +118,8 @@ export function strategyRows(strategies: Record<string, Metrics>) {
   const names = Object.keys(strategies);
   const keys: string[] = [];
   for (const n of names) for (const k of Object.keys(strategies[n] ?? {})) if (!keys.includes(k)) keys.push(k);
+  const order = (k: string) => Math.min(...names.map((n) => strategies[n]?.[k]?.order ?? 999));
+  keys.sort((a, b) => order(a) - order(b));
   return {
     columns: names.map((n) => ({ key: n, label: n.replace(/_/g, " ") })),
     rows: keys.map((k) => {
@@ -127,11 +129,13 @@ export function strategyRows(strategies: Record<string, Metrics>) {
   };
 }
 
-export function MeasurementNote({ className }: { className?: string }) {
+export function MeasurementNote({ className, suite }: { className?: string; suite?: boolean }) {
   return (
     <p className={cn("text-meta text-fg-3", className)}>
-      Measured on your own ground truth only — each rate shows its sample size and a 90% confidence interval. Research makes no comparative claim (for example against Apollo)
-      without a head-to-head measurement on the same dataset; overlapping intervals are not a difference.
+      {suite
+        ? "Synthetic, labelled scenarios: they compare strategies with each other and guard behaviour — they say nothing about real-world precision. "
+        : "Measured on your own ground truth only — each rate shows its sample size and a 90% confidence interval. "}
+      Research makes no comparative claim (for example against Apollo) without a head-to-head measurement on the same dataset; overlapping intervals are not a difference.
     </p>
   );
 }

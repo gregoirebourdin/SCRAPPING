@@ -146,8 +146,8 @@ export function BenchmarkPage() {
                     </span>
                   ),
                 },
-                { key: "runs", label: "Runs", className: "text-right", render: (d) => <span className="tabular text-fg-2">{n(d.runs)}</span> },
-                { key: "at", label: "Imported", className: "whitespace-nowrap", render: (d) => <span className="text-fg-3">{relTime(d.created_at)}</span> },
+                { key: "runs", label: "Runs", className: "hidden text-right sm:table-cell", render: (d) => <span className="tabular text-fg-2">{n(d.runs)}</span> },
+                { key: "at", label: "Imported", className: "hidden whitespace-nowrap sm:table-cell", render: (d) => <span className="text-fg-3">{relTime(d.created_at)}</span> },
                 {
                   key: "act",
                   label: "",
@@ -202,11 +202,14 @@ export function BenchmarkPage() {
                       <Link href={`/benchmark/runs/${r.id}`} onClick={(e) => e.stopPropagation()} className="truncate text-fg hover:underline">
                         {runTarget(r)}
                       </Link>
-                      <span className="max-w-56 truncate text-micro text-fg-3">{r.strategy}</span>
+                      <span className="max-w-56 truncate text-micro text-fg-3">
+                        <span className="sm:hidden">{r.mode} · </span>
+                        {r.strategy}
+                      </span>
                     </span>
                   ),
                 },
-                { key: "mode", label: "Mode", render: (r) => <Badge tone={r.mode === "live" ? "accent" : "neutral"}>{r.mode}</Badge> },
+                { key: "mode", label: "Mode", className: "hidden sm:table-cell", render: (r) => <Badge tone={r.mode === "live" ? "accent" : "neutral"}>{r.mode}</Badge> },
                 {
                   key: "status",
                   label: "Status",
@@ -224,10 +227,10 @@ export function BenchmarkPage() {
                 {
                   key: "cost",
                   label: "Cost",
-                  className: "text-right",
+                  className: "hidden text-right sm:table-cell",
                   render: (r) => <span className="tabular text-fg-2">{usd(r.cost_usd, r.cost_usd && r.cost_usd < 0.01 ? 4 : 2)}</span>,
                 },
-                { key: "at", label: "Started", className: "whitespace-nowrap", render: (r) => <span className="text-fg-3">{relTime(r.created_at)}</span> },
+                { key: "at", label: "Started", className: "hidden whitespace-nowrap md:table-cell", render: (r) => <span className="text-fg-3">{relTime(r.created_at)}</span> },
               ]}
             />
           </Block>

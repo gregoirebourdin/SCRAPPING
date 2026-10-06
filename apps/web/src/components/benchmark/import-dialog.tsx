@@ -276,7 +276,7 @@ function PreviewPanel({ preview }: { preview: ImportPreview }) {
         <div className="flex flex-wrap gap-1.5">
           {Object.entries(preview.mapping).map(([h, t]) => (
             <Badge key={h} tone="neutral" title={`${h} → ${t}`} className="max-w-full">
-              {h} → {t}
+              {h === t ? t : `${h} → ${t}`}
             </Badge>
           ))}
         </div>
