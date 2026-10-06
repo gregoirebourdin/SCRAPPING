@@ -197,3 +197,16 @@ def test_plan_and_suitability() -> None:
         .params["q"]
         .startswith("quantum blorp")
     )
+
+
+def test_a_named_tool_refines_web_searches():
+    from scout.schemas.campaign import CampaignDefinition
+
+    d = CampaignDefinition.model_validate(
+        {
+            "company_filters": {"industries": ["social media marketing agency"], "countries": ["FR"]},
+            "website_conditions": [{"type": "technology", "technologies": ["ManyChat"], "required": False}],
+        }
+    )
+    qs = [q.params["q"] for q in WebSearchSource().plan(d)]
+    assert any(q.endswith("ManyChat") for q in qs) and any("ManyChat" not in q for q in qs)

@@ -15,7 +15,7 @@ from scout.db.enums import ErrorCategory
 from scout.discovery import geo
 from scout.discovery.taxonomy import IndustryMatch, IndustryProfile, looks_french, match_industries_detailed
 from scout.errors import BlockedError, FetchError, PermanentError, RateLimitedError
-from scout.schemas.campaign import CampaignDefinition, KeywordCondition
+from scout.schemas.campaign import CampaignDefinition, KeywordCondition, TechnologyCondition
 from scout.util.urls import is_company_domain, registrable_domain
 
 log = structlog.get_logger(__name__)
@@ -326,6 +326,9 @@ def website_terms(defn: CampaignDefinition, limit: int = 2) -> list[str]:
     for cond in defn.website_conditions:
         if isinstance(cond, KeywordCondition):
             terms.extend(t.strip() for t in cond.terms if t.strip())
+        elif isinstance(cond, TechnologyCondition):
+            # "agences social media (potentiellement) ManyChat": also search agencies that name the tool
+            terms.extend(t.strip() for t in cond.technologies if t.strip())
     return list(dict.fromkeys(terms))[:limit]
 
 
