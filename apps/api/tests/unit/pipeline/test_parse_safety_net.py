@@ -91,3 +91,26 @@ async def test_catch_all_emails_are_accepted_unless_verified_only() -> None:
     strict = await _parse("Trouve 30 agences social media en France, emails vérifiés uniquement")
     assert EmailStatus.CATCH_ALL not in strict.accepted_email_statuses
     assert EmailStatus.SAFE in strict.accepted_email_statuses
+
+
+class ForgetfulModel(ManyChatModel):
+    """What Gemini returned in production: the hedged ManyChat criterion silently dropped."""
+
+    async def structured(self, *, schema: Any, **kw: Any) -> AIResult[Any]:
+        res = await super().structured(schema=schema, **kw)
+        res.value.website_conditions = []
+        return res
+
+
+async def test_a_named_tool_the_model_dropped_comes_back_as_a_bonus() -> None:
+    set_ai(ForgetfulModel())  # type: ignore[arg-type]
+    try:
+        defn, _ = await parse_prompt(
+            "Trouve 15 agences marketing spécialisées réseaux sociaux en France qui utilisent potentiellement "
+            "ManyChat, fondateur ou gérant, avec email"
+        )
+    finally:
+        set_ai(None)
+    (cond,) = defn.website_conditions
+    assert cond.type == "technology" and cond.technologies == ["ManyChat"] and cond.required is False
+    assert [e.name for e in defn.enrichments] == ["ManyChat"]

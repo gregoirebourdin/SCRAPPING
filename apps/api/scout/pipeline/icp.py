@@ -328,7 +328,34 @@ TECH_NAMES = [
     "stripe",
     "next.js",
     "react",
+    "manychat",
+    "chatfuel",
+    "gohighlevel",
+    "kajabi",
+    "systeme.io",
+    "clickfunnels",
+    "activecampaign",
+    "brevo",
+    "typeform",
+    "zapier",
 ]
+_TECH_DISPLAY = {
+    "manychat": "ManyChat",
+    "gohighlevel": "GoHighLevel",
+    "activecampaign": "ActiveCampaign",
+    "clickfunnels": "ClickFunnels",
+    "hubspot": "HubSpot",
+    "woocommerce": "WooCommerce",
+    "wordpress": "WordPress",
+    "prestashop": "PrestaShop",
+    "next.js": "Next.js",
+    "systeme.io": "Systeme.io",
+}
+_TECH_VERB = (
+    r"\b(?:use|uses|using|utilis\w+|built with|on|avec|via|sur|travaill\w+ (?:avec|sur)|work\w* with)\s+"
+    r"(?:(?:potentiel\w*|peut[- ]?[eê]tre|probablement|d[ée]j[àa]|aussi|potentially|possibly|maybe|probably"
+    r"|already|also)\s+)?"
+)
 
 
 def _to_int(s: str) -> int:
@@ -511,8 +538,8 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
         if terms:
             conds.append(AIWebsiteCondition(kind="keyword_all" if joiner_all else "keyword_any", terms=terms))
     for tech in TECH_NAMES:
-        if re.search(rf"\b(use|uses|using|utilis\w+|built with|on)\s+{re.escape(tech)}\b", low):
-            conds.append(AIWebsiteCondition(kind="technology", terms=[tech.title()]))
+        if re.search(rf"{_TECH_VERB}{re.escape(tech)}\b", low):
+            conds.append(AIWebsiteCondition(kind="technology", terms=[_TECH_DISPLAY.get(tech, tech.title())]))
     # email
     require_email = mode == CampaignMode.people and not re.search(
         r"\b(no email|email optional|sans email|pas besoin d.?email)\b", low
@@ -875,4 +902,11 @@ async def parse_prompt(prompt: str, ctx: ParseContext | None = None) -> tuple[Ca
             parsed.countries = h.countries
         if not (parsed.industries or parsed.keywords) and h.industries:
             parsed.industries = h.industries
+        # A named tool ("qui utilisent potentiellement ManyChat") the model dropped comes back; hedged → a bonus.
+        named = {normalize_key(t) for c in parsed.website_conditions for t in c.terms} | {
+            normalize_key(e.name) for e in parsed.enrichments
+        }
+        for c in h.website_conditions:
+            if c.kind == "technology" and not any(normalize_key(t) in named for t in c.terms):
+                parsed.website_conditions.append(c)
     return to_definition(parsed, prompt, ctx), parser
