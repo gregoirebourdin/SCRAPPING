@@ -61,6 +61,15 @@ async def usage(ctx: Ctx) -> dict[str, Any]:
         return await analytics.usage_summary(s, ctx.workspace_id)
 
 
+@router.get("/email/metrics")
+async def email_engine_metrics(ctx: Ctx, hours: int = 24) -> dict[str, Any]:
+    """Email Intelligence Engine throughput, latency (P50/P95), fast/deep mix, cache hits, SMTP health."""
+    from scout.services.email_metrics import email_metrics
+
+    async with session_scope() as s:
+        return await email_metrics(s, ctx.workspace_id, hours=max(1, min(hours, 24 * 30)))
+
+
 @router.get("/diagnostics")
 async def diagnostics(ctx: Ctx, hours: int = 24) -> dict[str, Any]:
     async with session_scope() as s:

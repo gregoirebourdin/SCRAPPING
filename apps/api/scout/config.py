@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     crawler_max_bytes: int = 3_000_000
     crawler_enable_crawl4ai: bool = False
     crawler_enable_browser: bool = False
+    # Scrapling tiers (optional extra `scraping`; no-ops when not installed). L2 = HTTP with browser TLS
+    # impersonation when L1 is blocked; L3 = air-gapped Chromium render (needs installed browsers).
+    scrapling_enabled: bool = True
+    scrapling_dynamic_enabled: bool = False
+    scrapling_impersonate: str = "chrome"  # curl_cffi target; "" → plain curl with crawler_user_agent
+    scrapling_timeout: float = 20.0
+    scrapling_dynamic_timeout: float = 30.0
+    pool_scrapling: int = 6
+    pool_scrapling_dynamic: int = 1  # live Chromium sessions (one per crawl using it)
     # Test/dev only: host → "ip:port" overrides and private hosts allow-list (never in production).
     crawler_host_overrides: dict[str, str] = Field(default_factory=dict)
     crawler_allow_private_hosts: Annotated[list[str], NoDecode] = Field(default_factory=list)
@@ -81,6 +90,34 @@ class Settings(BaseSettings):
     github_token: SecretStr | None = None
     discovery_fixture_manifest: str | None = None  # path to fixture manifest (tests/E2E)
 
+    # --- web search layer (scout.search): SearXNG → DuckDuckGo HTML → Gemini grounding only when unresolved ---
+    searxng_url: str | None = None  # e.g. http://searxng.railway.internal:8080 (private service, services/searxng)
+    searxng_timeout: float = 10.0
+    searxng_max_concurrency: int = 4
+    searxng_categories: str = "general"
+    searxng_engines: str | None = None  # comma-separated engine names; unset = the instance's enabled engines
+    searxng_safesearch: int = 0
+    search_providers: Annotated[list[str], NoDecode] = Field(  # web_search discovery source, in order
+        default_factory=lambda: ["searxng", "duckduckgo"]
+    )
+    search_lookup_providers: Annotated[list[str], NoDecode] = Field(  # per-lead lookups + pre-Gemini pass
+        default_factory=lambda: ["searxng"]
+    )
+    search_min_companies: int = 5  # Gemini discovery runs only if free search finds fewer company domains
+    search_cache_ttl_s: int = 21_600  # in-process cache of first result pages
+    gemini_search_fallback_only: bool = True  # False = legacy: Gemini grounding without the free-search pass
+    web_research_crawl_top: int = 2  # top search results fetched (robots-checked) before Gemini grounding
+
+    @field_validator("search_providers", "search_lookup_providers", mode="before")
+    @classmethod
+    def _split_search_providers(cls, v: object) -> object:
+        if isinstance(v, str):
+            raw = v.strip()
+            if raw.startswith("["):
+                return json.loads(raw)
+            return [s.strip().lower() for s in raw.split(",") if s.strip()]
+        return v
+
     # --- email verification ---------------------------------------------------------------
     verifier_backend: Literal["auto", "service", "builtin", "fixture"] = "auto"
     verifier_service_url: str | None = None  # e.g. http://email-verifier.railway.internal:8080
@@ -89,6 +126,7 @@ class Settings(BaseSettings):
     smtp_helo_domain: str = "scout.example"
     smtp_from_address: str = "verify@scout.example"
     smtp_timeout: float = 10.0
+    smtp_canary_enabled: bool = False  # periodic canary RCPT on a known non catch-all domain (health probe)
 
     # --- tech detection --------------------------------------------------------------------
     tech_service_url: str | None = None  # same Go service as the verifier by default
@@ -99,6 +137,11 @@ class Settings(BaseSettings):
     cost_browser_request_usd: float = 0.0004
     cost_crawl_request_usd: float = 0.00002
     cost_verification_usd: float = 0.0
+
+    # --- empirical source scoring (scout.learning) -------------------------------------------
+    # Use learned per-source precision/coverage/cost for discovery routing, people/enrichment confidence and
+    # enrichment planning. Counters are recorded either way; off ⇒ hard-coded priors only.
+    empirical_routing_enabled: bool = True
 
     # --- misc ----------------------------------------------------------------------------
     web_app_url: str = "http://localhost:3000"

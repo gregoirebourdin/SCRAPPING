@@ -3,11 +3,17 @@
 Deterministic EN/FR rules run first and pick the cheapest sufficiently reliable resolver. Keyword,
 technology and social rules always win. The AI planner is consulted only when no rule matched with
 confidence, and it can never choose grounded search for a keyword question.
+
+Empirical Source Scoring (``scout.learning``): for an ambiguous (weak) ask, interchangeable strategies
+(``STRATEGY_ALTERNATIVES``) are ordered by learned expected yield per dollar (``fallback_order``), and the AI
+planner is told each strategy's observed precision/coverage. Strong rules are never overridden and nothing
+changes until a strategy has minimum evidence.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from dataclasses import field as dc_field
 from typing import Any
@@ -1024,7 +1030,8 @@ async def _ai_plan(name: str, instruction: str | None, fallback: EnrichmentPlan)
     prompt = (
         f"Column name: {name}\nInstruction: {instruction or '(none)'}\n"
         f"Default plan if unsure: {fallback.strategy} ({fallback.data_type.value}).\n"
-        "Return the plan."
+        + learned_reliability_hint()
+        + "Return the plan."
     )
     res = await ai.structured(role=ModelRole.reasoning, system=system, prompt=prompt, schema=ColumnPlanDraft)
     d = res.value
@@ -1089,7 +1096,106 @@ async def plan_column(
                 if data_type is not None and ai_plan.strategy != "generated_text":
                     ai_plan.data_type = data_type
                 return ai_plan
+    if not rule.strong:
+        plan = _learned_choice(name, instruction or name, rule, plan, data_type)
     return plan
+
+
+# ---------------------------------------------------------------------------------------------
+# Empirical Source Scoring (scout.learning)
+# ---------------------------------------------------------------------------------------------
+# Strategies that answer the same ambiguous boolean ask, cheapest first; learned reliability can reorder them.
+STRATEGY_ALTERNATIVES: dict[str, tuple[Strategy, ...]] = {
+    "keyword": ("semantic_classifier",),
+    "semantic_classifier": ("keyword",),
+}
+
+
+def _learned_snapshot() -> Mapping[Any, Any]:
+    """In-process learned stats (no I/O; warmed by enrichment batches); {} when disabled."""
+    try:
+        from scout.learning import routing
+        from scout.learning.stats import cached_snapshot
+
+        return cached_snapshot() if routing.enabled() else {}
+    except Exception:
+        return {}
+
+
+def fallback_order(
+    candidates: Sequence[str], snap: Mapping[Any, Any] | None = None, *, seed: int | str | None = None
+) -> list[str]:
+    """Candidate resolvers for a column, best first by learned expected yield per dollar
+    (precision × coverage / cost, ``scout.learning.routing.rank``). Input order while nothing is learned;
+    no exploration (a column plan is sticky)."""
+    from scout.learning import routing
+
+    ranked = routing.rank(
+        "enrich.resolver", list(candidates), snap, objective="yield_per_cost", explore=0.0, seed=seed
+    )
+    return [r.key for r in ranked]
+
+
+def learned_reliability_hint(snap: Mapping[Any, Any] | None = None) -> str:
+    """One prompt line with the observed reliability of strategies that have learned evidence ('' if none)."""
+    try:
+        from scout.learning import routing
+
+        snap = _learned_snapshot() if snap is None else snap
+        if not snap:
+            return ""
+        parts = []
+        for strategy in STRATEGY_COST:
+            e = routing.estimate("enrich.resolver", strategy, snap)
+            if e.learned:
+                parts.append(
+                    f"{strategy} {round(e.precision * 100)}% correct, {round(e.coverage * 100)}% answered"
+                )
+        return ("Observed reliability on real data: " + "; ".join(parts) + ".\n") if parts else ""
+    except Exception:
+        return ""
+
+
+def _alternative_rule(rule: _Rule, strategy: str, text: str) -> _Rule | None:
+    if strategy == "semantic_classifier":
+        return _semantic_rule(_Ask.of(text), strong=False)
+    if strategy == "keyword" and rule.keywords:
+        return _Rule(
+            "keyword",
+            strong=False,
+            data_type=ColumnDataType.boolean,
+            keywords=rule.keywords,
+            concept=f"Website mentions {' / '.join(rule.keywords[:3])}",
+            explanation="Website keyword detection on existing crawl — no AI needed",
+        )
+    return None
+
+
+def _learned_choice(
+    name: str, text: str, rule: _Rule, plan: EnrichmentPlan, data_type: ColumnDataType | None
+) -> EnrichmentPlan:
+    """Weak ask without an AI plan: switch to an interchangeable strategy only when learned evidence ranks it
+    first (deterministic: unchanged while nothing is learned)."""
+    alts = STRATEGY_ALTERNATIVES.get(rule.strategy)
+    if not alts or data_type not in (None, ColumnDataType.boolean):
+        return plan
+    try:
+        snap = _learned_snapshot()
+        if not snap:
+            return plan
+        best = fallback_order([rule.strategy, *alts], snap)[0]
+        if best == rule.strategy:
+            return plan
+        alt = _alternative_rule(rule, best, text)
+        if alt is None:
+            return plan
+        chosen = _to_plan(name, alt, data_type)
+        note = f" (preferred over {rule.strategy}: learned reliability)"
+        chosen.explanation = (chosen.explanation + note)[:300]
+        return chosen
+    except Exception as exc:  # never block column creation
+        log.info("enrich.learned_choice_failed", error=str(exc))
+        return plan
 
 
 # ---------------------------------------------------------------------------------------------

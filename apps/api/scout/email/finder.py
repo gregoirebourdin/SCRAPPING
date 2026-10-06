@@ -31,7 +31,13 @@ PUBLISHED_ON_DOMAIN_CONFIDENCE = 0.95
 PUBLISHED_FREE_CONFIDENCE = 0.6
 # Two-letter initials are too weak to tie a published address to a person.
 _WEAK_PUBLISHED_PATTERNS = frozenset({"{f}{l}"})
-_INCONCLUSIVE = (SmtpResult.not_attempted, SmtpResult.timeout, SmtpResult.blocked, SmtpResult.unknown)
+_INCONCLUSIVE = (
+    SmtpResult.not_attempted,
+    SmtpResult.timeout,
+    SmtpResult.blocked,
+    SmtpResult.unknown,
+    SmtpResult.temporary,
+)
 _SEP = re.compile(r"[._+-]+")
 
 REASON_NO_DOMAIN = "No company domain"

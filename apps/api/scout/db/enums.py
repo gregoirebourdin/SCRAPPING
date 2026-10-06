@@ -160,10 +160,21 @@ class SourceType(StrEnum):
 
 
 class EmailStatus(StrEnum):
+    """Final verdict on an address (EMAIL_ENGINE.md §Statuses).
+
+    SAFE — confirmed: published for this person on the company's own domain, or accepted by a healthy
+    SMTP probe on a domain proven not catch-all. LIKELY_SAFE — strong evidence without a mailbox-level
+    confirmation (dominant domain pattern confirmed by real samples, MX valid, high name affinity).
+    TEMPORARY_UNKNOWN — the mail server answered "try later" (4xx, greylisting, timeout) or our SMTP
+    path is unhealthy: a retry is scheduled; never treated as INVALID.
+    """
+
     SAFE = "SAFE"
+    LIKELY_SAFE = "LIKELY_SAFE"
     RISKY = "RISKY"
     CATCH_ALL = "CATCH_ALL"
     UNKNOWN = "UNKNOWN"
+    TEMPORARY_UNKNOWN = "TEMPORARY_UNKNOWN"
     INVALID = "INVALID"
 
 
@@ -185,10 +196,65 @@ class EmailDiscoveryMethod(StrEnum):
 class SmtpResult(StrEnum):
     accepted = "accepted"
     rejected = "rejected"
+    temporary = "temporary"  # 4xx / greylisting / rate limit: ask again later, never a verdict
     unknown = "unknown"
     timeout = "timeout"
-    blocked = "blocked"
+    blocked = "blocked"  # our IP / HELO / sender refused — infrastructure, not the mailbox
     not_attempted = "not_attempted"
+
+
+class SmtpHealthState(StrEnum):
+    HEALTHY = "HEALTHY"
+    DEGRADED = "DEGRADED"
+    BLOCKED = "BLOCKED"
+    UNKNOWN = "UNKNOWN"
+
+
+class MailProvider(StrEnum):
+    google_workspace = "google_workspace"
+    microsoft_365 = "microsoft_365"
+    zoho = "zoho"
+    ovh = "ovh"
+    ionos = "ionos"
+    gandi = "gandi"
+    infomaniak = "infomaniak"
+    o2switch = "o2switch"
+    proton = "proton"
+    yandex = "yandex"
+    fastmail = "fastmail"
+    icloud = "icloud"
+    amazon_ses = "amazon_ses"
+    mailgun = "mailgun"
+    secure_gateway = "secure_gateway"  # Mimecast, Proofpoint, Barracuda… (often accept-all at RCPT)
+    self_hosted = "self_hosted"
+    none = "none"  # no MX / null MX
+    unknown = "unknown"
+
+
+class EmailEvidenceSource(StrEnum):
+    """Where an observed address came from (domain_email_samples.source)."""
+
+    website = "website"
+    github = "github"
+    rdap = "rdap"
+    import_ = "import"
+    user = "user"
+    smtp_verified = "smtp_verified"
+    search = "search"
+
+
+class VerificationRequestStatus(StrEnum):
+    pending = "pending"
+    processing = "processing"
+    retry = "retry"
+    done = "done"
+    cancelled = "cancelled"
+
+
+class EmailResolutionPath(StrEnum):
+    cache = "cache"
+    fast = "fast"
+    deep = "deep"
 
 
 class PageType(StrEnum):

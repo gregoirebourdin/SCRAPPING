@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -16,9 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from scout.db.enums import (
     CAMPAIGN_TERMINAL,
     CampaignMode,
+    CampaignSourceStatus,
     CampaignStatus,
+    CandidateOutcome,
     EntityType,
     ExclusionMode,
+    JobStatus,
     SeedType,
 )
 from scout.db.models import (
@@ -30,6 +34,7 @@ from scout.db.models import (
     CampaignTemplate,
     CompanyDiscoveryEvent,
     Import,
+    Job,
     JobEvent,
     List,
 )
@@ -245,10 +250,53 @@ async def get_campaign(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: uu
     return c
 
 
+async def lock_campaign(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> Campaign:
+    """Row-locked load for lifecycle mutations: concurrent pause / resume / amend calls serialize (double
+    clicks, chat + UI at the same time) instead of interleaving."""
+    c = await s.scalar(
+        sa.select(Campaign)
+        .where(Campaign.id == campaign_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if c is None or c.workspace_id != workspace_id:
+        raise NotFound("Campaign not found")
+    return c
+
+
+STATUS_LABEL = {
+    CampaignStatus.draft: "a draft",
+    CampaignStatus.planning: "starting",
+    CampaignStatus.running: "running",
+    CampaignStatus.paused: "paused",
+    CampaignStatus.completed: "completed",
+    CampaignStatus.exhausted: "out of results",
+    CampaignStatus.budget_reached: "stopped by its budget",
+    CampaignStatus.limit_reached: "stopped by a safety limit",
+    CampaignStatus.cancelled: "cancelled",
+    CampaignStatus.failed: "failed",
+}
+
+# Stopped by a condition that an amendment can lift (raise target / budget / runtime, broaden criteria).
+REOPENABLE = (
+    CampaignStatus.completed,
+    CampaignStatus.exhausted,
+    CampaignStatus.budget_reached,
+    CampaignStatus.limit_reached,
+)
+
+
 async def pause_campaign(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> Campaign:
-    c = await get_campaign(s, workspace_id, campaign_id)
+    """Pause keeps everything: delivered leads, partially processed candidates (checkpointed stage data) and
+    the discovery frontier (per-source cursors). Running jobs stop at their next stage boundary. Idempotent."""
+    c = await lock_campaign(s, workspace_id, campaign_id)
+    if c.status == CampaignStatus.paused:
+        return c
     if c.status not in (CampaignStatus.running, CampaignStatus.planning):
-        raise Conflict(f"Cannot pause a campaign that is {c.status.value}")
+        raise Conflict(
+            f"This search is {STATUS_LABEL.get(c.status, c.status.value)} — nothing to pause",
+            code="not_running",
+        )
     c.status = CampaignStatus.paused
     c.paused_at = datetime.now(UTC)
     await queue.set_campaign_jobs_paused(s, c.id)
@@ -263,28 +311,226 @@ async def pause_campaign(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: 
 
 
 async def resume_campaign(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> Campaign:
-    c = await get_campaign(s, workspace_id, campaign_id)
-    if c.status != CampaignStatus.paused:
-        raise Conflict(f"Cannot resume a campaign that is {c.status.value}")
+    """Continue where it stopped. Paused → running; stopped by a liftable condition (target, budget, runtime,
+    exhausted sources) → reopened once the condition is lifted; failed → planned again. Idempotent."""
+    c = await lock_campaign(s, workspace_id, campaign_id)
+    if c.status in (CampaignStatus.running, CampaignStatus.planning):
+        return c
+    if c.status == CampaignStatus.paused:
+        await _resume_paused(s, c)
+    elif c.status in REOPENABLE:
+        await assert_can_continue(s, c)
+        await reopen_campaign(s, c)
+    elif c.status == CampaignStatus.failed:
+        await retry_failed(s, c)
+    elif c.status == CampaignStatus.draft:
+        await start_campaign(s, c)
+    else:
+        raise Conflict(
+            "This search was cancelled — start a new one (its leads are kept)",
+            code="cancelled",
+            hint="Ask the assistant to “run this campaign again” to continue without repeating anyone.",
+        )
+    return c
+
+
+async def _resume_paused(s: AsyncSession, c: Campaign) -> None:
     c.status = CampaignStatus.running
     c.paused_at = None
     await queue.resume_campaign_jobs(s, c.id)
     await queue.enqueue(
         s,
-        workspace_id=workspace_id,
+        workspace_id=c.workspace_id,
         campaign_id=c.id,
         type="campaign.tick",
         priority=15,
         dedupe_key=f"tick:{c.id}",
     )
     await emit(
-        workspace_id,
+        c.workspace_id,
         "campaign.status",
         {"campaign_id": str(c.id), "status": "running"},
         campaign_id=c.id,
         session=s,
     )
-    return c
+
+
+async def _active_sources(s: AsyncSession, campaign_id: uuid.UUID) -> int:
+    return int(
+        await s.scalar(
+            sa.select(sa.func.count())
+            .select_from(CampaignSource)
+            .where(
+                CampaignSource.campaign_id == campaign_id,
+                CampaignSource.status.in_([CampaignSourceStatus.active, CampaignSourceStatus.pending]),
+            )
+        )
+        or 0
+    )
+
+
+async def _pending_candidates(s: AsyncSession, campaign_id: uuid.UUID) -> int:
+    return int(
+        await s.scalar(
+            sa.select(sa.func.count())
+            .select_from(CompanyDiscoveryEvent)
+            .where(
+                CompanyDiscoveryEvent.campaign_id == campaign_id,
+                CompanyDiscoveryEvent.outcome == CandidateOutcome.pending,
+            )
+        )
+        or 0
+    )
+
+
+async def assert_can_continue(s: AsyncSession, c: Campaign) -> None:
+    """Refuse to reopen a stopped campaign while the reason it stopped still holds — with the exact fix."""
+    from scout.services.usage import workspace_budget
+
+    st = await s.get(CampaignStats, c.id)
+    qualified = st.qualified if st else 0
+    if qualified >= c.target_qualified_count:
+        raise Conflict(
+            f"Target already reached ({qualified:,}/{c.target_qualified_count:,})",
+            code="target_reached",
+            hint="Raise the target to continue, e.g. “+100 leads”.",
+        )
+    if c.max_cost_usd is not None and st is not None and st.cost_usd >= c.max_cost_usd:
+        raise Conflict(
+            f"Campaign budget reached (${float(c.max_cost_usd):.2f})",
+            code="budget_reached",
+            hint="Raise the campaign budget to continue.",
+        )
+    budget = await workspace_budget(c.workspace_id, max_age_s=0)
+    if budget.exceeded:
+        raise Conflict(
+            f"Workspace monthly budget reached (${budget.monthly_budget_usd:.0f})",
+            code="workspace_budget",
+            hint="Raise the monthly budget in Settings → Workspace.",
+        )
+    if c.started_at and datetime.now(UTC) - c.started_at > timedelta(hours=c.max_runtime_hours):
+        raise Conflict(
+            f"Maximum runtime reached ({c.max_runtime_hours} h)",
+            code="runtime_limit",
+            hint="Raise the runtime limit to continue.",
+        )
+    if c.status == CampaignStatus.exhausted and not await _active_sources(s, c.id):
+        if not await _pending_candidates(s, c.id):
+            raise Conflict(
+                "Every source is exhausted for these criteria",
+                code="exhausted",
+                hint="Broaden the search (another city, a wider size range, more job titles) to find more.",
+            )
+
+
+async def reopen_campaign(s: AsyncSession, c: Campaign) -> None:
+    """Back to running after a stop. Candidates that were mid-pipeline get their job back (stage data was
+    checkpointed, so nothing is redone or double counted)."""
+    c.status = CampaignStatus.running
+    c.stop_reason = None
+    c.stopped_at = None
+    c.paused_at = None
+    await queue.resume_campaign_jobs(s, c.id)
+    pending = (
+        await s.execute(
+            sa.select(CompanyDiscoveryEvent.id, CompanyDiscoveryEvent.company_id).where(
+                CompanyDiscoveryEvent.campaign_id == c.id,
+                CompanyDiscoveryEvent.outcome == CandidateOutcome.pending,
+                CompanyDiscoveryEvent.company_id.is_not(None),
+            )
+        )
+    ).all()
+    for ev_id, comp_id in pending:
+        await queue.enqueue(
+            s,
+            workspace_id=c.workspace_id,
+            campaign_id=c.id,
+            type="company.process",
+            priority=5,
+            payload={"event_id": str(ev_id)},
+            dedupe_key=f"cp:{c.id}:{comp_id}",
+        )
+    await queue.enqueue(
+        s,
+        workspace_id=c.workspace_id,
+        campaign_id=c.id,
+        type="campaign.tick",
+        priority=15,
+        dedupe_key=f"tick:{c.id}",
+    )
+    await emit(
+        c.workspace_id,
+        "campaign.status",
+        {"campaign_id": str(c.id), "status": "running", "reopened": True},
+        campaign_id=c.id,
+        session=s,
+    )
+
+
+async def retry_failed(s: AsyncSession, c: Campaign) -> None:
+    """A failed campaign (e.g. no usable source at planning time) is planned again; sources that were already
+    planned keep their cursors."""
+    has_sources = await s.scalar(
+        sa.select(sa.func.count()).select_from(CampaignSource).where(CampaignSource.campaign_id == c.id)
+    )
+    if has_sources:
+        await reopen_campaign(s, c)
+        return
+    c.status = CampaignStatus.planning
+    c.stop_reason = None
+    c.stopped_at = None
+    await queue.enqueue(
+        s,
+        workspace_id=c.workspace_id,
+        campaign_id=c.id,
+        type="campaign.plan",
+        priority=20,
+        dedupe_key=f"plan:{c.id}",
+    )
+    await emit(
+        c.workspace_id,
+        "campaign.status",
+        {"campaign_id": str(c.id), "status": "planning", "retry": True},
+        campaign_id=c.id,
+        session=s,
+    )
+
+
+async def kick_campaign(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> dict[str, Any]:
+    """'Looks stuck → Retry': wake every delayed job of a running campaign now, make sure a tick exists and
+    reclaim jobs whose worker died. Paused / stopped campaigns are resumed instead."""
+    c = await lock_campaign(s, workspace_id, campaign_id)
+    if c.status not in (CampaignStatus.running, CampaignStatus.planning):
+        await resume_campaign(s, workspace_id, campaign_id)
+        return {"resumed": True, "woken": 0}
+    res = await s.execute(
+        sa.update(Job)
+        .where(
+            Job.campaign_id == c.id,
+            Job.status.in_([JobStatus.pending, JobStatus.retrying]),
+            Job.run_after > sa.func.now(),
+        )
+        .values(run_after=sa.func.now())
+        .returning(Job.id)
+    )
+    woken = len(res.scalars().all())
+    await queue.enqueue(
+        s,
+        workspace_id=c.workspace_id,
+        campaign_id=c.id,
+        type="campaign.tick",
+        priority=15,
+        dedupe_key=f"tick:{c.id}",
+    )
+    await s.execute(sa.text("SELECT pg_notify(:ch, 'kick')"), {"ch": queue.JOBS_CHANNEL})
+    await emit(
+        workspace_id,
+        "campaign.progress",
+        {"campaign_id": str(c.id), "kicked": True, "status": c.status.value},
+        campaign_id=c.id,
+        session=s,
+    )
+    return {"resumed": False, "woken": woken}
 
 
 async def stop_campaign(s: AsyncSession, campaign: Campaign, status: CampaignStatus, reason: str) -> None:
@@ -312,7 +558,7 @@ async def stop_campaign(s: AsyncSession, campaign: Campaign, status: CampaignSta
 
 
 async def cancel_campaign(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> Campaign:
-    c = await get_campaign(s, workspace_id, campaign_id)
+    c = await lock_campaign(s, workspace_id, campaign_id)
     await stop_campaign(s, c, CampaignStatus.cancelled, "Stopped by user")
     return c
 
@@ -554,3 +800,341 @@ async def latest_import_id(s: AsyncSession, workspace_id: uuid.UUID) -> uuid.UUI
         .order_by(Import.created_at.desc())
         .limit(1)
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# Amend ("resume with changes") — preview diff, apply, extend the discovery frontier, resume
+# ---------------------------------------------------------------------------------------------
+
+SAFE_WHILE_RUNNING = {"target", "budget", "runtime"}
+
+
+async def _list_names(s: AsyncSession, workspace_id: uuid.UUID, ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    if not ids:
+        return {}
+    return dict(
+        (
+            await s.execute(
+                sa.select(List.id, List.name).where(List.workspace_id == workspace_id, List.id.in_(ids))
+            )
+        ).all()
+    )
+
+
+async def _extend_sources(s: AsyncSession, c: Campaign, defn: CampaignDefinition) -> int:
+    """New criteria → new discovery queries appended to each source's plan (cursors untouched, so nothing
+    already fetched is fetched again); exhausted sources with new queries come back; newly suitable sources
+    are added. Returns the number of new queries."""
+    from scout.discovery.health import health_snapshot
+    from scout.discovery.router import get_source, select_sources
+
+    added = 0
+    existing = (await s.scalars(sa.select(CampaignSource).where(CampaignSource.campaign_id == c.id))).all()
+    known_keys = {x.source_key for x in existing}
+    for cs in existing:
+        src = get_source(cs.source_key)
+        if src is None or cs.source_key == "seed":
+            continue
+        plan = list(cs.query_plan or [])
+        seen = {(q.get("key"), orjson.dumps(q.get("params", {}), option=orjson.OPT_SORT_KEYS)) for q in plan}
+        keys = {q.get("key") for q in plan}
+        new_q = []
+        for q in src.plan(defn, expansion=0):
+            qd = asdict(q)
+            sig = (qd.get("key"), orjson.dumps(qd.get("params", {}), option=orjson.OPT_SORT_KEYS))
+            if sig in seen:
+                continue
+            if qd.get("key") in keys:  # same query key, different parameters → a new, versioned query
+                qd["key"] = f"{qd['key']}#a{len(plan) + len(new_q)}"
+            new_q.append(qd)
+        if new_q:
+            cs.query_plan = [*plan, *new_q]
+            if cs.status in (CampaignSourceStatus.exhausted, CampaignSourceStatus.pending):
+                cs.status = CampaignSourceStatus.active
+                cs.last_error = None
+            added += len(new_q)
+    if defn.seed.type == "search":
+        try:
+            chosen = select_sources(defn, health=await health_snapshot())
+        except Exception:  # health is advisory; never block an amendment on it
+            chosen = []
+        for src, priority in chosen:
+            if src.key in known_keys:
+                continue
+            plan = [asdict(q) for q in src.plan(defn, expansion=0)]
+            s.add(
+                CampaignSource(
+                    campaign_id=c.id,
+                    source_key=src.key,
+                    priority=priority,
+                    status=CampaignSourceStatus.active,
+                    query_plan=plan,
+                    cursor={"q": 0, "page": None, "expansion": 0},
+                )
+            )
+            added += len(plan)
+    if added:
+        await s.flush()
+    return added
+
+
+async def amend_campaign(
+    s: AsyncSession,
+    workspace_id: uuid.UUID,
+    campaign_id: uuid.UUID,
+    amendment: Any,
+    *,
+    user_id: str | None,
+    dry_run: bool = False,
+    resume: bool = True,
+    base_hash: str | None = None,
+    actor_type: Any = None,
+    assistant_action_id: uuid.UUID | None = None,
+) -> dict[str, Any]:
+    """Preview (dry_run) or apply a change. Applying is allowed while paused or stopped; while running, safe
+    fields (target, budget, runtime) apply live and criteria changes pause → apply → resume in one transaction.
+    Already delivered leads, exclusions and the discovery frontier are kept."""
+    from scout.chat.amend import apply_amendment, merge, parse_instruction
+    from scout.schemas.campaign import CampaignAmendment
+    from scout.services import audit
+
+    am = (
+        amendment if isinstance(amendment, CampaignAmendment) else CampaignAmendment.model_validate(amendment)
+    )
+    c = await (get_campaign if dry_run else lock_campaign)(s, workspace_id, campaign_id)
+    if c.status == CampaignStatus.cancelled:
+        raise Conflict(
+            "This search was cancelled — start a new one instead",
+            code="cancelled",
+            hint="Ask the assistant to “run this campaign again” with your change.",
+        )
+    base = CampaignDefinition.model_validate(c.definition)
+    parsed = parse_instruction(am.instruction or "", base) if (am.instruction or "").strip() else None
+    merged = merge(parsed, am)
+    if merged.is_empty:
+        raise ValidationFailed(
+            "Nothing to change", code="amend_empty", hint="Describe the change, e.g. “+100 leads”."
+        )
+    st = await s.get(CampaignStats, c.id)
+    qualified = st.qualified if st else 0
+    new_defn, changes, warnings = apply_amendment(base, merged, qualified=qualified)
+    running = c.status in (CampaignStatus.running, CampaignStatus.planning)
+    requires_pause = running and any(ch.field not in SAFE_WHILE_RUNNING for ch in changes)
+    preview: dict[str, Any] = {
+        "campaign_id": str(c.id),
+        "status": c.status.value,
+        "changes": [ch.model_dump() for ch in changes],
+        "warnings": warnings,
+        "requires_pause": requires_pause,
+        "noop": not changes,
+        "base_hash": c.definition_hash,
+        "instruction": merged.instruction,
+        "interpretation": [
+            i.model_dump()
+            for i in interpret(new_defn, await _list_names(s, workspace_id, new_defn.exclusion.list_ids))
+        ],
+    }
+    if dry_run:
+        return {**preview, "applied": False}
+    if base_hash and base_hash != c.definition_hash:
+        raise Conflict(
+            "This search changed since the preview",
+            code="stale_preview",
+            hint="Review the updated changes and confirm again.",
+        )
+    if not changes:
+        raise ValidationFailed(
+            "Nothing to change — the search already uses these criteria", code="amend_noop"
+        )
+    before = c.definition
+    auto_paused = False
+    if requires_pause:
+        c.status = CampaignStatus.paused
+        c.paused_at = datetime.now(UTC)
+        await queue.set_campaign_jobs_paused(s, c.id)
+        auto_paused = True
+    # ---- apply ----
+    c.definition = new_defn.model_dump(mode="json")
+    c.definition_hash = definition_hash(new_defn)
+    c.interpretation = preview["interpretation"]
+    c.target_qualified_count = new_defn.target_qualified_count
+    c.max_cost_usd = (
+        Decimal(str(new_defn.limits.max_cost_usd)) if new_defn.limits.max_cost_usd is not None else None
+    )
+    c.max_runtime_hours = new_defn.limits.max_runtime_hours
+    criteria_changed = any(ch.field not in SAFE_WHILE_RUNNING for ch in changes)
+    new_queries = 0
+    if criteria_changed:
+        await s.execute(sa.delete(CampaignFilter).where(CampaignFilter.campaign_id == c.id))
+        for row in _filters_rows(c.id, new_defn):
+            s.add(row)
+        new_queries = await _extend_sources(s, c, new_defn)
+    await s.flush()
+    from scout.db.enums import ActorType
+
+    await audit.log(
+        s,
+        workspace_id=workspace_id,
+        actor_id=user_id,
+        actor_type=actor_type or ActorType.user,
+        action="campaign.amend",
+        entity_type="campaign",
+        entity_ids=[c.id],
+        campaign_id=c.id,
+        assistant_action_id=assistant_action_id,
+        summary=f'Changed "{c.name}": ' + "; ".join(f"{ch.label} {ch.before} → {ch.after}" for ch in changes),
+        payload={
+            "instruction": merged.instruction,
+            "changes": [ch.model_dump() for ch in changes],
+            "before": before,
+            "after": c.definition,
+        },
+    )
+    await emit(
+        workspace_id,
+        "campaign.amended",
+        {
+            "campaign_id": str(c.id),
+            "changes": [ch.model_dump() for ch in changes],
+            "target": c.target_qualified_count,
+            "new_queries": new_queries,
+        },
+        campaign_id=c.id,
+        session=s,
+    )
+    resumed = False
+    resume_blocked: dict[str, Any] | None = None
+    if resume or auto_paused:
+        try:
+            if c.status == CampaignStatus.paused:
+                await _resume_paused(s, c)
+                resumed = True
+            elif c.status in REOPENABLE:
+                await assert_can_continue(s, c)
+                await reopen_campaign(s, c)
+                resumed = True
+            elif c.status == CampaignStatus.failed:
+                await retry_failed(s, c)
+                resumed = True
+        except Conflict as exc:
+            resume_blocked = {"code": exc.code, "message": exc.message, "hint": exc.hint}
+    return {
+        **preview,
+        "applied": True,
+        "auto_paused": auto_paused,
+        "resumed": resumed,
+        "resume_blocked": resume_blocked,
+        "new_queries": new_queries,
+        "status": c.status.value,
+        "base_hash": c.definition_hash,
+    }
+
+
+# ---------------------------------------------------------------------------------------------
+# Live snapshot — what the run header / chat run card restore after a refresh, plus stall diagnostics
+# ---------------------------------------------------------------------------------------------
+
+
+async def live_snapshot(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> dict[str, Any]:
+    status = await campaign_status(s, workspace_id, campaign_id)
+    cid = campaign_id
+    stages = dict(
+        (
+            await s.execute(
+                sa.select(CompanyDiscoveryEvent.stage, sa.func.count())
+                .where(
+                    CompanyDiscoveryEvent.campaign_id == cid,
+                    CompanyDiscoveryEvent.outcome == CandidateOutcome.pending,
+                )
+                .group_by(CompanyDiscoveryEvent.stage)
+            )
+        ).all()
+    )
+    in_flight = [
+        {"event_id": str(r.id), "name": r.name, "domain": r.domain, "stage": r.stage}
+        for r in (
+            await s.execute(
+                sa.select(
+                    CompanyDiscoveryEvent.id,
+                    CompanyDiscoveryEvent.name,
+                    CompanyDiscoveryEvent.domain,
+                    CompanyDiscoveryEvent.stage,
+                )
+                .where(
+                    CompanyDiscoveryEvent.campaign_id == cid,
+                    CompanyDiscoveryEvent.outcome == CandidateOutcome.pending,
+                )
+                .order_by(
+                    sa.case((CompanyDiscoveryEvent.stage == "discovered", 1), else_=0),
+                    CompanyDiscoveryEvent.observed_at,
+                )
+                .limit(12)
+            )
+        ).all()
+    ]
+    recent = [
+        {"id": r.id, "type": r.type, "payload": r.payload, "at": r.created_at}
+        for r in (
+            await s.execute(
+                sa.select(JobEvent.id, JobEvent.type, JobEvent.payload, JobEvent.created_at)
+                .where(JobEvent.campaign_id == cid)
+                .order_by(JobEvent.id.desc())
+                .limit(15)
+            )
+        ).all()
+    ]
+    jobs = dict(
+        (
+            await s.execute(
+                sa.select(Job.status, sa.func.count())
+                .where(Job.campaign_id == cid, Job.status.in_(_LIVE_JOB_STATES))
+                .group_by(Job.status)
+            )
+        ).all()
+    )
+    overdue = (
+        await s.execute(
+            sa.select(sa.func.count(), sa.func.min(Job.run_after)).where(
+                Job.campaign_id == cid,
+                Job.status.in_([JobStatus.pending, JobStatus.retrying]),
+                Job.run_after < sa.func.now() - timedelta(seconds=30),
+                Job.blocked_by_count == 0,
+            )
+        )
+    ).one()
+    last_error = await s.scalar(
+        sa.select(Job.last_error)
+        .where(Job.campaign_id == cid, Job.last_error.is_not(None))
+        .order_by(Job.updated_at.desc())
+        .limit(1)
+    )
+    now = await s.scalar(sa.select(sa.func.now()))
+    last_event_at = recent[0]["at"] if recent else None
+    c = await s.get(Campaign, cid)
+    from scout.config import get_settings
+
+    return {
+        **status,
+        "stages": {k: int(v) for k, v in stages.items()},
+        "in_flight": in_flight,
+        "recent": recent,
+        "health": {
+            "server_time": now,
+            "last_event_at": last_event_at,
+            "last_progress_at": c.last_progress_at if c else None,
+            "jobs": {k.value if hasattr(k, "value") else str(k): int(v) for k, v in jobs.items()},
+            "overdue_jobs": int(overdue[0] or 0),
+            "oldest_overdue_s": int((now - overdue[1]).total_seconds()) if overdue[1] is not None else None,
+            "last_error": last_error,
+            "workers_enabled": get_settings().worker_enabled,
+        },
+    }
+
+
+_LIVE_JOB_STATES = [
+    JobStatus.pending,
+    JobStatus.claimed,
+    JobStatus.running,
+    JobStatus.retrying,
+    JobStatus.paused,
+]

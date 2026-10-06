@@ -26,6 +26,7 @@ from scout.db.enums import (
     EntityType,
     JobStatus,
     SourceType,
+    VerificationRequestStatus,
 )
 from scout.db.models import (
     Campaign,
@@ -33,11 +34,12 @@ from scout.db.models import (
     CampaignStats,
     Company,
     CompanyDiscoveryEvent,
+    EmailVerificationRequest,
     Job,
     ListMembership,
     Person,
 )
-from scout.errors import BlockedError, RateLimitedError, RetryableError
+from scout.errors import BlockedError, CampaignPaused, RateLimitedError, RetryableError
 from scout.jobs import queue
 from scout.jobs.events import emit
 from scout.jobs.registry import JobContext, job_handler
@@ -93,6 +95,8 @@ async def plan_campaign(ctx: JobContext) -> dict[str, Any]:
         c = await s.get(Campaign, ctx.campaign_id)
         if c is None or c.status in CAMPAIGN_TERMINAL:
             return {"skipped": True}
+        if c.status == CampaignStatus.paused:
+            raise CampaignPaused("paused")  # planned on resume: a pause during planning is never overridden
         defn = CampaignDefinition.model_validate(c.definition)
         if defn.seed.type != "search":
             n = await _plan_seeded(s, c, defn)
@@ -150,7 +154,8 @@ async def plan_campaign(ctx: JobContext) -> dict[str, Any]:
                 payload={"source_key": source.key},
                 dedupe_key=f"discover:{c.id}:{source.key}",
             )
-        c.status = CampaignStatus.running
+        if c.status == CampaignStatus.planning:  # paused meanwhile → stays paused (sources are kept)
+            c.status = CampaignStatus.running
         await queue.enqueue(
             s,
             workspace_id=c.workspace_id,
@@ -162,7 +167,7 @@ async def plan_campaign(ctx: JobContext) -> dict[str, Any]:
         await emit(
             c.workspace_id,
             "campaign.status",
-            {"campaign_id": str(c.id), "status": "running", "sources": [x.key for x, _ in chosen]},
+            {"campaign_id": str(c.id), "status": c.status.value, "sources": [x.key for x, _ in chosen]},
             campaign_id=c.id,
             session=s,
         )
@@ -802,7 +807,24 @@ async def tick(ctx: JobContext) -> dict[str, Any] | None:
             or 0
         )
         st.in_flight = int(pending_candidates)
-        if not active and in_flight_jobs == 0:
+        pending_email = (
+            await s.scalar(
+                sa.select(sa.func.count())
+                .select_from(EmailVerificationRequest)
+                .where(
+                    EmailVerificationRequest.campaign_id == c.id,
+                    EmailVerificationRequest.status.in_(
+                        [
+                            VerificationRequestStatus.pending,
+                            VerificationRequestStatus.processing,
+                            VerificationRequestStatus.retry,
+                        ]
+                    ),
+                )
+            )
+            or 0
+        )
+        if not active and in_flight_jobs == 0 and pending_email == 0:
             reason = (
                 f"All eligible sources exhausted — {qualified:,}/{c.target_qualified_count:,} qualified. "
                 "Broaden criteria (location, size, conditions) to find more."

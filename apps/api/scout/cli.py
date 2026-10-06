@@ -4,6 +4,7 @@ openapi <path>                 write the OpenAPI document (packages/schemas)
 worker                         run a dedicated job worker process
 seed --workspace <uuid>        load clearly-marked demo data into a workspace
 migrate                        alembic upgrade head
+benchmark suites|run|import    benchmark harness (see scout/benchmark/cli.py)
 """
 
 from __future__ import annotations
@@ -63,6 +64,9 @@ def main(argv: list[str] | None = None) -> None:
     sd.add_argument("--workspace", required=True)
     sd.add_argument("--user")
     sub.add_parser("migrate")
+    from scout.benchmark import cli as benchmark_cli
+
+    benchmark_cli.add_parser(sub)
     args = p.parse_args(argv)
     if args.cmd == "openapi":
         _openapi(args.path)
@@ -72,6 +76,8 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_seed(args.workspace, args.user))
     elif args.cmd == "migrate":
         sys.exit(subprocess.call([sys.executable, "-m", "alembic", "upgrade", "head"]))
+    elif args.cmd == "benchmark":
+        asyncio.run(benchmark_cli.run(args))
 
 
 if __name__ == "__main__":

@@ -279,7 +279,10 @@ async def test_campaign_end_to_end_and_identical_rerun(env, workspace):
             "inferred_pattern",
         )
         checks = (await s.scalars(sa.select(EmailCheck).where(EmailCheck.workspace_id == ws))).all()
-        assert {ch.verifier for ch in checks} == {"fixture"}
+        # fast-path checks are recorded by the engine, SMTP probes by the fixture-backed simulated mail world
+        assert {ch.verifier for ch in checks} <= {"engine", "world"} and "world" in {
+            ch.verifier for ch in checks
+        }
 
         # ---- ICP scores + quality gate ----
         scores = (

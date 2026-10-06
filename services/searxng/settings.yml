@@ -1,0 +1,95 @@
+# SearXNG settings for Scout (Research) — private metasearch backend of the API (scout.search.searxng).
+#
+# Only the deltas from upstream defaults are listed (use_default_settings). Reachable only on the Railway
+# private network (http://searxng.railway.internal:8080): no public domain, limiter off, no Valkey.
+# Docs: https://docs.searxng.org/admin/settings/index.html
+use_default_settings:
+  engines:
+    # Curated set for B2B lead research (company websites, people, news). Everything else is not loaded.
+    keep_only:
+      # --- general web (enabled) ---
+      - duckduckgo        # html.duckduckgo.com; CAPTCHA when hammered → suspended 1 h, other engines carry on
+      - brave             # good company coverage; 429 under load from datacenter IPs → suspended 3 min
+      - bing              # disabled upstream by default; strong for company sites and LinkedIn profiles
+      # --- general web (loaded but disabled: opt in per request with engines=… or flip `disabled`) ---
+      - google            # disabled upstream (JS / CAPTCHA from datacenter IPs); try it on your egress IP
+      - yahoo             # Bing-backed; useful as a spare
+      - qwant             # blocks datacenter IPs aggressively
+      # --- reference (infoboxes, larger companies) ---
+      - wikipedia
+      - wikidata
+      # --- news (categories=news: funding, hiring, press for enrichment research) ---
+      - duckduckgo news
+      - bing news
+      - brave.news
+      - google news
+      # Not used: startpage / mojeek (marked inactive upstream: proof-of-work CAPTCHA), yandex, baidu.
+
+general:
+  instance_name: "scout-search"
+  debug: false
+  enable_metrics: true      # /stats shows per-engine errors (private network only)
+  privacypolicy_url: false
+  donation_url: false
+  contact_url: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  favicon_resolver: ""
+  default_lang: "auto"      # the API always sends `language` (e.g. fr-FR)
+  formats:                  # json is REQUIRED by the API (403 otherwise)
+    - html
+    - json
+  ban_time_on_fail: 5
+  max_ban_time_on_fail: 120
+  suspended_times:
+    SearxEngineAccessDenied: 600
+    SearxEngineCaptcha: 3600
+    SearxEngineTooManyRequests: 300
+    cf_SearxEngineCaptcha: 86400
+    cf_SearxEngineAccessDenied: 86400
+    recaptcha_SearxEngineCaptcha: 86400
+
+server:
+  # Overridden by env: SEARXNG_SECRET (required), SEARXNG_BASE_URL, SEARXNG_LIMITER, SEARXNG_PUBLIC_INSTANCE.
+  # Placeholder on purpose: SearXNG exits at startup when the secret is still "ultrasecretkey".
+  secret_key: "ultrasecretkey"
+  limiter: false            # private network only: the API is the only client (bot detection would block it)
+  public_instance: false
+  image_proxy: false
+  method: "GET"
+  http_protocol_version: "1.1"
+
+valkey:
+  url: false                # not needed with the limiter off
+
+ui:
+  query_in_title: false
+  default_theme: simple
+
+outgoing:
+  request_timeout: 4.0      # per engine; the API waits up to SEARXNG_TIMEOUT (10 s) for the merged answer
+  max_request_timeout: 8.0
+  pool_connections: 100
+  enable_http2: true
+  useragent_suffix: ""
+
+# With use_default_settings, this dict REPLACES the default plugin list: only what is listed is loaded.
+plugins:
+  searx.plugins.tracker_url_remover.SXNGPlugin:
+    active: true            # strip utm_* & co. from result URLs (cleaner provenance)
+
+engines:
+  - name: bing
+    disabled: false
+  - name: google
+    disabled: true
+  - name: yahoo
+    disabled: true
+  - name: qwant
+    disabled: true
+  - name: duckduckgo
+    timeout: 4.0
+  - name: brave
+    timeout: 4.0

@@ -6,9 +6,10 @@ person registry/exclusion/reservation → email finder → verification → scor
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -20,12 +21,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from scout.db.engine import session_scope
 from scout.db.enums import (
     CampaignMode,
+    CampaignStatus,
     CandidateOutcome,
     EmailStatus,
     EntityType,
     ExposureType,
     ReservationStatus,
     SourceType,
+    VerificationRequestStatus,
     WebsiteStatus,
 )
 from scout.db.models import (
@@ -35,14 +38,16 @@ from scout.db.models import (
     Company,
     CompanyDiscoveryEvent,
     Email,
+    EmailVerificationRequest,
     Person,
     PersonDiscoveryEvent,
     QualificationScore,
     Signal,
     WebsitePage,
 )
-from scout.jobs.events import emit
+from scout.jobs.events import emit, emit_candidate_done, emit_candidate_stage
 from scout.jobs.registry import JobContext, job_handler
+from scout.learning.people import PeopleLearning
 from scout.pipeline.exclusions import load_rules
 from scout.pipeline.fit import industry_fit
 from scout.pipeline.jobs import bump_stats
@@ -74,6 +79,7 @@ PERSON_SOURCE_LABEL = {
     "ai": "AI extraction (verified on page)",
     "grounded": "web research",
     "mailto": "published email",
+    "search_result": "web search result",
 }
 
 
@@ -121,10 +127,21 @@ def _condition_label(c: Any) -> str:
 
 async def _set_stage(ctx: Ctx, stage: str) -> None:
     async with session_scope() as s:
-        await s.execute(
+        res = await s.execute(
             sa.update(CompanyDiscoveryEvent)
             .where(CompanyDiscoveryEvent.id == ctx.event_id)
             .values(stage=stage, stage_data=ctx.stage_data)
+            .returning(CompanyDiscoveryEvent.name, CompanyDiscoveryEvent.domain)
+        )
+        row = res.first()
+        await emit_candidate_stage(  # live run: skeleton rows + "what's happening now"
+            s,
+            ctx.workspace_id,
+            ctx.campaign_id,
+            ctx.event_id,
+            stage,
+            name=row[0] if row else None,
+            domain=row[1] if row else None,
         )
 
 
@@ -172,6 +189,13 @@ async def _finish(ctx: Ctx, outcome: CandidateOutcome, reason: str | None, stage
                 suppressed=1 if outcome == CandidateOutcome.suppressed else 0,
                 errors=1 if outcome == CandidateOutcome.error else 0,
             )
+            await emit_candidate_done(
+                s, ctx.workspace_id, ctx.campaign_id, ctx.event_id, outcome.value, reason=reason, stage=stage
+            )
+    if changed and outcome == CandidateOutcome.rejected and stage == "company_qualification":
+        from scout.learning.feedback import discovery_outcome
+
+        await discovery_outcome(ctx.source_key, wrong=1)  # off-ICP candidate (Empirical Source Scoring)
     return changed
 
 
@@ -209,12 +233,12 @@ async def process_company(job: JobContext) -> dict[str, Any] | None:
             return {"delivered": int(company_delivered)}
         picks = await _stage_people(ctx, hints)
         await job.checkpoint()
-        delivered, last_reason = await _stage_persons(ctx, job, picks, conditions, fit)
-        if delivered == 0:
+        delivered, last_reason, pending_email = await _stage_persons(ctx, job, picks, conditions, fit)
+        if delivered == 0 and pending_email == 0:
             await _finish(
                 ctx, CandidateOutcome.rejected, last_reason or "No qualified decision maker", "people"
             )
-        return {"delivered": delivered}
+        return {"delivered": delivered, "pending_email": pending_email}
     except Rejection as rej:
         await _finish(ctx, rej.outcome, rej.reason, rej.stage)
         return {rej.outcome.value: rej.reason}
@@ -515,18 +539,32 @@ async def _stage_people(ctx: Ctx, hints: dict[str, Any]) -> list[PersonPick]:
         )
     if ctx.pages:
         candidates.extend(extract_people(ctx.pages, company_name=comp.name, domain=comp.normalized_domain))
-    picks = _rank(candidates, pf, normalize_title, title_match_score)
+    # Empirical Source Scoring: learned per-source confidence + attempts per people source.
+    learn = await PeopleLearning.start()
+    learn.website(ctx.pages, candidates, registry_hint="people" in hints)
+    picks = _rank(learn.adjust(candidates), pf, normalize_title, title_match_score)
     if not picks and ctx.pages:
         from scout.extract.ai_people import ai_extract_people
 
+        t0 = time.monotonic()
         try:
             ai_found = await ai_extract_people(ctx.pages, company_name=comp.name)
         except Exception as exc:
             log.info("people.ai_failed", error=str(exc))
             ai_found = []
-        picks = _rank(ai_found, pf, normalize_title, title_match_score)
+        learn.step("ai_extraction", ai_found, t0)
+        picks = _rank(learn.adjust(ai_found), pf, normalize_title, title_match_score)
+    if not picks:  # free web search (SearXNG) before any Gemini grounding; no-op when not configured
+        from scout.search.people import serp_people
+
+        found = await serp_people(comp.name, domain=comp.normalized_domain, country=comp.country, titles=pf.titles)
+        picks = _rank(learn.adjust(found), pf, normalize_title, title_match_score)
     if not picks and await allow_expensive():
-        picks = _rank(await _grounded_people(ctx, comp), pf, normalize_title, title_match_score)
+        t0 = time.monotonic()
+        grounded = await _grounded_people(ctx, comp)
+        learn.step("gemini_grounded_result", grounded, t0)
+        picks = _rank(learn.adjust(grounded), pf, normalize_title, title_match_score)
+    await learn.flush()
     if not picks:
         raise Rejection("No decision maker found", "people")
     await _count_once(ctx, "people_counted", people_found=1)
@@ -630,11 +668,13 @@ async def _grounded_people(ctx: Ctx, comp: Company) -> list[Any]:
 
 async def _stage_persons(
     ctx: Ctx, job: JobContext, picks: list[PersonPick], conditions: list[ConditionOutcome], fit: FitResult
-) -> tuple[int, str | None]:
-    from scout.email.store import find_and_save_for_person
+) -> tuple[int, str | None, int]:
+    """→ (delivered, last rejection reason, persons waiting for deep email verification)."""
+    from scout.email.engine import resolve_for_person
 
     defn = ctx.defn
     delivered = 0
+    pending_email = 0
     last_reason: str | None = None
     rules = None
     comp = await _company(ctx)
@@ -649,6 +689,7 @@ async def _stage_persons(
             "ai_extraction": SourceType.ai_extraction,
             "grounded_search": SourceType.grounded_search,
             "public_profile": SourceType.public_profile,
+            "search_snippet": SourceType.search_snippet,
         }.get(cand.source_type, SourceType.website)
         async with session_scope() as s:
             person, _created = await registry.upsert_person(
@@ -746,103 +787,318 @@ async def _stage_persons(
                         CampaignReservation.status == ReservationStatus.reserved,
                     )
                 )
-        # ---- email (reuse fresh SAFE emails: no re-verification, spec §89) ----
+        # ---- email: fast path from the domain profile; ambiguous cases go to the deep path ----
         email_addr, email_status, email_conf = await _existing_email(person_id)
         if defn.requires_email or defn.mode == CampaignMode.people:
-            if email_status != EmailStatus.SAFE:
+            if email_status not in defn.accepted_email_statuses:
+                deferred = _deferred_context(ctx, pick, conditions, fit, reservation_id)
                 try:
-                    finding = await find_and_save_for_person(ctx.workspace_id, person_id)
+                    resolution = await resolve_for_person(
+                        ctx.workspace_id, person_id, campaign_id=ctx.campaign_id, deliver_context=deferred
+                    )
                 except Exception as exc:
-                    log.warning("email.find_failed", error=str(exc), person_id=str(person_id))
-                    finding = None
+                    log.warning("email.resolve_failed", error=str(exc), person_id=str(person_id))
+                    resolution = None
                 email_addr, email_status, email_conf = await _existing_email(person_id)
-                if finding is not None and not email_addr:
-                    last_reason = finding.reason or "No professional email found"
+                if (
+                    resolution is not None
+                    and resolution.deep_requested
+                    and email_status not in defn.accepted_email_statuses
+                ):
+                    # Keep the reservation: delivery resumes when the per-domain SMTP batch concludes.
+                    pending_email += 1
+                    async with session_scope() as s:
+                        await _person_event(
+                            s,
+                            ctx,
+                            person_id,
+                            CandidateOutcome.pending,
+                            "Email verification in progress",
+                            cand.source_url,
+                        )
+                    last_reason = "Email verification in progress"
+                    continue
+                if resolution is not None and not email_addr:
+                    last_reason = resolution.reason or "No professional email found"
             await _count_once(
                 ctx,
                 f"email_counted:{person_id}",
                 emails_found=1 if email_addr else 0,
                 emails_safe=1 if email_status == EmailStatus.SAFE else 0,
             )
-        # ---- suppression of the address (or its domain) always wins (spec §87) ----
-        if email_addr:
-            async with session_scope() as s:
-                why = await _email_suppressed(s, ctx.workspace_id, email_addr)
-                if why:
-                    await _person_event(s, ctx, person_id, CandidateOutcome.suppressed, why, cand.source_url)
-                    await bump_stats(s, ctx.campaign_id, suppressed=1)
-                    if reservation_id:
-                        await s.execute(
-                            sa.update(CampaignReservation)
-                            .where(CampaignReservation.id == reservation_id)
-                            .values(status=ReservationStatus.released)
-                        )
-            if why:
-                last_reason = f"Decision maker suppressed ({why.lower()})"
-                continue
-        # ---- score + gate ----
-        async with session_scope() as s:
-            fresh = await s.get(Person, person_id)
-            assert fresh is not None
-            person = fresh
-            signals = [
-                {"type": sg.type.value, "confidence": sg.confidence}
-                for sg in (await s.scalars(sa.select(Signal).where(Signal.company_id == comp.id))).all()
-            ]
-            n_sources = await s.scalar(
-                sa.text(
-                    "SELECT count(DISTINCT coalesce(source_key, source_type)) FROM (SELECT source_key, source_type FROM "
-                    "company_field_observations WHERE company_id = :c UNION ALL SELECT source_key, source_type FROM "
-                    "person_field_observations WHERE person_id = :p) x"
-                ),
-                {"c": comp.id, "p": person_id},
-            )
-        inp = ScoringInput(
-            defn=defn,
-            industry_fit=fit.industry,
-            size_fit=fit.size,
-            location_fit=fit.location,
-            company_confidence=fit.company_confidence,
-            conditions=conditions,
-            person_identified=True,
-            person_name=person.full_name,
-            person_title=person.job_title,
-            title_match=pick.title_score,
-            decision_power=person.decision_power,
-            person_confidence=person.identity_confidence,
-            person_source=PERSON_SOURCE_LABEL.get(cand.method, cand.method),
-            email=email_addr,
-            email_status=email_status,
-            email_confidence=email_conf,
-            phone=bool(person.phone or comp.phone),
-            profile_url=bool(person.public_profile_url),
-            signals=signals,
-            evidence_sources=int(n_sources or 0),
-            evidence_quality=cand.confidence,
-            company_name=comp.name,
-            industry_label=fit.industry_label,
+        ok, reason = await _finish_person(
+            ctx,
+            comp,
+            person_id,
+            reservation_id,
+            _PersonInputs(
+                title_score=pick.title_score,
+                method=str(cand.method),
+                evidence_quality=float(cand.confidence),
+                source_url=cand.source_url,
+            ),
+            conditions,
+            fit,
+            email_addr,
+            email_status,
+            email_conf,
         )
-        result = score(inp)
-        if result.qualified:
-            ok = await _deliver_person(ctx, comp, person_id, reservation_id, result, email_status, email_addr)
-            if ok:
-                delivered += 1
-                continue
-            last_reason = "Lost a race with another campaign"
+        if ok:
+            delivered += 1
         else:
-            last_reason = result.first_failure
-            async with session_scope() as s:
-                await _save_score(s, ctx, comp.id, person_id, result)
-                await _person_event(
-                    s, ctx, person_id, CandidateOutcome.rejected, result.first_failure, cand.source_url
-                )
+            last_reason = reason
+    return delivered, last_reason, pending_email
+
+
+@dataclass
+class _PersonInputs:
+    title_score: float
+    method: str
+    evidence_quality: float
+    source_url: str | None
+
+
+async def _finish_person(
+    ctx: Ctx,
+    comp: Company,
+    person_id: uuid.UUID,
+    reservation_id: uuid.UUID | None,
+    pi: _PersonInputs,
+    conditions: list[ConditionOutcome],
+    fit: FitResult,
+    email_addr: str | None,
+    email_status: EmailStatus | None,
+    email_conf: float | None,
+) -> tuple[bool, str | None]:
+    """Suppression → score → quality gate → deliver. Shared by the inline path and deferred delivery."""
+    defn = ctx.defn
+    # ---- suppression of the address (or its domain) always wins (spec §87) ----
+    if email_addr:
+        async with session_scope() as s:
+            why = await _email_suppressed(s, ctx.workspace_id, email_addr)
+            if why:
+                await _person_event(s, ctx, person_id, CandidateOutcome.suppressed, why, pi.source_url)
+                await bump_stats(s, ctx.campaign_id, suppressed=1)
                 if reservation_id:
                     await s.execute(
                         sa.update(CampaignReservation)
                         .where(CampaignReservation.id == reservation_id)
                         .values(status=ReservationStatus.released)
                     )
-    return delivered, last_reason
+        if why:
+            return False, f"Decision maker suppressed ({why.lower()})"
+    # ---- score + gate ----
+    async with session_scope() as s:
+        person = await s.get(Person, person_id)
+        assert person is not None
+        signals = [
+            {"type": sg.type.value, "confidence": sg.confidence}
+            for sg in (await s.scalars(sa.select(Signal).where(Signal.company_id == comp.id))).all()
+        ]
+        n_sources = await s.scalar(
+            sa.text(
+                "SELECT count(DISTINCT coalesce(source_key, source_type)) FROM (SELECT source_key, source_type FROM "
+                "company_field_observations WHERE company_id = :c UNION ALL SELECT source_key, source_type FROM "
+                "person_field_observations WHERE person_id = :p) x"
+            ),
+            {"c": comp.id, "p": person_id},
+        )
+    inp = ScoringInput(
+        defn=defn,
+        industry_fit=fit.industry,
+        size_fit=fit.size,
+        location_fit=fit.location,
+        company_confidence=fit.company_confidence,
+        conditions=conditions,
+        person_identified=True,
+        person_name=person.full_name,
+        person_title=person.job_title,
+        title_match=pi.title_score,
+        decision_power=person.decision_power,
+        person_confidence=person.identity_confidence,
+        person_source=PERSON_SOURCE_LABEL.get(pi.method, pi.method),
+        email=email_addr,
+        email_status=email_status,
+        email_confidence=email_conf,
+        phone=bool(person.phone or comp.phone),
+        profile_url=bool(person.public_profile_url),
+        signals=signals,
+        evidence_sources=int(n_sources or 0),
+        evidence_quality=pi.evidence_quality,
+        company_name=comp.name,
+        industry_label=fit.industry_label,
+    )
+    result = score(inp)
+    if result.qualified:
+        if await _deliver_person(ctx, comp, person_id, reservation_id, result, email_status, email_addr):
+            return True, None
+        return False, "Lost a race with another campaign"
+    async with session_scope() as s:
+        await _save_score(s, ctx, comp.id, person_id, result)
+        await _person_event(s, ctx, person_id, CandidateOutcome.rejected, result.first_failure, pi.source_url)
+        if reservation_id:
+            await s.execute(
+                sa.update(CampaignReservation)
+                .where(CampaignReservation.id == reservation_id)
+                .values(status=ReservationStatus.released)
+            )
+    return False, result.first_failure
+
+
+def _deferred_context(
+    ctx: Ctx,
+    pick: PersonPick,
+    conditions: list[ConditionOutcome],
+    fit: FitResult,
+    reservation_id: uuid.UUID | None,
+) -> dict[str, Any]:
+    """Everything needed to score and deliver this person later, once the deep email path concludes."""
+    cand = pick.candidate
+    return {
+        "v": 1,
+        "company_id": str(ctx.company_id),
+        "event_id": str(ctx.event_id),
+        "source_key": ctx.source_key,
+        "reservation_id": str(reservation_id) if reservation_id else None,
+        "person": {
+            "title_score": pick.title_score,
+            "method": str(cand.method),
+            "evidence_quality": float(cand.confidence),
+            "source_url": cand.source_url,
+        },
+        "fit": asdict(fit),
+        "conditions": [asdict(c) for c in conditions],
+    }
+
+
+async def deliver_after_email(request: Any, verdict: Any) -> None:
+    """Deferred delivery: the deep email path concluded for a person a campaign was waiting on."""
+    dc = request.deliver_context or {}
+    if not dc or request.campaign_id is None:
+        return
+    async with session_scope() as s:
+        c = await s.get(Campaign, request.campaign_id)
+        if c is None:
+            return
+        running = c.status in (CampaignStatus.running, CampaignStatus.planning, CampaignStatus.paused)
+        defn = CampaignDefinition.model_validate(c.definition)
+        target_list_id = c.target_list_id
+    reservation_id = uuid.UUID(dc["reservation_id"]) if dc.get("reservation_id") else None
+    ctx = Ctx(
+        workspace_id=request.workspace_id,
+        campaign_id=request.campaign_id,
+        event_id=uuid.UUID(dc["event_id"]),
+        company_id=uuid.UUID(dc["company_id"]),
+        defn=defn,
+        target_list_id=target_list_id,
+        source_key=dc.get("source_key") or "unknown",
+    )
+    if not running:
+        if reservation_id:
+            async with session_scope() as s:
+                await s.execute(
+                    sa.update(CampaignReservation)
+                    .where(
+                        CampaignReservation.id == reservation_id,
+                        CampaignReservation.status == ReservationStatus.reserved,
+                    )
+                    .values(status=ReservationStatus.released)
+                )
+        return
+    comp = await _company(ctx)
+    email_addr, email_status, email_conf = await _existing_email(request.person_id)
+    async with session_scope() as s:
+        await bump_stats(
+            s,
+            ctx.campaign_id,
+            emails_found=1 if email_addr else 0,
+            emails_safe=1 if email_status == EmailStatus.SAFE else 0,
+        )
+        delivered_here = await s.scalar(
+            sa.select(sa.func.count())
+            .select_from(CampaignReservation)
+            .where(
+                CampaignReservation.campaign_id == ctx.campaign_id,
+                CampaignReservation.company_id == ctx.company_id,
+                CampaignReservation.status == ReservationStatus.qualified,
+            )
+        )
+    p = dc.get("person") or {}
+    pi = _PersonInputs(
+        title_score=float(p.get("title_score") or 0.0),
+        method=str(p.get("method") or "website"),
+        evidence_quality=float(p.get("evidence_quality") or 0.5),
+        source_url=p.get("source_url"),
+    )
+    reason: str | None
+    if (delivered_here or 0) >= defn.people_filters.max_people_per_company:
+        ok, reason = False, "Enough decision makers already delivered for this company"
+        if reservation_id:
+            async with session_scope() as s:
+                await s.execute(
+                    sa.update(CampaignReservation)
+                    .where(CampaignReservation.id == reservation_id)
+                    .values(status=ReservationStatus.released)
+                )
+    else:
+        ok, reason = await _finish_person(
+            ctx,
+            comp,
+            request.person_id,
+            reservation_id,
+            pi,
+            _conditions_from(dc),
+            _fit_from(dc),
+            email_addr,
+            email_status,
+            email_conf,
+        )
+    if ok:
+        return
+    async with session_scope() as s:
+        waiting = await s.scalar(
+            sa.select(sa.func.count())
+            .select_from(EmailVerificationRequest)
+            .where(
+                EmailVerificationRequest.campaign_id == ctx.campaign_id,
+                EmailVerificationRequest.company_id == ctx.company_id,
+                EmailVerificationRequest.id != request.id,
+                EmailVerificationRequest.status.in_(
+                    [
+                        VerificationRequestStatus.pending,
+                        VerificationRequestStatus.processing,
+                        VerificationRequestStatus.retry,
+                    ]
+                ),
+            )
+        )
+    if not waiting:
+        await _finish(ctx, CandidateOutcome.rejected, reason or "No qualified decision maker", "email")
+
+
+def _conditions_from(dc: dict[str, Any]) -> list[ConditionOutcome]:
+    return [ConditionOutcome(**c) for c in dc.get("conditions") or []]
+
+
+def _fit_from(dc: dict[str, Any]) -> FitResult:
+    f = dc.get("fit") or {}
+    return FitResult(
+        industry=f.get("industry"),
+        size=f.get("size"),
+        location=f.get("location"),
+        industry_label=f.get("industry_label"),
+        company_fit_score=f.get("company_fit_score"),
+        company_confidence=f.get("company_confidence"),
+    )
+
+
+def _register_email_hook() -> None:
+    from scout.email.engine import on_email_resolved
+
+    on_email_resolved(deliver_after_email)
+
+
+_register_email_hook()
 
 
 async def _expire_stale_reservation(
@@ -883,6 +1139,8 @@ def _person_source_key(ctx: Ctx, cand: Any) -> str:
         return "gemini_search"
     if cand.source_type == "ai_extraction":
         return "ai_extraction"
+    if cand.source_type == "search_snippet":
+        return "web_search"
     return "website"
 
 
@@ -1040,6 +1298,7 @@ async def _deliver_person(
             "lead.qualified",
             {
                 "campaign_id": str(ctx.campaign_id),
+                "event_id": str(ctx.event_id),
                 "list_id": str(ctx.target_list_id) if ctx.target_list_id else None,
                 "person_id": str(person_id),
                 "company_id": str(comp.id),
@@ -1203,6 +1462,7 @@ async def _deliver_company(ctx: Ctx, conditions: list[ConditionOutcome], fit: Fi
             "lead.qualified",
             {
                 "campaign_id": str(ctx.campaign_id),
+                "event_id": str(ctx.event_id),
                 "list_id": str(ctx.target_list_id) if ctx.target_list_id else None,
                 "company_id": str(comp.id),
                 "company": comp.name,

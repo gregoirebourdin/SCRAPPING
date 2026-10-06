@@ -9,7 +9,7 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from scout.db.enums import EntityType, ExposureType, SourceType
+from scout.db.enums import EntityType, ExposureType, SourceType, VerificationRequestStatus
 from scout.db.models import (
     Campaign,
     Company,
@@ -17,8 +17,11 @@ from scout.db.models import (
     CompanyFieldObservation,
     CustomColumn,
     CustomFieldValue,
+    DomainEmailPattern,
+    DomainProfile,
     Email,
     EmailCheck,
+    EmailVerificationRequest,
     LeadExposure,
     List,
     ListMembership,
@@ -219,6 +222,60 @@ async def company_detail(s: AsyncSession, workspace_id: uuid.UUID, company_id: u
             {"address": e.address, "status": e.status.value, "kind": e.kind.value, "source_url": e.source_url}
             for e in company_emails
         ],
+        "email_intel": await _email_intel(s, c.normalized_domain),
+    }
+
+
+def _explanation(checks: list[EmailCheck]) -> dict[str, Any]:
+    """Why the latest verdict is what it is (signals recorded by the Email Intelligence Engine)."""
+    raw = ((checks[0].result or {}).get("raw") or {}) if checks else {}
+    return {
+        "explanation": raw.get("signals") or [],
+        "resolution_path": raw.get("path"),
+        "resolver": raw.get("resolver"),
+        "name_affinity": raw.get("affinity"),
+    }
+
+
+async def _email_intel(s: AsyncSession, domain: str | None) -> dict[str, Any] | None:
+    """Domain Intelligence Profile summary for the company drawer (public, domain-level facts only)."""
+    if not domain:
+        return None
+    prof = await s.get(DomainProfile, domain)
+    patterns = (
+        await s.scalars(
+            sa.select(DomainEmailPattern)
+            .where(DomainEmailPattern.domain == domain, DomainEmailPattern.confidence > 0)
+            .order_by(DomainEmailPattern.confidence.desc())
+            .limit(3)
+        )
+    ).all()
+    if prof is None and not patterns:
+        return None
+    return {
+        "domain": domain,
+        "provider": prof.provider.value if prof else None,
+        "mx_hosts": (prof.mx_hosts if prof else [])[:3],
+        "accepts_mail": prof.accepts_mail if prof else None,
+        "catch_all": prof.catch_all if prof else None,
+        "catch_all_checked_at": prof.catch_all_checked_at if prof else None,
+        "smtp_reachable": prof.smtp_reachable if prof else None,
+        "greylisting_seen": prof.greylisting_seen if prof else False,
+        "named_samples": prof.named_samples if prof else 0,
+        "observed_emails": prof.observed_emails if prof else 0,
+        "updated_at": prof.updated_at if prof else None,
+        "patterns": [
+            {
+                "pattern": p.pattern,
+                "confidence": p.confidence,
+                "share": p.share,
+                "samples": p.supporting_samples,
+                "successes": p.successful_checks,
+                "failures": p.failed_checks,
+                "last_confirmed_at": p.last_confirmed_at,
+            }
+            for p in patterns
+        ],
     }
 
 
@@ -256,6 +313,22 @@ async def person_detail(s: AsyncSession, workspace_id: uuid.UUID, person_id: uui
         .where(QualificationScore.person_id == p.id)
         .order_by(QualificationScore.computed_at.desc())
         .limit(1)
+    )
+    verifying = bool(
+        await s.scalar(
+            sa.select(sa.func.count())
+            .select_from(EmailVerificationRequest)
+            .where(
+                EmailVerificationRequest.person_id == p.id,
+                EmailVerificationRequest.status.in_(
+                    [
+                        VerificationRequestStatus.pending,
+                        VerificationRequestStatus.processing,
+                        VerificationRequestStatus.retry,
+                    ]
+                ),
+            )
+        )
     )
     by_field: dict[str, list[dict[str, Any]]] = {}
     for o in obs:
@@ -319,9 +392,11 @@ async def person_detail(s: AsyncSession, workspace_id: uuid.UUID, person_id: uui
                     }
                     for c in checks.get(e.id, [])[:5]
                 ],
+                **_explanation(checks.get(e.id, [])),
             }
             for e in emails
         ],
+        "email_verifying": verifying,
         "score": _score_dict(score) if score else None,
         "company": company,
     }
@@ -592,6 +667,9 @@ async def edit_field(
         if p is None or p.workspace_id != workspace_id:
             raise NotFound("Person not found")
         old = getattr(p, field if field != "job_title" else "job_title", None)
+        from scout.learning.feedback import person_field_overridden
+
+        await person_field_overridden(s, p, field, value)  # source that produced `old` → wrong (never raises)
         await registry.observe_person(s, workspace_id, p, {field: value}, ev)
         if field == "job_title":
             from scout.extract.titles import normalize_title
@@ -689,6 +767,9 @@ async def approve_review(
         people = (
             await s.scalars(sa.select(Person).where(Person.workspace_id == workspace_id, Person.id.in_(ids)))
         ).all()
+        from scout.learning.feedback import people_approved
+
+        await people_approved(s, people)  # sources holding the approved name/title → correct (never raises)
         for p in people:
             await registry.observe_person(
                 s,

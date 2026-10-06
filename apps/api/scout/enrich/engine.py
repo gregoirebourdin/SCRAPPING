@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import time
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from datetime import UTC, datetime, timedelta
@@ -61,6 +62,8 @@ from scout.errors import (
     RateLimitedError,
     RetryableError,
 )
+from scout.learning import feedback as learning_feedback
+from scout.learning.enrich import EnrichLearning
 from scout.util.text import sha256_hex, slugify
 
 log = structlog.get_logger("enrich.engine")
@@ -709,6 +712,7 @@ class _Batch:
         self._event_lock = asyncio.Lock()
         self._exposed_companies: set[uuid.UUID] = set()
         self.stats = {"processed": 0, "unchanged": 0, "skipped": 0, "success": 0, "unknown": 0, "failed": 0}
+        self.learning = EnrichLearning(use=False)  # Empirical Source Scoring (attempts + learned confidence)
 
     # ------------------------------------------------------------------ loading
     async def load(self, entity_ids: Sequence[uuid.UUID]) -> None:
@@ -906,10 +910,12 @@ class _Batch:
                         None,
                     )
 
+        self.learning = await EnrichLearning.start()
         try:
             await asyncio.gather(*(guarded(eid) for eid in entity_ids))
         finally:
             await self._flush_events(force=True)
+            await self.learning.flush()
         return self.stats
 
     async def _process(self, eid: uuid.UUID) -> None:
@@ -989,7 +995,9 @@ class _Batch:
             dependency_values=deps,
             force=self.force,
         )
+        t0 = time.monotonic()
         result = await _safe_resolve(rc)
+        self.learning.observe(plan.strategy, result, t0)
         result.input_hash = input_hash if result.status != CellStatus.failed else None
         await self._write(eid, result, company, person)
 
@@ -1195,6 +1203,15 @@ async def set_user_value(
             }
         else:
             coerced = coerce_user_value(value, col.data_type, plan_of(col).enum_values)
+            # Empirical Source Scoring: the replaced value was wrong (or confirmed) for the column's resolver.
+            prev = await s.scalar(
+                sa.select(CustomFieldValue).where(
+                    CustomFieldValue.column_id == column_id,
+                    CustomFieldValue.entity_type == etype,
+                    CustomFieldValue.entity_id == entity_id,
+                )
+            )
+            await learning_feedback.cell_overridden(s, plan_of(col).strategy, prev, coerced)
             values = {
                 "value_json": coerced,
                 "display_value": display_for(coerced, col.data_type),

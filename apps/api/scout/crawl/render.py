@@ -1,8 +1,11 @@
-"""JavaScript rendering tiers (L3 Crawl4AI, L4 Playwright) — optional extras, used only when a page
-is clearly client-rendered. Both degrade to ``None`` when disabled, not installed, or failing.
+"""JavaScript rendering functions (Crawl4AI, Playwright) — optional extras, used only when a page is
+clearly client-rendered (see ``scout.crawl.tiers`` for the order). Both degrade to ``None`` when
+disabled, not installed, or failing.
 
-Browsers resolve DNS themselves, so besides the URL pre-check every request the page makes is
-re-validated (scheme/port/raw IP + resolved addresses) through a request interceptor (Playwright).
+Playwright runs air-gapped behind ``scout.crawl.browser_guard.BrowserGuard``: the browser has no
+network path of its own and every request it makes is served by the SSRF-safe L1 fetcher (redirect
+hops re-validated, connections pinned to validated IPs). Crawl4AI only gets the URL pre-check and the
+final-URL check (it manages its own browser): prefer the Scrapling dynamic tier for untrusted URLs.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from urllib.parse import urlsplit
 import structlog
 
 from scout.config import get_settings
+from scout.crawl.browser_guard import BROWSER_ARGS, CONTEXT_OPTIONS, DEAD_PROXY, BrowserGuard, http_raw_fetch
 from scout.crawl.parser import ParsedPage, parse_html
 from scout.crawl.ssrf import SSRFBlocked, resolve_safe, validate_url
 from scout.db.enums import UsageCategory
@@ -114,8 +118,8 @@ async def render_crawl4ai(url: str) -> str | None:
 
 
 async def render_playwright(url: str) -> str | None:
-    """Rendered HTML via Playwright Chromium (L4) or None. Images/fonts/media are blocked and every
-    request is SSRF-validated."""
+    """Rendered HTML via Playwright Chromium or None. Air-gapped (``BrowserGuard`` + L1 fetcher):
+    images/fonts/media blocked, every other request validated, fetched and served by us."""
     settings = get_settings()
     if not settings.crawler_enable_browser:
         return None
@@ -129,29 +133,29 @@ async def render_playwright(url: str) -> str | None:
         log.debug("playwright_not_installed")
         return None
 
-    async def _route(route: Any) -> None:
-        req = route.request
-        if req.resource_type in ("image", "font", "media"):
-            await route.abort()
-            return
-        if not await _host_is_safe(req.url, host_cache):
-            await route.abort()
-            return
-        await route.continue_()
-
+    guard = BrowserGuard(http_raw_fetch)
     executable = os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE") or None
     async with pool("browser"):
         await record_usage(UsageCategory.browser_request, cost_usd=settings.cost_browser_request_usd)
         try:
             async with async_playwright() as pw:
-                browser = await pw.chromium.launch(headless=True, executable_path=executable)
+                browser = await pw.chromium.launch(
+                    headless=True,
+                    executable_path=executable,
+                    args=list(BROWSER_ARGS),
+                    proxy={"server": DEAD_PROXY},
+                )
                 try:
                     context = await browser.new_context(
-                        user_agent=settings.crawler_user_agent, java_script_enabled=True
+                        user_agent=settings.crawler_user_agent, java_script_enabled=True, **CONTEXT_OPTIONS
                     )
-                    await context.route("**/*", _route)
+                    await guard.install(context)
                     page = await context.new_page()
+                    guard.begin(url)
                     await page.goto(url, wait_until="networkidle", timeout=RENDER_TIMEOUT_S * 1000)
+                    if not guard.served(url):
+                        log.warning("render_playwright_unguarded_navigation", url=url)
+                        return None
                     if not await _host_is_safe(page.url, host_cache):
                         return None
                     return await page.content()

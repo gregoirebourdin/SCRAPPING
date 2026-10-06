@@ -27,7 +27,9 @@ HANDLER_MODULES = [
     "scout.pipeline.maintenance",
     "scout.services.imports",
     "scout.email.jobs",
+    "scout.email.deep",
     "scout.enrich.jobs",
+    "scout.benchmark.jobs",
 ]
 
 
@@ -108,12 +110,14 @@ def create_app() -> FastAPI:
 
     from scout.api import (
         routes_activity,
+        routes_benchmark,
         routes_campaigns,
         routes_chat,
         routes_columns,
         routes_core,
         routes_io,
         routes_leads,
+        routes_learning,
         routes_lists,
     )
 
@@ -125,6 +129,8 @@ def create_app() -> FastAPI:
         routes_columns,
         routes_io,
         routes_activity,
+        routes_learning,
+        routes_benchmark,
         routes_chat,
     ):
         app.include_router(r.router, prefix="/v1")

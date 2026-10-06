@@ -86,6 +86,8 @@ class HttpResponse:
     not_modified: bool = False
     size_bytes: int = 0
     truncated: bool = False
+    tier: str = "http"  # fetch tier that produced it (scout.crawl.tiers telemetry key)
+    body: bytes = b""  # raw bytes, only kept by ``fetch(raw=True)`` (browser guard)
 
     @property
     def ok(self) -> bool:
@@ -240,15 +242,20 @@ async def fetch(
     last_modified: str | None = None,
     max_bytes: int | None = None,
     accept: str = DEFAULT_ACCEPT,
+    raw: bool = False,
+    extra_headers: dict[str, str] | None = None,
 ) -> HttpResponse:
     """GET ``url`` safely. 404/410 (and other non-blocking statuses) are returned to the caller.
+
+    ``raw=True`` reads the (capped) body whatever its content type and keeps the bytes in
+    ``HttpResponse.body`` (browser guard serving scripts/styles); ``extra_headers`` are added as-is.
 
     Raises SSRFBlocked (policy), FetchError (network/timeout), HttpBlockedError (403, challenge),
     HttpRateLimitedError (429), PermanentError (redirect loop / too many redirects).
     """
     settings = get_settings()
     cap = max_bytes or settings.crawler_max_bytes
-    headers = {"Accept": accept}
+    headers = {**(extra_headers or {}), "Accept": accept}
     if etag:
         headers["If-None-Match"] = etag
     if last_modified:
@@ -292,7 +299,7 @@ async def fetch(
                 content_type = resp_headers.get("content-type")
                 body = b""
                 truncated = False
-                if status != 304 and _is_textual(content_type):
+                if status != 304 and (raw or _is_textual(content_type)):
                     try:
                         body, truncated = await _read_capped(resp, cap)
                     except httpx.TimeoutException as exc:
@@ -329,5 +336,6 @@ async def fetch(
                 not_modified=status == 304,
                 size_bytes=len(body),
                 truncated=truncated,
+                body=body if raw else b"",
             )
     raise PermanentError(f"too many redirects (> {MAX_REDIRECTS}) from {url}", category=ErrorCategory.network)

@@ -170,7 +170,7 @@ class CampaignDefinition(Strict):
     minimum_person_confidence: int = Field(default=80, ge=0, le=100)
     minimum_company_fit: int = Field(default=60, ge=0, le=100)
     minimum_icp_score: int = Field(default=75, ge=0, le=100)
-    accepted_email_statuses: list[EmailStatus] = Field(default_factory=lambda: [EmailStatus.SAFE])
+    accepted_email_statuses: list[EmailStatus] = Field(default_factory=lambda: [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE])
     exclusion: ExclusionSpec = Field(default_factory=ExclusionSpec)
     enrichments: list[EnrichmentRequest] = Field(default_factory=list)
     signals: list[str] = Field(default_factory=list)
@@ -314,3 +314,66 @@ _COUNTRIES = {
 
 def _country_name(code: str) -> str:
     return _COUNTRIES.get(code.upper(), code.upper())
+
+
+# ---------------------------------------------------------------------------------------------
+# Amendments ("resume with changes") — additive contract shared by the API and the chat operator
+# ---------------------------------------------------------------------------------------------
+
+
+class CampaignAmendment(Strict):
+    """A change to a paused (or stopped) campaign. Natural language goes through the ICP parser; structured
+    fields override it. Target / budget / runtime are "safe" and may change while the campaign runs."""
+
+    instruction: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="The user's change in their own words, e.g. 'add Marseille too', 'founders only', '+200 leads'",
+    )
+    target_qualified_count: int | None = Field(default=None, ge=1, le=100_000, description="New absolute target")
+    add_target: int | None = Field(default=None, ge=1, le=100_000, description="Raise the target by N leads")
+    max_cost_usd: float | None = Field(default=None, ge=0, le=100_000, description="New campaign budget (USD)")
+    max_runtime_hours: int | None = Field(default=None, ge=1, le=24 * 30)
+    add_cities: list[str] = Field(default_factory=list)
+    remove_cities: list[str] = Field(default_factory=list)
+    add_countries: list[str] = Field(default_factory=list, description="ISO alpha-2")
+    add_industries: list[str] = Field(default_factory=list)
+    titles: list[str] | None = Field(default=None, description="Replace the decision-maker titles")
+    add_titles: list[str] = Field(default_factory=list)
+    employee_min: int | None = Field(default=None, ge=0)
+    employee_max: int | None = Field(default=None, ge=0)
+    accepted_email_statuses: list[EmailStatus] | None = None
+    exclude_keywords: list[str] = Field(default_factory=list)
+
+    @property
+    def is_empty(self) -> bool:
+        return not any(
+            v not in (None, [], "")
+            for v in (
+                (self.instruction or "").strip(),
+                self.target_qualified_count,
+                self.add_target,
+                self.max_cost_usd,
+                self.max_runtime_hours,
+                self.add_cities,
+                self.remove_cities,
+                self.add_countries,
+                self.add_industries,
+                self.titles,
+                self.add_titles,
+                self.employee_min,
+                self.employee_max,
+                self.accepted_email_statuses,
+                self.exclude_keywords,
+            )
+        )
+
+
+class AmendmentChange(BaseModel):
+    """One line of the confirmation diff."""
+
+    field: str
+    label: str
+    before: str
+    after: str
+    safe: bool = False  # may change while the campaign runs (target, budget, runtime)

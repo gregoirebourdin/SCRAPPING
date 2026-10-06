@@ -8,6 +8,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+import scout.db.benchmark_models  # noqa: F401  (registers the benchmark tables on Base.metadata)
 from scout.config import get_settings
 from scout.db.engine import normalize_async_url
 from scout.db.models import Base

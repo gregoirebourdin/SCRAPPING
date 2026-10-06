@@ -1,53 +1,55 @@
-"""Free web-search discovery via the DuckDuckGo HTML endpoint (no key).
+"""Free web-search discovery through the search chain (``scout.search``): SearXNG first when configured, the
+DuckDuckGo HTML endpoint as fallback (or alone). No key, no per-query cost.
 
 One candidate per registrable company domain; social networks, directories, media and gov/edu hosts are
 dropped. "Top 10 / meilleures agences" pages are not companies: at expansion ≥ 1 they are expanded into their
-outbound company links (``scout.discovery.listicle``). Anomaly / bot-challenge pages raise ``BlockedError``.
+outbound company links (``scout.discovery.listicle``). When every provider fails, the most relevant typed error
+is raised (anti-bot / anomaly page → ``BlockedError``) so the discovery job backs off and source health counts it.
+
+Cursor: ``{"engine": provider, "form": provider state (DDG next-page form / SearXNG {"pageno"}), "page", "seen"}``;
+cursors stored before the chain existed (``form`` only) continue on DuckDuckGo.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
 
 import structlog
 from rapidfuzz import fuzz
-from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from scout.config import get_settings
-from scout.db.enums import UsageCategory
 from scout.discovery import geo
 from scout.discovery.base import DiscoveryPage, DiscoveryQuery, RawCandidate
 from scout.discovery.common import (
     Throttle,
     candidate_domain,
-    http_request,
     is_digital_icp,
     is_local_icp,
     profiles_for,
     target_countries,
     website_terms,
 )
-from scout.errors import BlockedError
 from scout.schemas.campaign import CampaignDefinition
-from scout.services.usage import record_usage
-from scout.util.pools import pool
-from scout.util.text import collapse_ws, normalize_key
+from scout.search.assess import LISTICLE_RE, assess_companies, is_listicle
+from scout.search.chain import SearchChain, discovery_chain
+from scout.search.duckduckgo import DEFAULT_THROTTLE, is_blocked_page, parse_results, region_from_kl
+from scout.search.types import SearchResult
+from scout.util.text import normalize_key
 from scout.util.urls import normalize_website
 
 log = structlog.get_logger(__name__)
 
-_throttle = Throttle(2.0)  # be gentle with the free endpoint
+__all__ = [
+    "LISTICLE_RE",
+    "SearchResult",
+    "WebSearchSource",
+    "company_name_from_title",
+    "is_blocked_page",
+    "is_listicle",
+    "parse_results",
+]
 
-_ANOMALY_MARKERS = (
-    "anomaly-modal",
-    "anomaly_modal",
-    "challenge-form",
-    "bots use DuckDuckGo too",
-    "/anomaly.js",
-)
 _SEPARATORS = re.compile(r"\s+[|\-–—:·•»]\s+")
 _GENERIC_SEGMENTS = {
     "accueil",
@@ -62,81 +64,6 @@ _GENERIC_SEGMENTS = {
     "inicio",
     "home page",
 }
-LISTICLE_RE = re.compile(
-    r"(\btop\s*\d+|\b\d+\s+(meilleur|best|top|agences|agencies|entreprises|companies|startups|soci[ée]t[ée]s|firms|cabinets)"
-    r"|\bmeilleur(e|es|s)?\b|\bbest\b|\bclassement\b|\bpalmar[eè]s\b|\branking\b|\bliste des\b|\blist of\b|\bannuaire\b"
-    r"|\bdirectory\b|\bcomparatif\b|\bbeste[nr]?\b|\bmejores\b|\bmigliori\b)",
-    re.I,
-)
-
-
-@dataclass
-class SearchResult:
-    url: str
-    title: str
-    snippet: str
-    rank: int
-
-
-def _unwrap(href: str | None) -> str | None:
-    """DDG redirect links (//duckduckgo.com/l/?uddg=<url>) → target URL; ad links (y.js) → None."""
-    if not href:
-        return None
-    h = href.strip()
-    if h.startswith("//"):
-        h = "https:" + h
-    parts = urlsplit(h)
-    host = (parts.hostname or "").lower()
-    if (not host or host.endswith("duckduckgo.com")) and parts.path.startswith("/l/"):
-        target = parse_qs(parts.query).get("uddg", [None])[0]
-        return target
-    if host.endswith("duckduckgo.com"):
-        return None  # ads (/y.js) and internal links
-    return h if parts.scheme in ("http", "https") else None
-
-
-def is_blocked_page(html: str) -> bool:
-    return any(m in html for m in _ANOMALY_MARKERS)
-
-
-def parse_results(html: str) -> tuple[list[SearchResult], dict[str, str] | None]:
-    """Organic results (ads skipped) and the hidden inputs of the "next page" form, if any."""
-    tree = HTMLParser(html)
-    results: list[SearchResult] = []
-    for node in tree.css("div.result"):
-        classes = node.attributes.get("class") or ""
-        if "result--ad" in classes:
-            continue
-        a = node.css_first("a.result__a")
-        if a is None:
-            continue
-        url = _unwrap(a.attributes.get("href"))
-        if not url:
-            continue
-        snip = node.css_first(".result__snippet")
-        results.append(
-            SearchResult(
-                url=url,
-                title=collapse_ws(a.text(separator=" ")),
-                snippet=collapse_ws(snip.text(separator=" ")) if snip else "",
-                rank=len(results) + 1,
-            )
-        )
-    next_form: dict[str, str] | None = None
-    best_s = -1
-    for form in tree.css("div.nav-link form"):
-        fields = {
-            (i.attributes.get("name") or ""): (i.attributes.get("value") or "")
-            for i in form.css("input[type=hidden]")
-            if i.attributes.get("name")
-        }
-        try:
-            s = int(fields.get("s", "-1"))
-        except ValueError:
-            continue
-        if s > best_s:
-            best_s, next_form = s, fields
-    return results, next_form
 
 
 def company_name_from_title(title: str, domain: str | None) -> str:
@@ -157,23 +84,21 @@ def company_name_from_title(title: str, domain: str | None) -> str:
     return segments[0]
 
 
-def is_listicle(result: SearchResult) -> bool:
-    return bool(LISTICLE_RE.search(result.title)) or bool(
-        re.search(r"/(top-\d+|meilleur|best-|classement|ranking|liste-)", urlsplit(result.url).path, re.I)
-    )
-
-
 class WebSearchSource:
     key = "web_search"
-    name = "Web search (DuckDuckGo HTML)"
+    name = "Web search (SearXNG / DuckDuckGo)"
     quality = 0.6
     cost_class = "FREE"
 
-    def __init__(self, *, throttle: Throttle | None = None) -> None:
-        self.throttle = throttle or _throttle
+    def __init__(self, *, throttle: Throttle | None = None, chain: SearchChain | None = None) -> None:
+        self.throttle = throttle or DEFAULT_THROTTLE
+        self._chain = chain
+
+    def chain(self) -> SearchChain:
+        return self._chain or discovery_chain(ddg_throttle=self.throttle)
 
     def is_configured(self) -> bool:
-        return bool(get_settings().ddg_html_url)
+        return self.chain().configured
 
     def suitability(self, defn: CampaignDefinition) -> float:
         profiles = profiles_for(defn)
@@ -191,13 +116,20 @@ class WebSearchSource:
         max_pages = 2 if expansion == 0 else 4
         queries: list[DiscoveryQuery] = []
 
-        def add(q: str, kl: str, weight: float) -> None:
-            key = f"ddg:{kl}:{q.lower()}"
+        def add(q: str, kl: str, cc: str | None, lang: str, weight: float) -> None:
+            key = f"ddg:{kl}:{q.lower()}"  # stable keys: plans stored before the search chain stay valid
             if all(x.key != key for x in queries):
                 queries.append(
                     DiscoveryQuery(
                         key=key,
-                        params={"q": q, "kl": kl, "max_pages": max_pages, "expand_listicles": expansion >= 1},
+                        params={
+                            "q": q,
+                            "kl": kl,
+                            "region": cc,
+                            "lang": lang,
+                            "max_pages": max_pages,
+                            "expand_listicles": expansion >= 1,
+                        },
                         weight=weight,
                     )
                 )
@@ -216,34 +148,36 @@ class WebSearchSource:
             for kw in dict.fromkeys(terms):
                 if cities:
                     for rank, city in enumerate(cities):
-                        add(f"{kw} {city.name}", kl, 1.0 / (1 + 0.1 * rank))
+                        add(f"{kw} {city.name}", kl, cc, lang, 1.0 / (1 + 0.1 * rank))
                         for term in refinements:
-                            add(f"{kw} {city.name} {term}", kl, 0.9 / (1 + 0.1 * rank))
+                            add(f"{kw} {city.name} {term}", kl, cc, lang, 0.9 / (1 + 0.1 * rank))
                 else:
                     where = geo.country_name(cc, "fr" if lang == "fr" else "en") if cc else ""
-                    add(f"{kw} {where}".strip(), kl, 1.0)
+                    add(f"{kw} {where}".strip(), kl, cc, lang, 1.0)
                     for term in refinements:
-                        add(f"{kw} {where} {term}".strip(), kl, 0.9)
+                        add(f"{kw} {where} {term}".strip(), kl, cc, lang, 0.9)
         return queries
 
     async def discover(self, query: DiscoveryQuery, cursor: dict[str, Any] | None) -> DiscoveryPage:
         cur = dict(cursor or {})
         page = int(cur.get("page", 1))
-        form = cur.get("form") or {"q": query.params["q"], "kl": query.params.get("kl", "wt-wt")}
-        async with pool("search"):
-            await self.throttle.wait()
-            resp = await http_request(
-                "POST",
-                get_settings().ddg_html_url,
-                source=self.key,
-                data=form,
-                headers={"Referer": "https://html.duckduckgo.com/", "Accept": "text/html"},
-            )
-        await record_usage(UsageCategory.web_search, source_key=self.key, resolver="discovery")
-        html = resp.text
-        if resp.status_code == 202 or is_blocked_page(html):
-            raise BlockedError(f"{self.key}: anomaly / bot challenge page")
-        results, next_form = parse_results(html)
+        params = query.params
+        region = params.get("region") if "region" in params else region_from_kl(params.get("kl"))
+        lang = params.get("lang") or (geo.country_language(region) if region else None)
+        state = cur.get("form") or None
+        engine = cur.get("engine") or ("duckduckgo" if state else None)
+        min_companies = max(1, int(get_settings().search_min_companies))
+        res = await self.chain().search_page(
+            params["q"],
+            lang=lang,
+            region=region,
+            page=page,
+            state=state,
+            provider=engine,
+            assess=lambda rs: assess_companies(rs, min_companies=min_companies),
+        )
+        res.raise_if_failed()
+        results = res.results
         seen_order: list[str] = list(cur.get("seen") or [])
         seen: set[str] = set(seen_order)
         candidates: list[RawCandidate] = []
@@ -268,15 +202,17 @@ class WebSearchSource:
                     raw_data={
                         "title": r.title,
                         "snippet": r.snippet,
-                        "rank": r.rank,
+                        "rank": r.position,
                         "page": page,
-                        "query": query.params["q"],
-                        "kl": form.get("kl"),
+                        "query": params["q"],
+                        "kl": params.get("kl"),
+                        "engine": res.provider,
+                        "engines": list(r.engines),
                     },
                 )
             )
-        requests = 1
-        if query.params.get("expand_listicles") and listicles:
+        requests = 0 if res.from_cache else sum(1 for a in res.attempts if a.skipped is None)
+        if params.get("expand_listicles") and listicles:
             from scout.discovery.listicle import expand_listicle
 
             for url in listicles[:2]:
@@ -291,7 +227,11 @@ class WebSearchSource:
                         seen.add(c.domain)
                         seen_order.append(c.domain)
                         candidates.append(c)
-        max_pages = int(query.params.get("max_pages", 2))
-        has_next = bool(next_form) and bool(results) and page < max_pages
-        next_cursor = {"form": next_form, "page": page + 1, "seen": seen_order[-300:]} if has_next else None
-        return DiscoveryPage(candidates=candidates, next_cursor=next_cursor, requests=requests)
+        max_pages = int(params.get("max_pages", 2))
+        has_next = bool(res.next_state) and bool(results) and page < max_pages
+        next_cursor = (
+            {"engine": res.provider, "form": res.next_state, "page": page + 1, "seen": seen_order[-300:]}
+            if has_next
+            else None
+        )
+        return DiscoveryPage(candidates=candidates, next_cursor=next_cursor, requests=max(1, requests))

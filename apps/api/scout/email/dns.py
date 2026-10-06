@@ -6,9 +6,13 @@ Transient resolver failures (timeouts, SERVFAIL) are returned but never cached.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
 
 import dns.asyncresolver
 import dns.exception
@@ -17,6 +21,7 @@ import sqlalchemy as sa
 import structlog
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from scout.config import get_settings
 from scout.db.engine import session_scope
 from scout.db.models import DomainDnsCache
 from scout.email.syntax import normalize_domain
@@ -127,11 +132,34 @@ async def _cache_put(info: MxInfo) -> None:
         log.warning("email.dns.cache_write_failed", domain=info.domain, error=str(exc))
 
 
+@lru_cache(maxsize=8)
+def _fixture_domains(path: str) -> dict[str, dict[str, Any]]:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    domains = ((data or {}).get("email") or {}).get("domains") or {}
+    return {d: spec for name, spec in domains.items() if (d := normalize_domain(name))}
+
+
+def _fixture_mx(domain: str) -> MxInfo | None:
+    """Fixture verifier backend (tests / offline E2E only): MX facts come from the manifest, never DNS.
+
+    Same rules as `FixtureVerifier`: a listed domain has MX unless ``"mx": false``; unknown domains have none.
+    """
+    s = get_settings()
+    if s.verifier_backend != "fixture" or s.is_production or not s.discovery_fixture_manifest:
+        return None
+    spec = _fixture_domains(str(s.discovery_fixture_manifest)).get(domain)
+    if spec is None or not spec.get("mx", True):
+        return MxInfo(domain, has_mx=False, error="nxdomain")
+    return MxInfo(domain, has_mx=True, mx_hosts=[f"mx.{domain}"], has_a=True)
+
+
 async def mx_lookup(domain: str, *, use_cache: bool = True) -> MxInfo:
     """MX info for a domain; served from `domain_dns_cache` when checked within 30 days."""
     d = normalize_domain(domain)
     if d is None:
         return MxInfo(domain or "", has_mx=False, error="invalid_domain")
+    if (fixture := _fixture_mx(d)) is not None:
+        return fixture
     if use_cache and (cached := await _cache_get(d)) is not None:
         return cached
     info = await resolve_mx(d)

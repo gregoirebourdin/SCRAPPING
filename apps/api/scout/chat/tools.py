@@ -13,6 +13,7 @@ import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scout.auth.context import WorkspaceContext
+from scout.chat.clarify import ClarifyAnswer, ClarifyQuestion
 from scout.chat.context import UIContext
 from scout.db.engine import session_scope
 from scout.db.enums import (
@@ -92,6 +93,9 @@ class ToolOutcome:
     undo: dict[str, Any] | None = None
 
 
+ConfirmFn = Callable[[Any, ToolContext], Awaitable[str | dict[str, Any] | None]]
+
+
 @dataclass
 class ToolDef:
     name: str
@@ -99,7 +103,10 @@ class ToolDef:
     args: type[BaseModel]
     handler: Callable[[Any, ToolContext], Awaitable[ToolOutcome]]
     title: str
-    needs_confirmation: Callable[[Any, ToolContext], Awaitable[str | None]] | None = None
+    # Returns None (no confirmation), a question, or {"summary", "changes", "warnings", "danger", "confirm_label"}.
+    needs_confirmation: ConfirmFn | None = None
+    # The assistant turn ends after this tool: the UI now waits for the user (questions, plan to launch).
+    ends_turn: bool = False
 
 
 TOOLS: dict[str, ToolDef] = {}
@@ -110,13 +117,21 @@ def tool(
     title: str,
     description: str,
     args: type[BaseModel],
-    confirm: Callable[[Any, ToolContext], Awaitable[str | None]] | None = None,
+    confirm: ConfirmFn | None = None,
+    *,
+    ends_turn: bool = False,
 ):
     def deco(
         fn: Callable[[Any, ToolContext], Awaitable[ToolOutcome]],
     ) -> Callable[[Any, ToolContext], Awaitable[ToolOutcome]]:
         TOOLS[name] = ToolDef(
-            name=name, description=description, args=args, handler=fn, title=title, needs_confirmation=confirm
+            name=name,
+            description=description,
+            args=args,
+            handler=fn,
+            title=title,
+            needs_confirmation=confirm,
+            ends_turn=ends_turn,
         )
         return fn
 
@@ -1402,17 +1417,23 @@ async def _campaign_ref(ctx: ToolContext, cid: uuid.UUID | None) -> uuid.UUID:
     if ctx.ui.campaign_id:
         return ctx.ui.campaign_id
     async with session_scope() as s:
+        q = sa.select(Campaign.id).where(Campaign.workspace_id == ctx.ws.workspace_id)
+        if ctx.ui.list_id:  # "this search" → the campaign feeding the list on screen first
+            q = q.order_by(sa.case((Campaign.target_list_id == ctx.ui.list_id, 0), else_=1))
         found = await s.scalar(
-            sa.select(Campaign.id)
-            .where(Campaign.workspace_id == ctx.ws.workspace_id)
-            .order_by(
-                sa.case((Campaign.status.in_([CampaignStatus.running, CampaignStatus.paused]), 0), else_=1),
+            q.order_by(
+                sa.case(
+                    (Campaign.status.in_([CampaignStatus.running, CampaignStatus.planning]), 0),
+                    (Campaign.status == CampaignStatus.paused, 1),
+                    else_=2,
+                ),
                 Campaign.created_at.desc(),
-            )
-            .limit(1)
+            ).limit(1)
         )
     if not found:
-        raise NotFound("No campaign found")
+        raise NotFound(
+            "No campaign found", hint="Start a search first, e.g. “Find 50 marketing agencies in Lyon”."
+        )
     return found
 
 
@@ -1447,7 +1468,7 @@ async def get_campaign_status(a: CampaignRefArgs, ctx: ToolContext) -> ToolOutco
 
 
 async def _confirm_cancel(a: CampaignRefArgs, ctx: ToolContext) -> str | None:
-    return "Cancel this campaign? Already qualified leads are kept."
+    return "Cancel this search for good? Leads already found are kept. (Pause instead if you may continue later.)"
 
 
 def _lifecycle(action: str) -> Callable[[CampaignRefArgs, ToolContext], Awaitable[ToolOutcome]]:
@@ -1460,7 +1481,7 @@ def _lifecycle(action: str) -> Callable[[CampaignRefArgs, ToolContext], Awaitabl
         ]
         async with session_scope() as s:
             c = await fn(s, ctx.ws.workspace_id, cid)
-            name, status = c.name, c.status.value
+            name, status, list_id = c.name, c.status.value, c.target_list_id
         await _log(
             ctx,
             f"campaign.{action}",
@@ -1469,25 +1490,288 @@ def _lifecycle(action: str) -> Callable[[CampaignRefArgs, ToolContext], Awaitabl
             ids=[cid],
             campaign_id=cid,
         )
+        verb = {"pause": "Paused", "resume": "Resumed", "cancel": "Cancelled"}[action]
         return ToolOutcome(
-            {"campaign_id": str(cid), "status": status},
-            {"kind": "campaign_progress", "campaign_id": str(cid), "title": name},
+            {"campaign_id": str(cid), "status": status, "name": name},
+            {
+                "kind": "campaign_progress",
+                "campaign_id": str(cid),
+                "title": name,
+                "event": verb,
+                "list_id": str(list_id) if list_id else None,
+            },
         )
 
     return run
 
 
-tool("pause_campaign", "Paused campaign", "Pause a running campaign.", CampaignRefArgs)(_lifecycle("pause"))
-tool("resume_campaign", "Resumed campaign", "Resume a paused campaign.", CampaignRefArgs)(
-    _lifecycle("resume")
-)
+tool(
+    "pause_campaign",
+    "Paused campaign",
+    "Pause (stop) a running search. Keeps everything already found and where discovery stopped; resumable.",
+    CampaignRefArgs,
+)(_lifecycle("pause"))
+tool(
+    "resume_campaign",
+    "Resumed campaign",
+    "Resume a paused or stopped search exactly where it stopped (no new criteria — use amend_campaign for changes).",
+    CampaignRefArgs,
+)(_lifecycle("resume"))
 tool(
     "cancel_campaign",
     "Cancelled campaign",
-    "Cancel a campaign (qualified leads are kept). Requires confirmation.",
+    "Cancel a search for good (found leads are kept). Requires confirmation. Prefer pause_campaign for 'stop'.",
     CampaignRefArgs,
     confirm=_confirm_cancel,
 )(_lifecycle("cancel"))
+
+
+# ---- clarification → plan → launch ---------------------------------------------------------------------
+
+
+class AskClarificationsArgs(Strict):
+    request: str = Field(min_length=3, max_length=4000, description="The user's search request, verbatim")
+    questions: list[ClarifyQuestion] | None = Field(
+        default=None,
+        max_length=3,
+        description="Optional: up to 3 questions (≤ 4 short options each, a sensible default). Omit to let the app "
+        "ask the standard questions for what is missing (industry, location, roles, volume, size).",
+    )
+
+
+@tool(
+    "ask_clarifications",
+    "Questions",
+    "Before a NEW search whose what / where / who / how-many is unclear: ask at most 3 targeted questions in one "
+    "card (option chips + free text). Ends your turn; the user's answers come back to the app, which prepares the plan.",
+    AskClarificationsArgs,
+    ends_turn=True,
+)
+async def ask_clarifications(a: AskClarificationsArgs, ctx: ToolContext) -> ToolOutcome:
+    from scout.chat.clarify import build_questions, intro
+    from scout.chat.i18n import detect_lang
+
+    lang = detect_lang(a.request)
+    questions = [q.model_dump() for q in (a.questions or build_questions(a.request)[0])]
+    if not questions:
+        # Nothing worth asking: go straight to the plan.
+        return await plan_campaign(PlanCampaignArgs(request=a.request), ctx)
+    questions = questions[:3]
+    title = intro(lang, len(questions))
+    return ToolOutcome(
+        {
+            "status": "awaiting_answers",
+            "message": "The questions are shown to the user; stop here and wait.",
+            "request": a.request,
+            "questions": questions,
+        },
+        {
+            "kind": "clarify",
+            "title": title,
+            "detail": " / ".join(q["text"] for q in questions),
+            "request": a.request,
+            "questions": questions,
+            "lang": lang,
+        },
+    )
+
+
+class PlanCampaignArgs(Strict):
+    request: str = Field(min_length=3, max_length=4000, description="The user's search request, verbatim")
+    answers: list[ClarifyAnswer] = Field(
+        default_factory=list,
+        description="Answers to clarification questions: [{id, value, label?, question?}]",
+    )
+    target_list_name: str | None = Field(default=None, description="Existing or new list to receive leads")
+
+
+@tool(
+    "plan_campaign",
+    "Search plan",
+    "Prepare (do not start) a search from the user's request: shows 'Here is what I'll search' with Launch / Edit. "
+    "Use for precise new search requests; the user launches it.",
+    PlanCampaignArgs,
+    ends_turn=True,
+)
+async def plan_campaign(a: PlanCampaignArgs, ctx: ToolContext) -> ToolOutcome:
+    from scout.api.routes_campaigns import build_parse_context
+    from scout.chat.clarify import answers_text, apply_answers
+    from scout.chat.i18n import detect_lang, source_label
+    from scout.pipeline.icp import parse_prompt
+    from scout.schemas.campaign import interpret
+
+    lang = detect_lang(a.request)
+    answers = list(a.answers)
+    pc = await build_parse_context(ctx.ws, ctx.ui.list_id, [])
+    defn, parser = await parse_prompt(a.request, pc)
+    defn, leftovers = apply_answers(defn, answers)
+    if leftovers:  # answers to free-form questions: let the parser read them, then re-apply known slots
+        defn, parser = await parse_prompt(a.request + "\n" + "\n".join(leftovers), pc)
+        defn, _ = apply_answers(defn, answers)
+    prompt = a.request + (f" · {answers_text(answers)}" if answers else "")
+    names = {v: k for k, v in pc.lists.items()}
+    interp = [i.model_dump() for i in interpret(defn, names)]
+    sources: list[str] = []
+    warnings: list[str] = []
+    try:
+        from scout.discovery.health import health_snapshot
+        from scout.discovery.router import select_sources
+
+        sources = [src.key for src, _ in select_sources(defn, health=await health_snapshot())]
+    except Exception:  # advisory only
+        sources = []
+    if defn.seed.type == "search" and not sources:
+        warnings.append(
+            "Aucune source de découverte n'est configurée pour ce type de recherche."
+            if lang == "fr"
+            else "No discovery source is configured for this kind of search."
+        )
+    async with session_scope() as s:
+        running = (
+            await s.scalars(
+                sa.select(Campaign.name).where(
+                    Campaign.workspace_id == ctx.ws.workspace_id,
+                    Campaign.status.in_([CampaignStatus.running, CampaignStatus.planning]),
+                )
+            )
+        ).all()
+    if running:
+        warnings.append(
+            f"« {running[0]} » tourne déjà — les deux recherches avanceront en parallèle."
+            if lang == "fr"
+            else f"“{running[0]}” is already running — both searches will run in parallel."
+        )
+    title = "Voici ce que je vais chercher" if lang == "fr" else "Here is what I'll search"
+    return ToolOutcome(
+        {
+            "status": "plan_ready",
+            "message": "The plan is shown with Launch / Edit; the user decides. Stop here.",
+            "request": prompt,
+            "definition": defn.model_dump(mode="json"),
+            "interpretation": interp,
+            "target": defn.target_qualified_count,
+            "parser": parser,
+            "sources": sources,
+            "target_list_name": a.target_list_name,
+        },
+        {
+            "kind": "campaign_plan",
+            "title": title,
+            "name": defn.name,
+            "detail": "; ".join(f"{i['label']}: {i['value']}" for i in interp),
+            "request": prompt,
+            "original_request": a.request,
+            "interpretation": interp,
+            "target": defn.target_qualified_count,
+            "sources": [source_label(x, lang) for x in sources],
+            "warnings": warnings,
+            "parser": parser,
+            "lang": lang,
+        },
+    )
+
+
+class AmendCampaignArgs(CampaignRefArgs):
+    instruction: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="The user's change in their own words, e.g. 'add Marseille too', 'only founders', '+200 leads'",
+    )
+    add_target: int | None = Field(default=None, ge=1, le=100_000, description="Raise the target by N leads")
+    target_qualified_count: int | None = Field(default=None, ge=1, le=100_000)
+    max_cost_usd: float | None = Field(default=None, ge=0, le=100_000, description="New budget in USD")
+    add_cities: list[str] = Field(default_factory=list)
+    remove_cities: list[str] = Field(default_factory=list)
+    titles: list[str] | None = Field(default=None, description="Replace decision-maker titles")
+    add_titles: list[str] = Field(default_factory=list)
+    employee_min: int | None = Field(default=None, ge=0)
+    employee_max: int | None = Field(default=None, ge=0)
+    resume: bool = Field(default=True, description="Resume the search after applying the change")
+
+    def amendment(self) -> Any:
+        from scout.schemas.campaign import CampaignAmendment
+
+        return CampaignAmendment.model_validate(self.model_dump(exclude={"campaign_id", "resume"}))
+
+
+async def _amend_preview(a: AmendCampaignArgs, ctx: ToolContext) -> tuple[uuid.UUID, dict[str, Any]]:
+    from scout.pipeline import campaigns as csvc
+
+    cid = await _campaign_ref(ctx, a.campaign_id)
+    async with session_scope() as s:
+        preview = await csvc.amend_campaign(
+            s, ctx.ws.workspace_id, cid, a.amendment(), user_id=ctx.ws.user_id, dry_run=True
+        )
+    return cid, preview
+
+
+async def _confirm_amend(a: AmendCampaignArgs, ctx: ToolContext) -> dict[str, Any] | None:
+    _cid, preview = await _amend_preview(a, ctx)
+    if preview["noop"]:
+        raise ValidationFailed(
+            "Nothing to change — the search already uses these criteria", code="amend_noop"
+        )
+    verb = "Apply & resume" if a.resume else "Apply"
+    summary = "; ".join(f"{c['label']}: {c['before']} → {c['after']}" for c in preview["changes"])
+    if preview["requires_pause"]:
+        summary += " (the search pauses for a moment, then continues)"
+    return {
+        "summary": summary,
+        "changes": preview["changes"],
+        "warnings": preview["warnings"],
+        "danger": False,
+        "confirm_label": verb,
+        "kind": "amend",
+    }
+
+
+@tool(
+    "amend_campaign",
+    "Updated search",
+    "Change a paused or stopped search and resume it ('resume with changes'): add a city, only founders, +N leads, "
+    "a new budget… Pass the user's words as `instruction` (+ structured fields when obvious). Shows a diff to confirm. "
+    "Leads already found are kept and exclusions keep working.",
+    AmendCampaignArgs,
+    confirm=_confirm_amend,
+)
+async def amend_campaign(a: AmendCampaignArgs, ctx: ToolContext) -> ToolOutcome:
+    from scout.db.enums import ActorType
+    from scout.pipeline import campaigns as csvc
+
+    cid = await _campaign_ref(ctx, a.campaign_id)
+    async with session_scope() as s:
+        out = await csvc.amend_campaign(
+            s,
+            ctx.ws.workspace_id,
+            cid,
+            a.amendment(),
+            user_id=ctx.ws.user_id,
+            resume=a.resume,
+            actor_type=ActorType.assistant,
+            assistant_action_id=ctx.action_id,
+        )
+        c = await s.get(Campaign, cid)
+        name = c.name if c else "Search"
+        list_id = c.target_list_id if c else None
+    return ToolOutcome(
+        {
+            "campaign_id": str(cid),
+            "status": out["status"],
+            "changes": out["changes"],
+            "resumed": out["resumed"],
+            "resume_blocked": out["resume_blocked"],
+        },
+        {
+            "kind": "campaign_amended",
+            "title": name,
+            "campaign_id": str(cid),
+            "changes": out["changes"],
+            "warnings": out["warnings"],
+            "resumed": out["resumed"],
+            "resume_blocked": out["resume_blocked"],
+            "list_id": str(list_id) if list_id else None,
+        },
+    )
 
 
 class ExcludePreviousArgs(Strict):

@@ -34,6 +34,14 @@ browser = [
   "crawl4ai==0.9.4",
   "playwright==1.63.0",
 ]
+# Scrapling fetch tiers (scout/crawl/scrapling_tiers.py). Its HTTP fetcher module imports playwright and
+# patchright at import time, so the full `fetchers` extra is required (~330 MB of wheels, no browsers;
+# browsers only for the dynamic tier: `scrapling install`). curl-cffi pinned: the SSRF hardening
+# relies on its curl options (>= 0.15 for GHSA-qw2m-4pqf-rmpp).
+scraping = [
+  "scrapling[fetchers]==0.4.15",
+  "curl-cffi==0.16.3",
+]
 
 [dependency-groups]
 dev = [

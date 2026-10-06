@@ -3,10 +3,17 @@
 Each query is one segmented research question (industry × city/region). Every returned company must carry a
 website whose registrable domain is a real company domain; grounding sources and search queries are kept in
 ``raw_data`` as provenance. Skipped entirely when the workspace is near its budget.
+
+Gemini is the fallback, not the default search engine (``GEMINI_SEARCH_FALLBACK_ONLY``, default on): before
+asking Gemini, the segment is searched for free through the lookup chain (self-hosted SearXNG). When that
+already yields ≥ ``SEARCH_MIN_COMPANIES`` distinct company domains, the segment is left to the ``web_search``
+source (same free results, honest ``search_snippet`` provenance) and no grounded call is made. Without a
+lookup provider configured, or when ``web_search`` is excluded from the campaign, Gemini runs as before.
 """
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import structlog
@@ -14,8 +21,10 @@ from pydantic import BaseModel, Field
 
 from scout.ai.factory import get_ai
 from scout.ai.prompts import UNTRUSTED_CONTENT_RULES
+from scout.config import get_settings
 from scout.discovery import geo
 from scout.discovery.base import DiscoveryPage, DiscoveryQuery, RawCandidate
+from scout.discovery.catalog import canonical_source_key
 from scout.discovery.common import (
     candidate_domain,
     employee_bounds,
@@ -104,35 +113,89 @@ class GeminiSearchSource:
         if not subjects:
             return []
         size = _size_phrase(employee_bounds(defn))
-        areas: list[str] = []
+        excluded = {canonical_source_key(k) for k in defn.sources.excluded}
+        serp_first = "web_search" not in excluded  # the web_search source covers segments free search answers
+        # (area label for Gemini, place for the free-search pass, its country)
+        areas: list[tuple[str, str, str | None]] = []
         for cc in target_countries(defn)[:2]:
             country = geo.country_name(cc)
+            local_country = geo.country_name(cc, "fr" if geo.country_language(cc) == "fr" else "en")
             if cf.cities or cf.regions or expansion > 0:
                 cities = geo.cities_for(cc, regions=cf.regions, cities=cf.cities, expansion=expansion)
-                areas.extend(f"{c.name}, {country}" for c in cities[: 3 + 4 * expansion])
+                areas.extend((f"{c.name}, {country}", c.name, cc) for c in cities[: 3 + 4 * expansion])
             else:
-                areas.extend(f"{c.name}, {country}" for c in geo.cities_for(cc)[:3])
-                areas.append(country)
+                areas.extend((f"{c.name}, {country}", c.name, cc) for c in geo.cities_for(cc)[:3])
+                areas.append((country, local_country, cc))
         if not areas:
-            areas = cf.cities[:3] or cf.regions[:3] or [""]
+            areas = [(a, a, None) for a in (cf.cities[:3] or cf.regions[:3] or [""])]
+        unique: dict[str, tuple[str, str | None]] = {}
+        for area, place, area_cc in areas:
+            unique.setdefault(area, (place, area_cc))
         queries: list[DiscoveryQuery] = []
-        for subject in subjects:
-            for rank, area in enumerate(dict.fromkeys(areas)):
+        for i, subject in enumerate(subjects):
+            profile = profiles[i] if i < len(profiles) else None
+            for rank, (area, (place, area_cc)) in enumerate(unique.items()):
                 where = f" in {area}" if area else ""
                 question = f"Which {subject}{where}{size} are there? List their names and official websites."
+                lang = geo.country_language(area_cc) if area_cc else "en"
+                # Free-search pass: the industry in the target language, like the web_search source queries.
+                term = next(iter(profile.keywords(lang)), subject) if profile is not None else subject
                 queries.append(
                     DiscoveryQuery(
                         key=f"gs:{subject.lower()}|{area.lower()}|{size.strip()}",
-                        params={"question": question, "subject": subject, "area": area},
+                        params={
+                            "question": question,
+                            "subject": subject,
+                            "area": area,
+                            "serp_q": f"{term} {place}".strip(),
+                            "serp_region": area_cc,
+                            "serp_lang": lang,
+                            "serp_first": serp_first,
+                        },
                         weight=round(1.0 / (1 + 0.15 * rank), 4),
                     )
                 )
         return queries
 
+    async def _free_search_suffices(self, query: DiscoveryQuery) -> bool:
+        """True when the free lookup chain already finds enough company domains for this segment."""
+        from scout.search.assess import assess_companies
+        from scout.search.chain import gemini_fallback_only, lookup_chain
+
+        params = query.params
+        if not gemini_fallback_only() or not params.get("serp_first", True):
+            return False
+        chain = lookup_chain("gemini_precheck")
+        if not chain.available():
+            return False
+        q = params.get("serp_q") or f"{params.get('subject', '')} {params.get('area', '')}".strip()
+        if not q:
+            return False
+        min_companies = max(1, int(get_settings().search_min_companies))
+        res = await chain.search(
+            q,
+            num=30,
+            lang=params.get("serp_lang"),
+            region=params.get("serp_region"),
+            assess=lambda rs: assess_companies(rs, min_companies=min_companies),
+        )
+        log.info(
+            "gemini_search.free_search_pass",
+            query=query.key,
+            provider=res.provider,
+            sufficient=res.sufficient,
+            reason=res.assessment.reason,
+        )
+        return res.sufficient
+
     async def discover(self, query: DiscoveryQuery, cursor: dict[str, Any] | None) -> DiscoveryPage:
         if not await allow_expensive():
             log.info("gemini_search.skipped_budget", query=query.key)
             return DiscoveryPage(candidates=[], next_cursor=None, requests=0)
+        if await self._free_search_suffices(query):
+            log.info("gemini_search.skipped_free_search_sufficient", query=query.key)
+            return DiscoveryPage(candidates=[], next_cursor=None, requests=1)
+        started = time.monotonic()
         res = await get_ai().grounded_search(
             query=query.params["question"], instructions=INSTRUCTIONS, schema=GroundedCompanies
         )
@@ -168,4 +231,11 @@ class GeminiSearchSource:
                 )
             )
         log.info("gemini_search.page", query=query.key, returned=len(companies), kept=len(candidates))
+        from scout.search.telemetry import record_gemini
+
+        await record_gemini(
+            produced=bool(candidates),
+            latency_ms=int((time.monotonic() - started) * 1000),
+            cost_usd=res.usage.cost_usd,
+        )
         return DiscoveryPage(candidates=candidates, next_cursor=None)

@@ -58,10 +58,11 @@ SOURCE_CATALOG: dict[str, CatalogEntry] = {
         ),
         CatalogEntry(
             "web_search",
-            "Web search (DuckDuckGo HTML)",
+            "Web search (SearXNG / DuckDuckGo)",
             "discovery",
             0.6,
-            "Free web search results, one company per domain; listicles expanded.",
+            "Free web search (self-hosted SearXNG, DuckDuckGo HTML fallback), one company per domain; "
+            "listicles expanded.",
             50,
         ),
         CatalogEntry(
@@ -158,6 +159,7 @@ SOURCE_ALIASES: dict[str, str] = {
     "web": "web_search",
     "web_search_ddg": "web_search",
     "search": "web_search",
+    "searxng": "web_search",
     "gemini": "gemini_search",
     "grounding": "gemini_search",
     "grounded": "gemini_search",

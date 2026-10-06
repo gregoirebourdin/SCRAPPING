@@ -1,7 +1,9 @@
-"""Site crawler: home → parked check → robots → sitemap → page selection → bounded fetch (+ JS tiers).
+"""Site crawler: home → parked check → robots → sitemap → page selection → bounded fetch (+ tiers).
 
 ``crawl_site`` never raises for site-level problems: unreachable / blocked / parked sites are
 reported through ``CrawlResult.status``. Per-page failures only increment ``pages_failed``.
+Fetching goes through a per-crawl ``scout.crawl.tiers.TierChain`` (L1 httpx, Scrapling escalation
+when blocked, JS rendering tiers when client-rendered).
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import structlog
 
-from scout.crawl import http, render, robots
+from scout.crawl import http, render, robots, tiers
 from scout.crawl.page_selector import parse_sitemap_entries, pick_child_sitemaps, select_pages
 from scout.crawl.parser import ParsedPage, parse_html
 from scout.crawl.ssrf import SSRFBlocked, validate_url
@@ -192,32 +194,40 @@ def _fetched_page(
 
 
 async def _maybe_render(
-    url: str, html: str, parsed: ParsedPage, *, is_home: bool
+    url: str,
+    html: str,
+    parsed: ParsedPage,
+    *,
+    is_home: bool,
+    chain: tiers.TierChain,
+    base_tier: FetchTier = FetchTier.http,
 ) -> tuple[str, ParsedPage, FetchTier]:
-    """Upgrade to a JS tier only when the HTTP response looks client-rendered."""
+    """Upgrade to a JS tier only when the fetched HTML looks client-rendered."""
     if not render.needs_js(html, parsed):
-        return html, parsed, FetchTier.http
-    for tier, renderer in (
-        (FetchTier.crawl4ai, render.render_crawl4ai),
-        (FetchTier.browser, render.render_playwright),
-    ):
-        rendered = await renderer(url)
-        if rendered:
-            reparsed = parse_html(rendered, url, is_home=is_home)
-            if len(reparsed.content_text) > len(parsed.content_text):
-                if is_home and parsed.head_html and not reparsed.head_html:
-                    reparsed.head_html = parsed.head_html
-                return rendered, reparsed, tier
-    return html, parsed, FetchTier.http
+        return html, parsed, base_tier
+
+    def better(rendered: str) -> ParsedPage | None:
+        reparsed = parse_html(rendered, url, is_home=is_home)
+        return reparsed if len(reparsed.content_text) > len(parsed.content_text) else None
+
+    got = await chain.render(url, better)
+    if got is None:
+        return html, parsed, base_tier
+    rendered, reparsed, tier_name = got
+    if is_home and parsed.head_html and not reparsed.head_html:
+        reparsed.head_html = parsed.head_html
+    return rendered, reparsed, tiers.STORED_TIER[tier_name]
 
 
-async def _fetch_home(candidates: list[str]) -> tuple[http.HttpResponse | None, CrawlResult | None]:
+async def _fetch_home(
+    candidates: list[str], chain: tiers.TierChain
+) -> tuple[http.HttpResponse | None, CrawlResult | None]:
     """Try the home URL variants. Returns (response, None) or (None, failure result)."""
     last_error: str | None = None
     last_category: ErrorCategory | None = None
     for url in candidates:
         try:
-            resp = await http.fetch(url)
+            resp = await chain.fetch(url)
         except SSRFBlocked as exc:
             return None, _failure(url, WebsiteStatus.unreachable, ErrorCategory.validation, str(exc))
         except RateLimitedError as exc:
@@ -292,12 +302,25 @@ async def crawl_site(
     *,
     max_pages: int | None = None,
     known: KnownPages | None = None,
+    chain: tiers.TierChain | None = None,
 ) -> CrawlResult:
     """Crawl a company website (5–12 pages). ``known`` maps canonical URL → (etag, last_modified,
-    content_hash) from the cache so unchanged pages can be revalidated with conditional requests."""
+    content_hash) from the cache so unchanged pages can be revalidated with conditional requests.
+    ``chain`` (tests / custom tiers) defaults to a fresh :class:`tiers.TierChain`, closed here."""
+    own = chain is None
+    chain = chain or tiers.TierChain()
+    try:
+        return await _crawl_site(website_url, max_pages=max_pages, known=known or {}, chain=chain)
+    finally:
+        if own:
+            await chain.aclose()
+
+
+async def _crawl_site(
+    website_url: str, *, max_pages: int | None, known: KnownPages, chain: tiers.TierChain
+) -> CrawlResult:
     started = time.monotonic()
     deadline = started + CRAWL_TIME_BUDGET_S
-    known = known or {}
     candidates = _home_candidates(website_url)
     try:
         validate_url(candidates[0])
@@ -312,7 +335,7 @@ async def crawl_site(
                 )
                 res.robots_blocked = True
                 return res
-            home_resp, failure = await _fetch_home(candidates)
+            home_resp, failure = await _fetch_home(candidates, chain)
     except TimeoutError:
         home_resp, failure = (
             None,
@@ -353,7 +376,14 @@ async def crawl_site(
         result.error = "disallowed by robots.txt"
         return result
 
-    _html, home_parsed, tier = await _maybe_render(final_url, home_resp.text, home_parsed, is_home=True)
+    _html, home_parsed, tier = await _maybe_render(
+        final_url,
+        home_resp.text,
+        home_parsed,
+        is_home=True,
+        chain=chain,
+        base_tier=tiers.STORED_TIER.get(home_resp.tier, FetchTier.http),
+    )
     home_page = _fetched_page(final_url, home_resp, home_parsed, PageType.home, tier=tier, is_home=True)
     result.pages.append(home_page)
     result.tier_max = tier
@@ -374,7 +404,7 @@ async def crawl_site(
         etag, last_mod, cached_hash = known.get(key, (None, None, ""))
         try:
             async with domain_slot(domain):
-                resp = await http.fetch(
+                resp = await chain.fetch(
                     url, etag=etag if cached_hash else None, last_modified=last_mod if cached_hash else None
                 )
         except (JobError, SSRFBlocked) as exc:
@@ -411,7 +441,14 @@ async def crawl_site(
                 return  # redirected to an already-fetched page (often the home page)
             seen.add(final_key)
         parsed = parse_html(resp.text, resp.final_url)
-        _html, parsed, page_tier = await _maybe_render(resp.final_url, resp.text, parsed, is_home=False)
+        _html, parsed, page_tier = await _maybe_render(
+            resp.final_url,
+            resp.text,
+            parsed,
+            is_home=False,
+            chain=chain,
+            base_tier=tiers.STORED_TIER.get(resp.tier, FetchTier.http),
+        )
         result.pages.append(_fetched_page(url, resp, parsed, page_type, tier=page_tier, is_home=False))
         if _TIER_ORDER[page_tier] > _TIER_ORDER[result.tier_max]:
             result.tier_max = page_tier

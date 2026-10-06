@@ -31,9 +31,11 @@ _PATTERN_METHODS = (EmailDiscoveryMethod.known_pattern, EmailDiscoveryMethod.inf
 STATUS_RANK: dict[EmailStatus, int] = {
     EmailStatus.INVALID: 0,
     EmailStatus.UNKNOWN: 1,
-    EmailStatus.CATCH_ALL: 2,
-    EmailStatus.RISKY: 3,
-    EmailStatus.SAFE: 4,
+    EmailStatus.TEMPORARY_UNKNOWN: 2,
+    EmailStatus.CATCH_ALL: 3,
+    EmailStatus.RISKY: 4,
+    EmailStatus.LIKELY_SAFE: 5,
+    EmailStatus.SAFE: 6,
 }
 
 

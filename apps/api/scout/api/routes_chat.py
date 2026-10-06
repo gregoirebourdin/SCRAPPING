@@ -29,6 +29,14 @@ class MessageIn(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
     thread_id: uuid.UUID | None = None
     context: UIContext = Field(default_factory=UIContext)
+    # Structured answers to a clarification card (the content is their readable summary).
+    clarification: operator.ClarificationIn | None = None
+
+
+class LaunchIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    context: UIContext = Field(default_factory=UIContext)
+    target: int | None = Field(default=None, ge=1, le=100_000)
 
 
 class ConfirmIn(BaseModel):
@@ -73,7 +81,9 @@ async def send(body: MessageIn, ctx: Ctx) -> EventSourceResponse:
     thread = await operator.get_or_create_thread(ctx, body.thread_id, body.context.list_id)
 
     async def gen() -> AsyncIterator[dict[str, str]]:
-        async for event, data in operator.run_turn(ctx, thread, body.content, body.context):
+        async for event, data in operator.run_turn(
+            ctx, thread, body.content, body.context, clarification=body.clarification
+        ):
             yield {"event": event, "data": orjson.dumps(data, default=str).decode()}
 
     return EventSourceResponse(
@@ -84,6 +94,12 @@ async def send(body: MessageIn, ctx: Ctx) -> EventSourceResponse:
 @router.post("/chat/actions/{action_id}/confirm")
 async def confirm(action_id: uuid.UUID, body: ConfirmIn, ctx: Ctx) -> dict[str, Any]:
     return await operator.confirm_action(ctx, action_id, body.context, approve=body.approve)
+
+
+@router.post("/chat/actions/{action_id}/launch")
+async def launch(action_id: uuid.UUID, body: LaunchIn, ctx: Ctx) -> dict[str, Any]:
+    """Launch the search prepared by a plan card ("Here is what I'll search" → Launch). Idempotent."""
+    return await operator.launch_plan(ctx, action_id, body.context, target=body.target)
 
 
 @router.get("/meta/tools", tags=["meta"])

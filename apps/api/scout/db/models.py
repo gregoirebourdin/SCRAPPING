@@ -822,7 +822,11 @@ class DomainEmailPattern(Base):
     supporting_samples: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
     successful_checks: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
     failed_checks: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    # Share of this pattern among the domain's named samples (recency/source weighted), 0–1.
+    share: Mapped[float] = mapped_column(sa.Float, nullable=False, server_default="0")
     last_verified_at: Mapped[datetime | None] = tstz()
+    last_confirmed_at: Mapped[datetime | None] = tstz()  # last real sample or SMTP success
+    last_failed_at: Mapped[datetime | None] = tstz()
     created_at: Mapped[datetime] = created_at()
     updated_at: Mapped[datetime] = updated_at()
 
@@ -843,6 +847,176 @@ class DomainDnsCache(Base):
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
     )
     error: Mapped[str | None] = mapped_column(sa.Text)
+
+
+class DomainProfile(Base):
+    """Domain Intelligence Profile (EMAIL_ENGINE.md): computed once per domain, reused by every contact,
+    campaign and workspace. Public facts only (DNS, provider, patterns, catch-all, SMTP behaviour)."""
+
+    __tablename__ = "domain_profiles"
+    domain: Mapped[str] = mapped_column(sa.Text, primary_key=True)
+    provider: Mapped[E.MailProvider] = mapped_column(enum_col(E.MailProvider), nullable=False, server_default="unknown")
+    mx_hosts: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    has_mx: Mapped[bool | None] = mapped_column(sa.Boolean)
+    accepts_mail: Mapped[bool | None] = mapped_column(sa.Boolean)  # False: null MX, or no MX and no A
+    catch_all: Mapped[bool | None] = mapped_column(sa.Boolean)
+    catch_all_confidence: Mapped[float | None] = mapped_column(sa.Float)
+    catch_all_method: Mapped[str | None] = mapped_column(sa.Text)
+    catch_all_checked_at: Mapped[datetime | None] = tstz()
+    smtp_reachable: Mapped[bool | None] = mapped_column(sa.Boolean)
+    smtp_last_result: Mapped[str | None] = mapped_column(sa.Text)
+    greylisting_seen: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.false())
+    smtp_checked_at: Mapped[datetime | None] = tstz()
+    dominant_pattern: Mapped[str | None] = mapped_column(sa.Text)
+    dominant_pattern_confidence: Mapped[float | None] = mapped_column(sa.Float)
+    named_samples: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    observed_emails: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    github_org: Mapped[str | None] = mapped_column(sa.Text)
+    website_checked_at: Mapped[datetime | None] = tstz()
+    github_checked_at: Mapped[datetime | None] = tstz()
+    rdap_checked_at: Mapped[datetime | None] = tstz()
+    mx_checked_at: Mapped[datetime | None] = tstz()
+    # [{signal, value, source, source_url, observed_at}] — every signal keeps its evidence.
+    evidence: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    stats: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    built_at: Mapped[datetime] = created_at()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+class DomainEmailSample(Base):
+    """A real address observed for a domain (published, committed, registered, verified…)."""
+
+    __tablename__ = "domain_email_samples"
+    id: Mapped[uuid.UUID] = pk()
+    domain: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    address: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    local_part: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    first_name: Mapped[str | None] = mapped_column(sa.Text)
+    last_name: Mapped[str | None] = mapped_column(sa.Text)
+    pattern: Mapped[str | None] = mapped_column(sa.Text)  # inferred from (first, last, local) when named
+    is_role: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.false())
+    source: Mapped[E.EmailEvidenceSource] = mapped_column(enum_col(E.EmailEvidenceSource), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(sa.Text)
+    evidence: Mapped[str | None] = mapped_column(sa.Text)
+    confidence: Mapped[float] = mapped_column(sa.Float, nullable=False, server_default="0.9")
+    times_seen: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="1")
+    workspace_id: Mapped[uuid.UUID | None] = fk_uuid("workspaces.id", ondelete="SET NULL")
+    observed_at: Mapped[datetime] = created_at()
+    last_seen_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        sa.UniqueConstraint("domain", "address", "source"),
+        sa.Index("ix_domain_email_samples_domain", "domain"),
+    )
+
+
+class SmtpHealth(Base):
+    """Health of OUR SMTP verification path (global and per provider) — never confused with mailbox validity."""
+
+    __tablename__ = "smtp_health"
+    scope: Mapped[str] = mapped_column(sa.Text, primary_key=True)  # "global" | "provider:<name>"
+    state: Mapped[E.SmtpHealthState] = mapped_column(
+        enum_col(E.SmtpHealthState), nullable=False, server_default="UNKNOWN"
+    )
+    window: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    blocked_until: Mapped[datetime | None] = tstz()
+    reason: Mapped[str | None] = mapped_column(sa.Text)
+    last_success_at: Mapped[datetime | None] = tstz()
+    last_failure_at: Mapped[datetime | None] = tstz()
+    state_changed_at: Mapped[datetime | None] = tstz()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+class EmailVerificationRequest(Base):
+    """Deep-path work item: ambiguous candidates for one person, verified in per-domain SMTP batches."""
+
+    __tablename__ = "email_verification_requests"
+    id: Mapped[uuid.UUID] = pk()
+    workspace_id: Mapped[uuid.UUID] = ws_fk()
+    person_id: Mapped[uuid.UUID] = fk_uuid("people.id", ondelete="CASCADE", nullable=False)
+    company_id: Mapped[uuid.UUID | None] = fk_uuid("companies.id", ondelete="CASCADE")
+    campaign_id: Mapped[uuid.UUID | None] = fk_uuid("campaigns.id", ondelete="SET NULL")
+    domain: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    candidates: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    status: Mapped[E.VerificationRequestStatus] = mapped_column(
+        enum_col(E.VerificationRequestStatus), nullable=False, server_default="pending"
+    )
+    attempts: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+    provisional_status: Mapped[E.EmailStatus | None] = mapped_column(enum_col(E.EmailStatus, "evr_provisional_status"))
+    provisional_confidence: Mapped[float | None] = mapped_column(sa.Float)
+    result: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    deliver_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # deferred campaign delivery
+    error: Mapped[str | None] = mapped_column(sa.Text)
+    created_at: Mapped[datetime] = created_at()
+    updated_at: Mapped[datetime] = updated_at()
+
+    __table_args__ = (
+        sa.Index("ix_evr_domain_due", "domain", "status", "next_attempt_at"),
+        sa.Index(
+            "uq_evr_active_person",
+            "workspace_id",
+            "person_id",
+            unique=True,
+            postgresql_where=sa.text("status IN ('pending', 'processing', 'retry')"),
+        ),
+    )
+
+
+class ResolverStat(Base):
+    """Empirical source scoring (scout.learning): attempts / coverage / outcomes per (dimension, key).
+
+    Dimensions: email ``resolver`` / ``source`` / ``pattern`` / ``technique`` / ``provider`` and
+    ``discovery.source``, ``people.source``, ``enrich.resolver``, ``search.engine``, ``crawl.tier``.
+    """
+
+    __tablename__ = "resolver_stats"
+    dimension: Mapped[str] = mapped_column(sa.Text, primary_key=True)
+    key: Mapped[str] = mapped_column(sa.Text, primary_key=True)
+    attempts: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    successes: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    confirmed_correct: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    confirmed_wrong: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    inconclusive: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    latency_ms_total: Mapped[int] = mapped_column(sa.BigInteger, nullable=False, server_default="0")
+    cost_usd_total: Mapped[Decimal] = mapped_column(sa.Numeric(12, 6), nullable=False, server_default="0")
+    last_outcome_at: Mapped[datetime | None] = tstz()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+EmailResolverStat = ResolverStat  # backwards-compatible name (email engine, metrics)
+
+
+class EmailResolution(Base):
+    """One email resolution (fast or deep), for throughput/latency/cache metrics and audit."""
+
+    __tablename__ = "email_resolutions"
+    id: Mapped[uuid.UUID] = pk()
+    workspace_id: Mapped[uuid.UUID] = ws_fk()
+    person_id: Mapped[uuid.UUID | None] = fk_uuid("people.id", ondelete="SET NULL")
+    campaign_id: Mapped[uuid.UUID | None] = fk_uuid("campaigns.id", ondelete="SET NULL")
+    domain: Mapped[str | None] = mapped_column(sa.Text)
+    path: Mapped[E.EmailResolutionPath] = mapped_column(enum_col(E.EmailResolutionPath), nullable=False)
+    status: Mapped[E.EmailStatus] = mapped_column(enum_col(E.EmailStatus, "email_resolution_status"), nullable=False)
+    resolver: Mapped[str | None] = mapped_column(sa.Text)
+    address: Mapped[str | None] = mapped_column(sa.Text)
+    confidence: Mapped[float | None] = mapped_column(sa.Float)
+    candidates_considered: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    smtp_probes: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default="0")
+    cache_hits: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
+    duration_ms: Mapped[int | None] = mapped_column(sa.Integer)
+    cost_usd: Mapped[Decimal] = mapped_column(sa.Numeric(12, 6), nullable=False, server_default="0")
+    explanation: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default="[]")
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (
+        sa.Index("ix_email_resolutions_created", "created_at"),
+        sa.Index("ix_email_resolutions_domain", "domain"),
+    )
 
 
 # =========================================================================================

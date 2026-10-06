@@ -2,6 +2,10 @@
 
 After ``FAILURE_THRESHOLD`` consecutive failures/blocks a source is unhealthy for 15 min; every further failure
 doubles the cooldown (capped at 6 h). Any success resets the streak and clears the cooldown.
+
+Every request / qualified lead is also counted for Empirical Source Scoring (``scout.learning``, dimension
+``discovery.source``: attempts, coverage = requests returning candidates, correct = qualified leads), and
+``health_snapshot()`` warms the learned-stats snapshot the router reads.
 """
 
 from __future__ import annotations
@@ -17,8 +21,10 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from scout.db.engine import session_scope
 from scout.db.models import Source
 from scout.discovery.catalog import SOURCE_CATALOG
+from scout.learning import stats as learning_stats
 
 log = structlog.get_logger(__name__)
+LEARNING_DIMENSION = "discovery.source"
 
 FAILURE_THRESHOLD = 5
 BASE_COOLDOWN_MIN = 15
@@ -118,6 +124,14 @@ async def record_request(
     )
     async with session_scope() as s:
         row = (await s.execute(upsert)).one()
+        await learning_stats.record_in(
+            s,
+            [
+                learning_stats.StatEvent(
+                    LEARNING_DIMENSION, key, produced=ok and results > 0, latency_ms=max(0, latency_ms)
+                )
+            ],
+        )
     if not ok and row.consecutive_failures >= FAILURE_THRESHOLD:
         log.warning(
             "source.unhealthy",
@@ -146,6 +160,10 @@ async def record_outcomes(key: str, *, duplicates: int = 0, qualified: int = 0) 
     )
     async with session_scope() as s:
         await s.execute(stmt)
+        if qualified > 0:  # a qualified lead: the discovery source was right
+            await learning_stats.record_in(
+                s, [learning_stats.StatEvent(LEARNING_DIMENSION, key, correct=True, outcome=True)] * qualified
+            )
 
 
 def _ratio(a: int, b: int, default: float) -> float:
@@ -174,4 +192,8 @@ async def health_snapshot() -> dict[str, SourceHealth]:
             consecutive_failures=r.consecutive_failures,
             last_error=r.last_error,
         )
+    from scout.learning.routing import enabled as learning_enabled
+
+    if learning_enabled():
+        await learning_stats.snapshot()  # warm the cache read by router.select_sources (never raises)
     return out

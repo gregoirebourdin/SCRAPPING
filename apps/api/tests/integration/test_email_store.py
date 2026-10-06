@@ -21,6 +21,7 @@ from scout.db.models import (
     DomainEmailPattern,
     Email,
     EmailCheck,
+    EmailVerificationRequest,
     JobEvent,
     Person,
     WebsitePage,
@@ -143,28 +144,35 @@ async def test_learn_and_load_patterns(db):
         ],
     )
     assert counts == {"{first}.{last}": 2, "{f}{last}": 1}
-    assert await store.load_domain_patterns("agence-x.fr") == [
-        ("{first}.{last}", 0.85, 2),
-        ("{f}{last}", 0.7, 1),
-    ]
+    # Learning v2 (scout.email.intel.learning): posterior predictive confidences compete (sum ≤ 1).
+    patterns = await store.load_domain_patterns("agence-x.fr")
+    assert [(p, n) for p, _, n in patterns] == [("{first}.{last}", 2), ("{f}{last}", 1)]
+    assert patterns[0][1] == pytest.approx(0.767, abs=0.01) and patterns[1][1] < 0.3
     await store.learn_patterns("agence-x.fr", [("Léa", "Petit", "lea.petit")])
     row = await pattern_row("agence-x.fr", "{first}.{last}")
-    assert row.supporting_samples == 3 and row.confidence == 0.925
+    assert row.supporting_samples == 3 and row.confidence > patterns[0][1]
+    await store.learn_patterns("agence-x.fr", [("Léa", "Petit", "lea.petit")])  # same address: idempotent
+    assert (await pattern_row("agence-x.fr", "{first}.{last}")).supporting_samples == 3
     assert await store.load_domain_patterns(None) == []
 
 
 async def test_record_pattern_outcome(db):
     await store.record_pattern_outcome("studio-y.fr", "{first}", success=True)
     row = await pattern_row("studio-y.fr", "{first}")
-    assert row.successful_checks == 1 and row.confidence == 0.7 and row.last_verified_at is not None
+    assert row.successful_checks == 1 and 0.6 < row.confidence < 0.9
+    assert row.last_verified_at is not None and row.last_confirmed_at is not None
 
     await store.learn_patterns("studio-y.fr", [("Marie", "Dupont", "mdupont"), ("Jean", "Martin", "jmartin")])
+    before = (await pattern_row("studio-y.fr", "{f}{last}")).confidence
     await store.record_pattern_outcome("studio-y.fr", "{f}{last}", success=False)
     row = await pattern_row("studio-y.fr", "{f}{last}")
-    assert row.failed_checks == 1 and row.confidence == pytest.approx(0.425)
+    assert row.failed_checks == 1 and row.confidence < before and row.last_failed_at is not None
 
+    # Failure counters are kept even without samples, but never surface as a known pattern.
     await store.record_pattern_outcome("studio-y.fr", "{last}", success=False)
-    assert await pattern_row("studio-y.fr", "{last}") is None  # failures never create rows
+    row = await pattern_row("studio-y.fr", "{last}")
+    assert row.failed_checks == 1 and row.share == 0 and row.supporting_samples == 0
+    assert "{last}" not in [p for p, _, _ in await store.load_domain_patterns("studio-y.fr")]
     await store.record_pattern_outcome("studio-y.fr", "{bogus}", success=True)
     assert await pattern_row("studio-y.fr", "{bogus}") is None
 
@@ -396,7 +404,7 @@ async def test_find_and_save_guess_records_pattern_outcomes(workspace, verifier)
     stale = await pattern_row("studio-y.fr", "{f}{last}")
     assert stale.failed_checks == 1 and stale.confidence < 0.7
     good = await pattern_row("studio-y.fr", "{first}")
-    assert good.successful_checks == 1 and good.confidence == 0.7
+    assert good.successful_checks == 1 and good.confidence > stale.confidence
 
     await store.find_and_save_for_person(ws, paul)  # same addresses again → no new outcomes
     assert (await pattern_row("studio-y.fr", "{first}")).successful_checks == 1
@@ -442,18 +450,57 @@ def ctx(ws, type_, payload):
     )
 
 
-async def test_email_jobs(workspace, verifier):
-    ws, _ = workspace
-    assert get_handler("email.find") is not None and get_handler("email.verify") is not None
-    cid = await make_company(ws, "agence-x.fr", employee_max=5000)
-    jean = await make_person(ws, cid, "Jean", "Martin")
+async def test_email_jobs(workspace, verifier, monkeypatch):
+    """email.find runs the fast path; the ambiguous guess is settled by ONE per-domain SMTP batch (deep path)."""
+    from scout.email import engine as eng
+    from scout.email.deep import process_domain
+    from scout.email.smtp.deep_verifiers import set_deep_verifier
+    from scout.email.smtp.health import MemoryHealthStore, SmtpHealthMonitor
+    from scout.email.smtp.world import MailWorld, WorldDeepVerifier
+    from tests.unit.email.fakes import load_manifest
 
-    res = await email_find(ctx(ws, "email.find", {"person_ids": [str(jean), str(uuid.uuid4())]}))
-    assert res == {"processed": 2, "found": 1, "missing": 1, "statuses": {"SAFE": 1}}
-    async with session_scope() as s:
-        events = (await s.scalars(sa.select(JobEvent).where(JobEvent.workspace_id == ws))).all()
-    assert [e.type for e in events] == ["cell.updated"]
-    assert events[0].payload["value"] == "jean.martin@agence-x.fr"
+    ws, _ = workspace
+    world = MailWorld.from_manifest(load_manifest())
+    deep = WorldDeepVerifier(world)
+
+    async def world_mx(domain: str, *, use_cache: bool = True) -> edns.MxInfo:  # never real DNS in tests
+        return await deep.resolve_mx(domain)
+
+    monkeypatch.setattr(edns, "mx_lookup", world_mx)
+    monkeypatch.setattr(eng, "_smtp_capable", lambda: True)
+    set_deep_verifier(deep)
+    try:
+        assert get_handler("email.find") is not None and get_handler("email.verify") is not None
+        cid = await make_company(ws, "agence-x.fr", employee_max=5000)
+        jean = await make_person(ws, cid, "Jean", "Martin")
+
+        res = await email_find(ctx(ws, "email.find", {"person_ids": [str(jean), str(uuid.uuid4())]}))
+        assert res["processed"] == 2 and res["missing"] == 1
+        assert set(res["statuses"]) <= {
+            "RISKY",
+            "UNKNOWN",
+        }  # no convention known yet: not settled by the fast path
+        async with session_scope() as s:
+            req = await s.scalar(
+                sa.select(EmailVerificationRequest).where(EmailVerificationRequest.person_id == jean)
+            )
+        assert req is not None and req.domain == "agence-x.fr" and 1 <= len(req.candidates) <= 3
+
+        monitor = SmtpHealthMonitor(MemoryHealthStore(), enabled=lambda: True)
+        summary = await process_domain(
+            "agence-x.fr", verifier=deep, monitor=monitor, canary=False, schedule=False
+        )
+        assert summary["claimed"] == 1 and summary["done"] == 1
+        assert world.sessions == 1  # one SMTP session for the domain
+        row = await get_email(ws, "jean.martin@agence-x.fr")
+        assert row is not None and row.status == S.SAFE
+        async with session_scope() as s:
+            events = (await s.scalars(sa.select(JobEvent).where(JobEvent.workspace_id == ws))).all()
+        assert any(
+            e.type == "cell.updated" and e.payload.get("value") == "jean.martin@agence-x.fr" for e in events
+        )
+    finally:
+        set_deep_verifier(None)
 
     row = await get_email(ws, "jean.martin@agence-x.fr")
     assert await email_verify(ctx(ws, "email.verify", {"email_ids": [str(row.id)]})) == {

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -19,11 +20,14 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scout.db.engine import session_scope
-from scout.db.enums import EmailDiscoveryMethod, EmailKind, EmailStatus, SmtpResult
+from scout.db.enums import EmailDiscoveryMethod, EmailEvidenceSource, EmailKind, EmailStatus, SmtpResult
 from scout.db.models import Company, DomainEmailPattern, Email, EmailCheck, Person, WebsitePage
+from scout.email.contracts import ObservedEmail
 from scout.email.finder import find_email, matches_person
+from scout.email.intel import learning as intel_learning
+from scout.email.intel.samples import record_observed_emails
 from scout.email.lists import is_disposable_domain, is_free_provider, is_role_local_part
-from scout.email.patterns import PATTERN_SET, infer_pattern, infer_patterns, pattern_confidence
+from scout.email.patterns import PATTERN_SET, infer_pattern
 from scout.email.status import STATUS_RANK, derive_status
 from scout.email.syntax import is_valid_syntax, normalize_address, normalize_domain, split_address
 from scout.email.types import EmailCandidate, EmailFinding, VerificationResult
@@ -39,100 +43,77 @@ _GUESSED = (
 )
 REVERIFY_CONCURRENCY = 4
 
-# ---- domain pattern memory ----------------------------------------------------------------
+# ---- domain pattern memory (served by scout.email.intel.learning) ---------------------------
 
 
 async def load_domain_patterns(domain: str | None) -> list[tuple[str, float, int]]:
-    """[(pattern, confidence, evidence)] for a domain, best first; evidence = samples + SMTP successes."""
-    d = normalize_domain(domain)
-    if d is None:
-        return []
-    async with session_scope() as s:
-        rows = (
-            await s.scalars(
-                sa.select(DomainEmailPattern)
-                .where(DomainEmailPattern.domain == d, DomainEmailPattern.confidence > 0)
-                .order_by(DomainEmailPattern.confidence.desc(), DomainEmailPattern.supporting_samples.desc())
-            )
-        ).all()
+    """[(pattern, confidence, evidence)] for a domain, best first; evidence = samples + SMTP successes.
+
+    Backed by the domain-intelligence learning (recency/source-weighted samples, Bayesian posterior,
+    SMTP outcomes); patterns without positive evidence (failure-only) are not returned.
+    """
     return [
-        (r.pattern, float(r.confidence), r.supporting_samples + r.successful_checks)
-        for r in rows
-        if r.pattern in PATTERN_SET
+        (st.pattern, st.confidence, st.samples + st.successes)
+        for st in await intel_learning.load_pattern_stats(domain)
     ]
 
 
 async def _bump_pattern(
     s: AsyncSession, domain: str, pattern: str, *, samples: int = 0, successes: int = 0, failures: int = 0
 ) -> None:
-    """Upsert counters for (domain, pattern) and recompute its confidence."""
-    T = DomainEmailPattern
-    verified = successes > 0 or failures > 0
-    ins = pg_insert(T).values(
-        domain=domain,
-        pattern=pattern,
-        supporting_samples=samples,
-        successful_checks=successes,
-        failed_checks=failures,
-        confidence=pattern_confidence(samples, successes, failures),
-        last_verified_at=sa.func.now() if verified else None,
-    )
-    stmt = ins.on_conflict_do_update(
-        index_elements=[T.domain, T.pattern],
-        set_={
-            "supporting_samples": T.supporting_samples + ins.excluded.supporting_samples,
-            "successful_checks": T.successful_checks + ins.excluded.successful_checks,
-            "failed_checks": T.failed_checks + ins.excluded.failed_checks,
-            "last_verified_at": sa.func.coalesce(ins.excluded.last_verified_at, T.last_verified_at),
-            "updated_at": sa.func.now(),
-        },
-    ).returning(T.id, T.supporting_samples, T.successful_checks, T.failed_checks)
-    row = (await s.execute(stmt)).one()
-    await _set_confidence(s, *row)
+    """Compatibility shim: add counters for (domain, pattern) and relearn the domain inside `s`.
+
+    `samples` without addresses are kept as legacy evidence (prefer `learn_patterns`, which records them).
+    """
+    d = normalize_domain(domain)
+    if d is None or pattern not in PATTERN_SET:
+        return
+    await intel_learning.bump_counters(s, d, pattern, successes=successes, failures=failures)
+    await intel_learning.add_legacy_samples(s, d, pattern, samples)
+    await intel_learning.relearn_in_session(s, d)
 
 
 async def _set_confidence(
     s: AsyncSession, row_id: uuid.UUID, samples: int, successes: int, failures: int
 ) -> None:
-    await s.execute(
-        sa.update(DomainEmailPattern)
-        .where(DomainEmailPattern.id == row_id)
-        .values(confidence=pattern_confidence(samples, successes, failures))
-    )
+    """Compatibility shim: recompute the confidence of the row's domain (counts are taken from the DB)."""
+    domain = await s.scalar(sa.select(DomainEmailPattern.domain).where(DomainEmailPattern.id == row_id))
+    if domain is not None:
+        await intel_learning.relearn_in_session(s, domain)
 
 
 async def learn_patterns(domain: str, samples: Sequence[tuple[str, str, str]]) -> dict[str, int]:
-    """Learn from published (first, last, local_part) samples: supporting_samples += n per pattern."""
+    """Learn from published (first, last, local_part) samples → patterns learned, with counts.
+
+    Each sample is recorded once as a website-observed address of the domain (idempotent per address),
+    then the domain's patterns are relearned. Role, nameless and ``{f}{l}`` samples teach nothing.
+    """
     d = normalize_domain(domain)
-    counts = infer_patterns(samples)
-    if d is None or not counts:
+    if d is None:
         return {}
-    async with session_scope() as s:
-        for pattern, n in counts.items():
-            await _bump_pattern(s, d, pattern, samples=n)
-    return counts
+    items = [
+        ObservedEmail(
+            address=f"{local.strip().lower()}@{d}",
+            local_part=local.strip().lower(),
+            source=EmailEvidenceSource.website,
+            first_name=first,
+            last_name=last,
+        )
+        for first, last, local in samples
+        if local and local.strip()
+    ]
+    learnable = [o for o in items if intel_learning.sample_pattern(o) is not None]
+    if not learnable:
+        return {}
+    await record_observed_emails(d, learnable)
+    counts = Counter(intel_learning.sample_pattern(o) for o in learnable)
+    return {str(p): n for p, n in counts.most_common()}
 
 
-async def record_pattern_outcome(domain: str, pattern: str, *, success: bool) -> None:
-    """SMTP outcome of a guessed address: success creates/strengthens, failure weakens existing rows."""
-    d = normalize_domain(domain)
-    if d is None or pattern not in PATTERN_SET:
-        return
-    async with session_scope() as s:
-        if success:
-            await _bump_pattern(s, d, pattern, successes=1)
-            return
-        T = DomainEmailPattern
-        row = (
-            await s.execute(
-                sa.update(T)
-                .where(T.domain == d, T.pattern == pattern)
-                .values(failed_checks=T.failed_checks + 1, last_verified_at=sa.func.now())
-                .returning(T.id, T.supporting_samples, T.successful_checks, T.failed_checks)
-            )
-        ).first()
-        if row is not None:
-            await _set_confidence(s, *row)
+async def record_pattern_outcome(domain: str, pattern: str, success: bool) -> None:
+    """SMTP outcome of a guessed address (healthy infrastructure only): successes strengthen the
+    pattern, failures weaken it (counters kept even without samples); the domain is relearned."""
+    await intel_learning.record_pattern_outcome(domain, pattern, success)
 
 
 # ---- findings ---------------------------------------------------------------------------------

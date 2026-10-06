@@ -1,4 +1,5 @@
-"""DuckDuckGo HTML adapter: parsing, non-company filtering, pagination, blocking, listicle expansion."""
+"""Web search discovery source (search chain; DuckDuckGo HTML here): parsing, non-company filtering, pagination,
+blocking, listicle expansion. SearXNG-first behaviour is covered in tests/unit/search."""
 
 from __future__ import annotations
 
@@ -16,10 +17,17 @@ from scout.discovery.web_search import (
     parse_results,
 )
 from scout.errors import BlockedError
+from scout.search import reset_state
 
 from .conftest import defn, fixture_text
 
 DDG = "https://html.duckduckgo.com/html/"
+
+
+@pytest.fixture(autouse=True)
+def _fresh_search_state() -> None:
+    """The search chain caches first pages and cools blocked providers down (process-wide)."""
+    reset_state()
 
 
 @pytest.fixture

@@ -3,26 +3,30 @@ emits UI effects, asks confirmation for destructive actions, persists the conver
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 import sqlalchemy as sa
 import structlog
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from scout.ai.factory import get_ai
+from scout.ai.factory import LocalProvider, get_ai
 from scout.ai.models import ModelRole, model_for
 from scout.ai.provider import ChatTurn, TextDelta, ToolCallEvent, ToolCallRequest, ToolSpec, TurnComplete
 from scout.auth.context import WorkspaceContext
+from scout.chat.clarify import ClarifyAnswer, answers_text, is_new_search, wants_go
 from scout.chat.context import UIContext
-from scout.chat.tools import TOOLS, ToolContext, describe_error, json_schema_for
+from scout.chat.i18n import Lang, detect_lang, t, tool_step
+from scout.chat.tools import TOOLS, ToolContext, _jsonable, describe_error, json_schema_for
 from scout.db.engine import session_scope
 from scout.db.enums import ActionStatus, CampaignStatus
 from scout.db.models import AssistantAction, Campaign, CampaignStats, ChatMessage, ChatThread, List, Workspace
-from scout.errors import AppError, NotFound
+from scout.errors import AppError, Conflict, NotFound
 
 log = structlog.get_logger("chat")
 
@@ -31,10 +35,24 @@ HISTORY_TURNS = 16
 
 SYSTEM_PROMPT = """You are Research's operator: the AI that runs a B2B lead intelligence workspace for the user.
 You act through tools — never claim you did something without calling the tool. Be concise (1–3 short sentences);
-the UI shows rich cards for tool results, so don't repeat their numbers at length.
+the UI shows rich cards for tool results, so don't repeat their numbers at length. Reply in the user's language.
 
-Rules:
-- Use create_campaign for any request to find/discover leads or companies (pass the user's words verbatim).
+New searches (finding leads / companies):
+- If what / where / who / how many are clear, call plan_campaign(request=<the user's words verbatim>). It shows
+  "Here is what I'll search" with Launch / Edit — the user launches; do not call create_campaign yourself.
+- If one of them is genuinely open, call ask_clarifications(request=<verbatim>) ONCE — at most 3 questions whose
+  answers change the search (location, company type/size, decision-maker role, email strictness, volume,
+  exclusions), each with ≤ 4 short options and a default. Omit `questions` to let the app ask the standard ones.
+  Never ask twice and never ask about something the user already said. The app collects the answers and
+  prepares the plan itself.
+- If the user says go / lance / vas-y / "no questions", call create_campaign directly.
+Running searches:
+- "pause / stop / arrête" → pause_campaign (keeps everything found and where discovery stopped).
+  "cancel / annule définitivement" → cancel_campaign.
+- "resume / reprends / continue" → resume_campaign. With a change ("reprends en ajoutant Marseille", "only
+  founders", "+200 leads", "budget $10") → amend_campaign(instruction=<their words>, + structured fields when
+  obvious); it shows a diff for confirmation, then resumes. Already found leads are always kept.
+Table & data:
 - "these / those / selected" → rows.target = "selection". "this list" → the current list.
 - Filtering the table is non-destructive (filter_table). Never delete data unless explicitly asked.
 - "Remove X" about rows usually means filter them out of the view unless the user says to remove from the list.
@@ -89,8 +107,24 @@ async def context_block(ws: WorkspaceContext, ui: UIContext) -> str:
                 .where(
                     Campaign.workspace_id == ws.workspace_id,
                     Campaign.status.in_(
-                        [CampaignStatus.running, CampaignStatus.paused, CampaignStatus.planning]
+                        [
+                            CampaignStatus.running,
+                            CampaignStatus.paused,
+                            CampaignStatus.planning,
+                            CampaignStatus.exhausted,
+                            CampaignStatus.budget_reached,
+                            CampaignStatus.limit_reached,
+                            CampaignStatus.completed,
+                        ]
                     ),
+                )
+                .order_by(
+                    sa.case(
+                        (Campaign.status.in_([CampaignStatus.running, CampaignStatus.planning]), 0),
+                        (Campaign.status == CampaignStatus.paused, 1),
+                        else_=2,
+                    ),
+                    Campaign.created_at.desc(),
                 )
                 .limit(5)
             )
@@ -237,7 +271,11 @@ async def execute_tool(
                         arguments=args.model_dump(mode="json"),
                     )
                 )
-            req = {"action_id": str(action_id), "title": tdef.title, "summary": question, "danger": True}
+            req: dict[str, Any] = {"action_id": str(action_id), "title": tdef.title, "danger": True}
+            if isinstance(question, dict):
+                req.update(question)
+            else:
+                req["summary"] = question
             return (
                 {"status": "awaiting_confirmation", "message": "Asked the user to confirm in the UI."},
                 None,
@@ -294,8 +332,6 @@ async def _finish_action(
     error: str | None,
     undo: dict[str, Any] | None = None,
 ) -> None:
-    from scout.chat.tools import _jsonable
-
     async with session_scope() as s:
         await s.execute(
             sa.update(AssistantAction)
@@ -310,8 +346,97 @@ async def _finish_action(
         )
 
 
+class ClarificationIn(BaseModel):
+    """Structured answers to a clarification card (sent by the UI instead of free text)."""
+
+    model_config = ConfigDict(extra="forbid")
+    action_id: uuid.UUID
+    answers: list[ClarifyAnswer] = Field(default_factory=list, max_length=8)
+    use_defaults: bool = False
+    skipped: bool = False
+    launch: bool = False  # "answer and launch right away"
+
+
+@dataclass
+class _Route:
+    """A deterministic turn (no model round-trip): answering a clarification card, launching or refining a plan."""
+
+    kind: str  # answers | launch_plan | refine_plan
+    action_id: uuid.UUID
+    card: dict[str, Any]
+    message_id: uuid.UUID | None
+    answers: list[ClarifyAnswer] = field(default_factory=list)
+    free_text: str | None = None
+    launch: bool = False
+
+
+_CHITCHAT = re.compile(
+    r"^\s*(merci|thanks?|thank you|cool|super|nice|g[ée]nial|top|parfait !?|bravo|hello|salut|bonjour|hi)\b",
+    re.I,
+)
+_YES = re.compile(
+    r"^\s*(ok|okay|oui|yes|yep|yup|parfait|perfect|let'?s go|allons-y|d'?accord|c'?est bon|go)\b", re.I
+)
+# Tools that mean "a different command" (not an answer / refinement of the pending search).
+_SEARCHY = {"create_campaign", "plan_campaign", "ask_clarifications", "filter_table", "sort_table"}
+
+
+class _Turn:
+    """State + SSE helpers for one assistant turn (steps, parts, text)."""
+
+    def __init__(self, lang: Lang) -> None:
+        self.lang: Lang = lang
+        self.parts: list[dict[str, Any]] = []
+        self.text = ""
+        self.steps: dict[str, dict[str, Any]] = {}
+        self._t0: dict[str, float] = {}
+        self.tokens_in = 0
+        self.tokens_out = 0
+        # outcome of the last tool run by _emit_tool: (result, card, status, confirm)
+        self.last: tuple[dict[str, Any], dict[str, Any] | None, str, dict[str, Any] | None] = (
+            {},
+            None,
+            "",
+            None,
+        )
+
+    def step(
+        self, sid: str, label: str, status: str = "active", error: str | None = None
+    ) -> tuple[str, dict[str, Any]]:
+        if status == "active":
+            self._t0[sid] = time.monotonic()
+        st = self.steps.get(sid) or {"id": sid, "label": label}
+        st.update({"label": label or st.get("label"), "status": status})
+        if status != "active" and sid in self._t0:
+            st["ms"] = int((time.monotonic() - self._t0.pop(sid)) * 1000)
+        if error:
+            st["error"] = error[:240]
+        self.steps[sid] = st
+        return "step", dict(st)
+
+    def open_steps(self) -> list[str]:
+        return [k for k, v in self.steps.items() if v.get("status") == "active"]
+
+    def say(self, text: str) -> tuple[str, dict[str, Any]]:
+        self.text += text
+        if self.parts and self.parts[-1].get("type") == "text":
+            self.parts[-1]["text"] += text
+        else:
+            self.parts.append({"type": "text", "text": text})
+        return "text", {"delta": text}
+
+    def final_parts(self) -> list[dict[str, Any]]:
+        steps = [v for v in self.steps.values()]
+        return ([{"type": "steps", "steps": steps}] if steps else []) + self.parts
+
+
 async def run_turn(
-    ws: WorkspaceContext, thread: ChatThread, user_text: str, ui: UIContext
+    ws: WorkspaceContext,
+    thread: ChatThread,
+    user_text: str,
+    ui: UIContext,
+    *,
+    clarification: ClarificationIn | None = None,
 ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
     """Yield SSE (event, data) pairs for one user message."""
     async with session_scope() as s:
@@ -320,7 +445,8 @@ async def run_turn(
             thread_id=thread.id,
             role="user",
             content=user_text,
-            context=ui.model_dump(mode="json"),
+            context=ui.model_dump(mode="json")
+            | ({"clarification": clarification.model_dump(mode="json")} if clarification else {}),
         )
         s.add(um)
         if thread.title == "New conversation":
@@ -339,85 +465,455 @@ async def run_turn(
         await s.flush()
         assistant_id = am.id
     yield "start", {"thread_id": str(thread.id), "message_id": str(assistant_id)}
+    route = await _preroute(ws, thread, user_text, ui, clarification, exclude_message_id=assistant_id)
+    lang: Lang = (route.card.get("lang") if route and route.card.get("lang") else None) or detect_lang(
+        user_text
+    )
+    turn = _Turn(lang)
+    tctx = ToolContext(ws=ws, ui=ui, thread_id=thread.id, message_id=assistant_id)
+    try:
+        if route is not None:
+            async for ev in _run_route(route, turn, tctx):
+                yield ev
+        else:
+            async for ev in _run_model(ws, thread, user_text, ui, turn, tctx):
+                yield ev
+    except AppError as exc:
+        for sid in turn.open_steps():
+            yield turn.step(sid, "", "failed", exc.message)
+        yield "error", {"code": exc.code, "message": exc.message, "hint": exc.hint, "retryable": False}
+        turn.parts.append({"type": "error", "message": exc.message, "hint": exc.hint})
+    except Exception as exc:
+        log.exception("chat.failed")
+        msg = "The assistant is temporarily unavailable. Your workspace is unchanged; try again."
+        if "RetryableError" in type(exc).__name__ or "Gemini" in str(exc):
+            msg = "The AI provider did not respond. Try again in a moment."
+        for sid in turn.open_steps():
+            yield turn.step(sid, "", "failed", msg)
+        yield "error", {"code": "assistant_unavailable", "message": msg, "retryable": True}
+        turn.parts.append({"type": "error", "message": msg, "retryable": True})
+    for sid in turn.open_steps():  # never leave a shimmering step behind
+        yield turn.step(sid, "", "done")
+    async with session_scope() as s:
+        await s.execute(
+            sa.update(ChatMessage)
+            .where(ChatMessage.id == assistant_id)
+            .values(
+                content=turn.text,
+                parts=_jsonable(turn.final_parts()),
+                tokens_in=turn.tokens_in or None,
+                tokens_out=turn.tokens_out or None,
+            )
+        )
+        await s.execute(
+            sa.update(ChatThread).where(ChatThread.id == thread.id).values(updated_at=datetime.now(UTC))
+        )
+    yield "done", {"message_id": str(assistant_id)}
+
+
+async def _emit_tool(
+    call: ToolCallRequest, turn: _Turn, tctx: ToolContext, ui: UIContext
+) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    """Run one tool with its visible step; yields SSE events. The outcome lands in `turn.last`."""
+    tdef = TOOLS.get(call.name)
+    sid = f"tool:{call.id}"
+    yield turn.step(sid, tool_step(call.name, call.args, turn.lang))
+    yield (
+        "tool_call",
+        {"tool": call.name, "title": tdef.title if tdef else call.name, "call_id": call.id},
+    )
+    res, card, effects, status, confirm = await execute_tool(call, tctx)
+    if status == "failed":
+        detail = (card or {}).get("detail") or (res.get("error") or {}).get("message") or "Failed"
+        yield turn.step(sid, "", "failed", str(detail))
+    else:
+        yield turn.step(sid, "", "done")
+    if card:
+        card = {**card, "lang": card.get("lang") or turn.lang}
+        turn.parts.append({"type": "card", "card": card, "status": status})
+    yield ("tool_result", {"tool": call.name, "call_id": call.id, "status": status, "card": card})
+    for eff in effects:
+        turn.parts.append({"type": "ui_effect", "effect": eff})
+        yield "ui_effect", eff
+        _apply_effect_to_context(ui, eff)
+    if confirm:
+        turn.parts.append({"type": "confirm", **confirm})
+        yield "confirm", confirm
+    turn.last = (res, card, status, confirm)
+
+
+async def _run_model(
+    ws: WorkspaceContext,
+    thread: ChatThread,
+    user_text: str,
+    ui: UIContext,
+    turn: _Turn,
+    tctx: ToolContext,
+) -> AsyncIterator[tuple[str, dict[str, Any]]]:
     ai = get_ai()
     system = SYSTEM_PROMPT + "\n\nCurrent context:\n" + await context_block(ws, ui)
     turns = await _history(thread.id)
     turns = [t for t in turns if not (t.role == "user" and t.text == user_text)][-HISTORY_TURNS:]
     turns.append(ChatTurn(role="user", text=user_text))
     specs = tool_specs()
-    parts: list[dict[str, Any]] = []
-    text_acc = ""
-    tokens_in = tokens_out = 0
-    tctx = ToolContext(ws=ws, ui=ui, thread_id=thread.id, message_id=assistant_id)
-    try:
-        for _round in range(MAX_TOOL_ROUNDS):
-            calls: list[ToolCallRequest] = []
-            assistant_turn: ChatTurn | None = None
-            round_text = ""
+    yield turn.step("understand", t("understand", turn.lang))
+    understood = False
+    executed_any = False
+    for _round in range(MAX_TOOL_ROUNDS):
+        calls: list[ToolCallRequest] = []
+        assistant_turn: ChatTurn | None = None
+        round_text = ""
+        try:
             async for ev in ai.chat_stream(role=ModelRole.reasoning, system=system, turns=turns, tools=specs):
+                if not understood:
+                    understood = True
+                    yield turn.step("understand", t("understood", turn.lang), "done")
                 if isinstance(ev, TextDelta):
                     round_text += ev.text
-                    yield "text", {"delta": ev.text}
+                    yield turn.say(ev.text)
                 elif isinstance(ev, ToolCallEvent):
                     calls.append(ev.call)
                 elif isinstance(ev, TurnComplete):
                     assistant_turn = ev.turn
-                    tokens_in += ev.usage.tokens_in
-                    tokens_out += ev.usage.tokens_out
-            text_acc += round_text
-            if round_text:
-                parts.append({"type": "text", "text": round_text})
-            if not calls:
-                break
-            turns.append(assistant_turn or ChatTurn(role="assistant", text=round_text, tool_calls=calls))
-            results: list[tuple[ToolCallRequest, dict[str, Any]]] = []
-            for call in calls:
-                tdef = TOOLS.get(call.name)
-                yield (
-                    "tool_call",
-                    {"tool": call.name, "title": tdef.title if tdef else call.name, "call_id": call.id},
-                )
-                res, card, effects, status, confirm = await execute_tool(call, tctx)
-                if card:
-                    parts.append({"type": "card", "card": card, "status": status})
-                    yield (
-                        "tool_result",
-                        {"tool": call.name, "call_id": call.id, "status": status, "card": card},
-                    )
-                else:
-                    yield (
-                        "tool_result",
-                        {"tool": call.name, "call_id": call.id, "status": status, "card": None},
-                    )
-                for eff in effects:
-                    parts.append({"type": "ui_effect", "effect": eff})
-                    yield "ui_effect", eff
-                    _apply_effect_to_context(ui, eff)
-                if confirm:
-                    parts.append({"type": "confirm", **confirm})
-                    yield "confirm", confirm
-                results.append((call, res))
-            turns.append(ChatTurn(role="tool", tool_results=results))
-    except AppError as exc:
-        yield "error", {"code": exc.code, "message": exc.message, "retryable": False}
-        parts.append({"type": "error", "message": exc.message})
-    except Exception as exc:
-        log.exception("chat.failed")
-        msg = "The assistant is temporarily unavailable. Your workspace is unchanged; try again."
-        if "RetryableError" in type(exc).__name__ or "Gemini" in str(exc):
-            msg = "The AI provider did not respond. Try again in a moment."
-        yield "error", {"code": "assistant_unavailable", "message": msg, "retryable": True}
-        parts.append({"type": "error", "message": msg})
+                    turn.tokens_in += ev.usage.tokens_in
+                    turn.tokens_out += ev.usage.tokens_out
+        except Exception as exc:
+            # The AI provider failed before anything happened: answer deterministically instead of erroring.
+            if executed_any or round_text or getattr(ai, "name", "") == "local":
+                raise
+            log.warning("chat.provider_fallback", error=str(exc)[:300])
+            yield turn.step("fallback", t("fallback", turn.lang), "done")
+            ai = LocalProvider()
+            continue
+        if not understood:
+            understood = True
+            yield turn.step("understand", t("understood", turn.lang), "done")
+        if not calls:
+            break
+        turns.append(assistant_turn or ChatTurn(role="assistant", text=round_text, tool_calls=calls))
+        results: list[tuple[ToolCallRequest, dict[str, Any]]] = []
+        stop = False
+        for call in calls:
+            async for ev in _emit_tool(call, turn, tctx, ui):
+                yield ev
+            res, _card, status, confirm = turn.last
+            executed_any = True
+            results.append((call, res))
+            tdef = TOOLS.get(call.name)
+            if (tdef and tdef.ends_turn and status == "executed") or confirm:
+                stop = True
+        if stop:
+            break
+        turns.append(ChatTurn(role="tool", tool_results=results))
+
+
+# ---- deterministic routes: answers → plan, "go" → launch, refinements ----------------------------------
+
+
+async def _last_assistant_card(
+    thread_id: uuid.UUID, exclude_message_id: uuid.UUID | None
+) -> tuple[uuid.UUID, dict[str, Any]] | None:
+    """The newest assistant message's open clarify / plan card (not answered / launched / superseded)."""
     async with session_scope() as s:
-        await s.execute(
-            sa.update(ChatMessage)
-            .where(ChatMessage.id == assistant_id)
-            .values(content=text_acc, parts=parts, tokens_in=tokens_in or None, tokens_out=tokens_out or None)
+        q = sa.select(ChatMessage).where(ChatMessage.thread_id == thread_id, ChatMessage.role == "assistant")
+        if exclude_message_id:
+            q = q.where(ChatMessage.id != exclude_message_id)
+        m = await s.scalar(q.order_by(ChatMessage.created_at.desc()).limit(1))
+    if m is None:
+        return None
+    for p in reversed(m.parts or []):
+        card = p.get("card") if p.get("type") == "card" else None
+        if not card or not card.get("action_id"):
+            continue
+        if card.get("kind") == "clarify" and not card.get("answered"):
+            return m.id, card
+        if (
+            card.get("kind") == "campaign_plan"
+            and not card.get("launched_campaign_id")
+            and not card.get("superseded")
+        ):
+            return m.id, card
+    return None
+
+
+async def _preroute(
+    ws: WorkspaceContext,
+    thread: ChatThread,
+    text: str,
+    ui: UIContext,
+    clarification: ClarificationIn | None,
+    *,
+    exclude_message_id: uuid.UUID | None,
+) -> _Route | None:
+    if clarification is not None:
+        card, message_id = await _clarify_card(ws, clarification.action_id)
+        answers = list(clarification.answers)
+        if clarification.use_defaults:
+            given = {a.id for a in answers}
+            for q in card.get("questions", []):
+                if q.get("id") not in given and q.get("default"):
+                    label = next(
+                        (o["label"] for o in q.get("options", []) if o["value"] == q["default"]), q["default"]
+                    )
+                    answers.append(
+                        ClarifyAnswer(id=q["id"], value=q["default"], label=label, question=q.get("text"))
+                    )
+        if clarification.skipped:
+            answers = []
+        return _Route(
+            "answers",
+            clarification.action_id,
+            card,
+            message_id,
+            answers=answers,
+            launch=clarification.launch,
         )
-        await s.execute(
-            sa.update(ChatThread).where(ChatThread.id == thread.id).values(updated_at=datetime.now(UTC))
+    pending = await _last_assistant_card(thread.id, exclude_message_id)
+    if pending is None or _CHITCHAT.search(text):
+        return None
+    message_id, card = pending
+    from scout.chat.local_router import route as local_route
+
+    calls, _ = local_route(text, await context_block(ws, ui))
+    if calls and calls[0].name not in _SEARCHY:
+        return None  # a different command ("add a column…", "export") — not an answer
+    if is_new_search(text) and not wants_go(text):
+        return None  # a brand-new search request
+    action_id = uuid.UUID(card["action_id"])
+    if card["kind"] == "clarify":
+        if wants_go(text):
+            answers = [
+                ClarifyAnswer(id=q["id"], value=q["default"], question=q.get("text"))
+                for q in card.get("questions", [])
+                if q.get("default")
+            ]
+            return _Route("answers", action_id, card, message_id, answers=answers, launch=True)
+        return _Route("answers", action_id, card, message_id, free_text=text)
+    if wants_go(text) or _YES.search(text):
+        return _Route("launch_plan", action_id, card, message_id)
+    return _Route("refine_plan", action_id, card, message_id, free_text=text)
+
+
+async def _clarify_card(
+    ws: WorkspaceContext, action_id: uuid.UUID
+) -> tuple[dict[str, Any], uuid.UUID | None]:
+    async with session_scope() as s:
+        a = await s.get(AssistantAction, action_id)
+        if a is None or a.workspace_id != ws.workspace_id or a.tool_name != "ask_clarifications":
+            raise NotFound("These questions are no longer available")
+        res = a.result or {}
+        message_id = a.message_id
+    from scout.chat.i18n import detect_lang as _dl
+
+    request = str(res.get("request") or (a.arguments or {}).get("request") or "")
+    card = {
+        "kind": "clarify",
+        "action_id": str(action_id),
+        "request": request,
+        "questions": res.get("questions") or [],
+        "lang": _dl(request),
+    }
+    return card, message_id
+
+
+async def _patch_card(
+    message_id: uuid.UUID | None,
+    action_id: str,
+    patch: dict[str, Any],
+    append: list[dict[str, Any]] | None = None,
+) -> None:
+    """Update a persisted card (answered / launched / superseded) so a reload shows the same state."""
+    if message_id is None:
+        return
+    async with session_scope() as s:
+        m = await s.scalar(sa.select(ChatMessage).where(ChatMessage.id == message_id).with_for_update())
+        if m is None:
+            return
+        parts = [dict(p) for p in (m.parts or [])]
+        for p in parts:
+            if p.get("type") == "card" and (p.get("card") or {}).get("action_id") == action_id:
+                p["card"] = {**p["card"], **patch}
+        if append:
+            parts.extend(append)
+        m.parts = _jsonable(parts)
+
+
+async def _run_route(
+    route: _Route, turn: _Turn, tctx: ToolContext
+) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    fr = turn.lang == "fr"
+    if route.kind == "launch_plan":
+        yield turn.step("launch", t("launch", turn.lang))
+        out = await launch_plan(tctx.ws, route.action_id, tctx.ui, append_to_plan_message=False)
+        yield turn.step("launch", "", "done")
+        yield turn.say(
+            "C'est parti — les leads arrivent dans le tableau au fur et à mesure."
+            if fr
+            else "Started — leads land in the table as they qualify."
         )
-    yield "done", {"message_id": str(assistant_id)}
+        card = {**out["card"], "lang": turn.lang}
+        turn.parts.append({"type": "card", "card": card, "status": "executed"})
+        yield (
+            "tool_result",
+            {"tool": "plan_campaign", "call_id": "launch", "status": "executed", "card": card},
+        )
+        for eff in out["ui_effects"]:
+            turn.parts.append({"type": "ui_effect", "effect": eff})
+            yield "ui_effect", eff
+        return
+    request = str(route.card.get("original_request") or route.card.get("request") or "")
+    answers = list(route.answers)
+    if route.kind == "answers":
+        yield turn.step("answers", t("answers", turn.lang))
+        summary = answers_text(answers) or (route.free_text or "")
+        await _patch_card(
+            route.message_id,
+            str(route.action_id),
+            {"answered": True, "answers": [a.model_dump() for a in answers], "answer_text": summary or None},
+        )
+        yield (
+            "card_update",
+            {"action_id": str(route.action_id), "patch": {"answered": True, "answer_text": summary}},
+        )
+        if route.free_text:
+            request = f"{request}. {route.free_text}"
+        yield turn.step("answers", "", "done")
+    else:  # refine_plan: the user typed a change under a plan card
+        request = f"{request}. {route.free_text}"
+        await _patch_card(route.message_id, str(route.action_id), {"superseded": True})
+        yield "card_update", {"action_id": str(route.action_id), "patch": {"superseded": True}}
+    call = ToolCallRequest(
+        id=f"det_{uuid.uuid4().hex[:8]}",
+        name="plan_campaign",
+        args={"request": request, "answers": [a.model_dump() for a in answers]},
+    )
+    if not route.launch:
+        yield turn.say(
+            "Voici ce que je vais chercher — lance quand tu veux, ou modifie un critère :"
+            if fr
+            else "Here is what I'll search — launch it, or change a criterion:"
+        )
+    async for ev in _emit_tool(call, turn, tctx, tctx.ui):
+        yield ev
+    _res, card, status, _confirm = turn.last
+    if route.launch and status == "executed" and card and card.get("action_id"):
+        yield turn.step("launch", t("launch", turn.lang))
+        out = await launch_plan(tctx.ws, uuid.UUID(card["action_id"]), tctx.ui, append_to_plan_message=False)
+        for p in turn.parts:
+            if p.get("type") == "card" and (p.get("card") or {}).get("action_id") == card["action_id"]:
+                p["card"] = {**p["card"], "launched_campaign_id": out["campaign_id"]}
+        yield (
+            "card_update",
+            {"action_id": card["action_id"], "patch": {"launched_campaign_id": out["campaign_id"]}},
+        )
+        yield turn.step("launch", "", "done")
+        run = {**out["card"], "lang": turn.lang}
+        turn.parts.append({"type": "card", "card": run, "status": "executed"})
+        yield "tool_result", {"tool": "plan_campaign", "call_id": "launch", "status": "executed", "card": run}
+        for eff in out["ui_effects"]:
+            turn.parts.append({"type": "ui_effect", "effect": eff})
+            yield "ui_effect", eff
+
+
+async def launch_plan(
+    ws: WorkspaceContext,
+    action_id: uuid.UUID,
+    ui: UIContext,
+    *,
+    target: int | None = None,
+    append_to_plan_message: bool = True,
+) -> dict[str, Any]:
+    """Start the campaign prepared by a `plan_campaign` card. Idempotent: a second click (or a second tab)
+    returns the campaign already started from this plan instead of launching a duplicate."""
+    from scout.chat.i18n import detect_lang as _dl
+    from scout.pipeline import campaigns as csvc
+    from scout.schemas.campaign import CampaignDefinition
+    from scout.services import audit
+    from scout.services import lists as lists_svc
+
+    already = False
+    async with session_scope() as s:
+        a = await s.scalar(
+            sa.select(AssistantAction)
+            .where(AssistantAction.id == action_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if a is None or a.workspace_id != ws.workspace_id:
+            raise NotFound("Plan not found")
+        if a.status != ActionStatus.executed or not (a.result or {}).get("definition"):
+            raise Conflict("This plan can't be launched", code="not_a_plan")
+        res = dict(a.result)
+        if res.get("campaign_id"):
+            already = True
+            cid = uuid.UUID(res["campaign_id"])
+        else:
+            defn = CampaignDefinition.model_validate(res["definition"])
+            if target:
+                defn.target_qualified_count = max(1, min(100_000, int(target)))
+            target_list_id = None
+            if res.get("target_list_name"):
+                from scout.db.enums import EntityType
+
+                lst, _ = await lists_svc.create_list(
+                    s,
+                    ws.workspace_id,
+                    name=res["target_list_name"],
+                    user_id=ws.user_id,
+                    entity_type=EntityType.company if defn.mode.value == "companies" else EntityType.person,
+                    if_exists="return",
+                )
+                target_list_id = lst.id
+            c = await csvc.create_campaign(
+                s,
+                ws.workspace_id,
+                defn,
+                user_id=ws.user_id,
+                prompt=str(res.get("request") or ""),
+                target_list_id=target_list_id,
+            )
+            cid = c.id
+            res["campaign_id"] = str(cid)
+            a.result = res
+            await audit.log(
+                s,
+                workspace_id=ws.workspace_id,
+                actor_id=ws.user_id,
+                action="campaign.create",
+                entity_type="campaign",
+                entity_ids=[cid],
+                campaign_id=cid,
+                assistant_action_id=a.id,
+                summary=f'Started campaign "{c.name}"',
+            )
+        c = await s.get(Campaign, cid)
+        assert c is not None
+        card = {
+            "kind": "campaign_started",
+            "title": c.name,
+            "campaign_id": str(cid),
+            "interpretation": c.interpretation,
+            "target": c.target_qualified_count,
+            "list_id": str(c.target_list_id) if c.target_list_id else None,
+            "lang": _dl(str(res.get("request") or "")),
+            "action_id": f"run:{action_id}",
+        }
+        message_id = a.message_id
+    if not already:
+        await _patch_card(
+            message_id,
+            str(action_id),
+            {"launched_campaign_id": str(cid)},
+            append=[{"type": "card", "card": card, "status": "executed"}] if append_to_plan_message else None,
+        )
+    effects = [{"type": "open_list", "list_id": card["list_id"]}] if card["list_id"] else []
+    return {
+        "status": "executed",
+        "card": card,
+        "ui_effects": effects,
+        "campaign_id": str(cid),
+        "already": already,
+    }
 
 
 def _apply_effect_to_context(ui: UIContext, eff: dict[str, Any]) -> None:
@@ -436,16 +932,25 @@ async def confirm_action(
     ws: WorkspaceContext, action_id: uuid.UUID, ui: UIContext, *, approve: bool
 ) -> dict[str, Any]:
     async with session_scope() as s:
-        a = await s.get(AssistantAction, action_id)
+        a = await s.scalar(
+            sa.select(AssistantAction)
+            .where(AssistantAction.id == action_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
         if a is None or a.workspace_id != ws.workspace_id:
             raise NotFound("Action not found")
         if a.status != ActionStatus.awaiting_confirmation:
             raise AppError("This action is no longer awaiting confirmation", code="not_pending")
+        thread_id, message_id, name, args = a.thread_id, a.message_id, a.tool_name, a.arguments
         if not approve:
             a.status = ActionStatus.rejected
-            return {"status": "rejected"}
-        a.confirmed_at = datetime.now(UTC)
-        thread_id, message_id, name, args = a.thread_id, a.message_id, a.tool_name, a.arguments
+        else:
+            a.confirmed_at = datetime.now(UTC)
+            a.status = ActionStatus.running  # a double click can't execute twice
+    if not approve:
+        await _patch_confirm(message_id, str(action_id), "rejected", None)
+        return {"status": "rejected"}
     tctx = ToolContext(ws=ws, ui=ui, thread_id=thread_id, message_id=message_id, confirmed=True)
     res, card, effects, status, _ = await execute_tool(
         ToolCallRequest(id=str(action_id), name=name, args=args), tctx, confirmed=True
@@ -456,4 +961,24 @@ async def confirm_action(
             .where(AssistantAction.id == action_id)
             .values(status=ActionStatus.executed if status == "executed" else ActionStatus.failed)
         )
+    await _patch_confirm(message_id, str(action_id), "approved", card and {**card, "status": status})
     return {"status": status, "card": card, "ui_effects": effects, "result": res}
+
+
+async def _patch_confirm(
+    message_id: uuid.UUID | None, action_id: str, status: str, card: dict[str, Any] | None
+) -> None:
+    if message_id is None:
+        return
+    async with session_scope() as s:
+        m = await s.scalar(sa.select(ChatMessage).where(ChatMessage.id == message_id).with_for_update())
+        if m is None:
+            return
+        parts = [dict(p) for p in (m.parts or [])]
+        for p in parts:
+            if p.get("type") == "confirm" and p.get("action_id") == action_id:
+                p["status"] = status
+        if card:
+            st = card.pop("status", "executed")
+            parts.append({"type": "card", "card": card, "status": st})
+        m.parts = _jsonable(parts)

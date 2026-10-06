@@ -11,7 +11,9 @@ from typing import Literal
 
 from scout.config import get_settings
 
-PoolName = Literal["http", "browser", "maps", "gemini", "search", "smtp", "public_api"]
+PoolName = Literal[
+    "http", "browser", "maps", "gemini", "search", "smtp", "public_api", "scrapling", "scrapling_dynamic"
+]
 
 _pools: dict[str, asyncio.Semaphore] = {}
 _domain_sems: dict[str, asyncio.Semaphore] = {}
@@ -29,6 +31,8 @@ def _size(name: str) -> int:
         "search": s.pool_search,
         "smtp": s.pool_smtp,
         "public_api": s.pool_public_api,
+        "scrapling": s.pool_scrapling,
+        "scrapling_dynamic": s.pool_scrapling_dynamic,
     }.get(name, 4)
 
 

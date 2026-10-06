@@ -145,6 +145,44 @@ def _quoted_or_after(text: str, pattern: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
+def _campaign_in_context(system: str) -> bool:
+    return bool(
+        re.search(
+            r'^campaign ".+": (running|paused|planning|exhausted|budget_reached|limit_reached|completed)',
+            system,
+            re.M,
+        )
+    )
+
+
+def _looks_like_change(text: str) -> bool:
+    """Does this read like a change to a search's criteria (vs. a bare 'resume')?"""
+    from scout.chat.amend import parse_instruction
+    from scout.schemas.campaign import CampaignDefinition
+
+    try:
+        parse_instruction(text, CampaignDefinition())
+    except Exception:
+        return False
+    return True
+
+
+def _search_request(text: str) -> tuple[list[ToolCallRequest], str | None]:
+    """New search: go → launch; precise → plan card (Launch / Edit); otherwise ≤ 3 clarifying questions."""
+    from scout.chat.clarify import build_questions, intro, wants_go
+    from scout.chat.i18n import detect_lang
+
+    lang = detect_lang(text)
+    if wants_go(text):
+        return [_call("create_campaign", {"request": text})], None
+    questions, lang, _missing = build_questions(text)
+    if questions:
+        return [_call("ask_clarifications", {"request": text})], intro(lang, len(questions))
+    return [_call("plan_campaign", {"request": text})], (
+        "Voici ce que je vais chercher :" if lang == "fr" else "Here is what I'll search:"
+    )
+
+
 def route(text: str, system: str) -> tuple[list[ToolCallRequest], str | None]:
     """Return (tool calls, direct reply)."""
     t = text.strip()
@@ -199,21 +237,54 @@ def route(text: str, system: str) -> tuple[list[ToolCallRequest], str | None]:
                 "find_decision_makers", {"titles": titles, "max_per_company": 1, "exclude_known_people": True}
             )
         ], None
-    if re.search(r"^(find|get|search|discover|trouve|cherche|donne|liste)\w*\b", low) and re.search(
-        r"\d|agenc|compan|entreprise|leads?|founders?|ceos?|startups?|dentist|restaurants?|people|contacts?",
+    if re.search(
+        r"^(find|get|search|discover|trouve|cherche|donne|liste|je (veux|voudrais|cherche)|i (want|need))\w*\b",
+        low,
+    ) and re.search(
+        r"\d|agenc|compan|entreprise|soci[ée]t|leads?|founders?|fondat|dirigeant|ceos?|startups?|dentist|"
+        r"restaurants?|people|contacts?|prospects?|boutiques?|shops?|stores?|cabinets?|marques?|brands?",
         low,
     ):
         if re.search(
             r"(missing|without|no|sans) (an? )?e?-?mails?|find (their )?emails?|trouve.*(les )?e-?mails?", low
         ):
             return [_call("find_emails", {"rows": _rows_ref(t, system)})], None
-        return [_call("create_campaign", {"request": t})], None
-    if re.search(r"\b(pause)\b.*campa|^pause\b", low):
-        return [_call("pause_campaign", {})], None
-    if re.search(r"\b(resume|reprend\w*)\b", low):
-        return [_call("resume_campaign", {})], None
-    if re.search(r"\b(cancel|stop|annule\w*|arr[eê]te\w*)\b.*campa", low):
+        return _search_request(t)
+    has_campaign = _campaign_in_context(system)
+    if re.search(r"\b(cancel|annule\w*|supprime\w* la (campagne|recherche))\b", low) and re.search(
+        r"campa|recherche|search|d[ée]finitivement|for good", low
+    ):
         return [_call("cancel_campaign", {})], None
+    if re.search(
+        r"^(pause|stop|stoppe|arr[eê]te|met[s]? en pause|mets (la recherche |la campagne )?en pause)\b|"
+        r"\b(pause|stop|arr[eê]te\w*)\b.*\b(campa\w*|recherche|search)",
+        low,
+    ):
+        return [_call("pause_campaign", {})], None
+    if re.search(r"^(resume|reprend\w*|continue\w*|relance\w*|restart)\b", low) or (
+        re.search(r"\b(resume|reprend\w*)\b", low) and has_campaign
+    ):
+        change = re.sub(
+            r"^(resume|reprend\w*|continue\w*|relance\w*|restart)\b\s*(la recherche|la campagne|the search|the campaign|it|l[aà])?\s*",
+            "",
+            t,
+            flags=re.I,
+        ).strip(" ,.:;-")
+        change = re.sub(r"^(en|with|avec|and|et|but|mais)\s+", "", change, flags=re.I).strip()
+        if change and _looks_like_change(change):
+            return [_call("amend_campaign", {"instruction": change, "resume": True})], None
+        return [_call("resume_campaign", {})], None
+    if (
+        has_campaign
+        and _looks_like_change(t)
+        and re.search(
+            r"\+\s*\d|\d+\s*(leads?|contacts?)\s*(de plus|more|en plus|suppl)|budget|"
+            r"\b(ajoute\w*|add|aussi|also)\b.*\b(ville|city|paris|lyon|marseille|bordeaux|lille|nantes|toulouse|nice|"
+            r"rennes|strasbourg|montpellier|leads?|fondateurs?|founders?|ceos?|cmos?|dirigeants?)",
+            low,
+        )
+    ):
+        return [_call("amend_campaign", {"instruction": t, "resume": True})], None
     if re.search(r"(campaign status|progress|o[uù] en est|status of the campaign|how many qualified)", low):
         return [_call("get_campaign_status", {})], None
     # ---- lists ------------------------------------------------------------------------------
@@ -372,7 +443,8 @@ def route(text: str, system: str) -> tuple[list[ToolCallRequest], str | None]:
     )
 
 
-def summarize(results: list[tuple[ToolCallRequest, dict[str, Any]]]) -> str:
+def summarize(results: list[tuple[ToolCallRequest, dict[str, Any]]], lang: str = "en") -> str:
+    fr = lang == "fr"
     lines = []
     for call, res in results:
         if "error" in res:
@@ -388,8 +460,44 @@ def summarize(results: list[tuple[ToolCallRequest, dict[str, Any]]]) -> str:
         n = call.name
         if n == "create_campaign" or n == "rerun_campaign":
             lines.append(
-                f"Campaign started — I'll keep searching until {res.get('target', 0):,} qualified leads. New leads appear as they qualify."
+                f"C'est parti — je cherche jusqu'à {res.get('target', 0):,} leads qualifiés ; ils apparaissent dans le tableau au fur et à mesure."
+                if fr
+                else f"Campaign started — I'll keep searching until {res.get('target', 0):,} qualified leads. New leads appear as they qualify."
             )
+        elif n == "pause_campaign":
+            lines.append(
+                "En pause. Tout ce qui a été trouvé est conservé — reprends quand tu veux, avec ou sans modification."
+                if fr
+                else "Paused. Everything found so far is kept — resume anytime, with or without changes."
+            )
+        elif n == "resume_campaign":
+            lines.append(
+                "Reprise là où la recherche s'était arrêtée." if fr else "Resumed exactly where it stopped."
+            )
+        elif n == "cancel_campaign":
+            lines.append(
+                "Recherche arrêtée définitivement. Les leads trouvés restent dans ta liste."
+                if fr
+                else "Search cancelled. The leads already found stay in your list."
+            )
+        elif n == "amend_campaign":
+            changes = "; ".join(f"{c['label']}: {c['before']} → {c['after']}" for c in res.get("changes", []))
+            blocked = res.get("resume_blocked")
+            if blocked:
+                lines.append(
+                    (
+                        f"Modifié ({changes}), mais je ne peux pas reprendre : {blocked['message']}."
+                        if fr
+                        else f"Updated ({changes}), but it can't resume yet: {blocked['message']}."
+                    )
+                    + (f" {blocked['hint']}" if blocked.get("hint") else "")
+                )
+            elif res.get("resumed"):
+                lines.append(
+                    f"Modifié et relancé — {changes}." if fr else f"Updated and resumed — {changes}."
+                )
+            else:
+                lines.append(f"Modifié — {changes}." if fr else f"Updated — {changes}.")
         elif n == "find_more_leads":
             lines.append(
                 f"Looking for {res.get('target', 0):,} more leads like these, excluding everyone you've already seen."
@@ -451,7 +559,10 @@ async def local_chat(system: str, turns: list[ChatTurn], tools: list[ToolSpec]) 
     last = turns[-1] if turns else None
     usage = AIUsage(model="local")
     if last is not None and last.role == "tool":
-        text = summarize(last.tool_results)
+        from scout.chat.i18n import detect_lang
+
+        user = next((x.text for x in reversed(turns) if x.role == "user"), "")
+        text = summarize(last.tool_results, detect_lang(user))
         yield TextDelta(text)
         yield TurnComplete(turn=ChatTurn(role="assistant", text=text), usage=usage)
         return

@@ -15,7 +15,8 @@ from .fakes import FakeMxLookup, FakeSmtpServer
 
 DOMAIN = "agence-x.fr"
 TARGET = "marie.dupont@agence-x.fr"
-PROBE = re.compile(r"^scout-zz-[0-9a-f]{16}@agence-x\.fr$")
+# Random catch-all probes look like plausible people (first.last, flast…), never like tests.
+PROBE = re.compile(r"^(?!marie\.dupont@)[a-z]+([._-][a-z]+)?@agence-x\.fr$")
 
 
 def make(server: FakeSmtpServer | None = None, *, smtp: bool = True, mx: FakeMxLookup | None = None):
@@ -49,10 +50,10 @@ async def test_rejected_user_unknown():
     assert res.smtp_result == R.rejected and res.catch_all is False
 
 
-async def test_greylisted_is_unknown():
+async def test_greylisted_is_temporary():
     server = FakeSmtpServer(reply=lambda _: (450, "4.2.0 Greylisted, please try again later"))
     res = await make(server).verify(TARGET)
-    assert res.smtp_result == R.unknown and res.catch_all is None
+    assert res.smtp_result == R.temporary and res.catch_all is None
 
 
 async def test_catch_all_probe_and_memory():
@@ -73,7 +74,8 @@ async def test_is_catch_all_probe_only_random_recipient():
     server = FakeSmtpServer()
     v = make(server)
     assert await v.is_catch_all("Agence-X.fr") is False
-    assert len(server.all_rcpts) == 1 and PROBE.match(server.all_rcpts[0])
+    # Two random probes of different shapes; catch-all is decided only when all agree.
+    assert len(server.all_rcpts) == 2 and all(PROBE.match(r) for r in server.all_rcpts)
 
 
 async def test_smtp_disabled_never_connects():
@@ -153,8 +155,8 @@ async def test_invalid_syntax_and_disposable_skip_dns():
         (250, "2.1.5 Ok", R.accepted),
         (251, "User not local; will forward", R.accepted),
         (252, "Cannot VRFY user", R.unknown),
-        (450, "4.2.0 Greylisted", R.unknown),
-        (451, "4.7.1 Try again later", R.unknown),
+        (450, "4.2.0 Greylisted", R.temporary),
+        (451, "4.7.1 Try again later", R.temporary),
         (550, "5.1.1 The email account that you tried to reach does not exist", R.rejected),
         (550, "5.4.1 Recipient address rejected: Access denied", R.rejected),
         (551, "User not local", R.rejected),
@@ -162,7 +164,8 @@ async def test_invalid_syntax_and_disposable_skip_dns():
         (554, "Delivery error: dd This user doesn't have an account", R.rejected),
         (550, "5.7.1 Service unavailable; client host blocked using Spamhaus", R.blocked),
         (554, "5.7.606 Access denied, banned sending IP", R.blocked),
-        (552, "Requested mail action aborted: exceeded storage allocation", R.unknown),
+        # mailbox full: the mailbox exists
+        (552, "Requested mail action aborted: exceeded storage allocation", R.accepted),
     ],
 )
 def test_classify_rcpt(code, message, expected):

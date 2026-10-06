@@ -120,8 +120,10 @@ def score(inp: ScoringInput) -> ScoreResult:
         if inp.email_status is not None:
             base = {
                 EmailStatus.SAFE: 1.0,
+                EmailStatus.LIKELY_SAFE: 0.85,
                 EmailStatus.RISKY: 0.6,
                 EmailStatus.CATCH_ALL: 0.4,
+                EmailStatus.TEMPORARY_UNKNOWN: 0.3,
                 EmailStatus.UNKNOWN: 0.25,
                 EmailStatus.INVALID: 0.0,
             }[inp.email_status]

@@ -96,7 +96,7 @@ class AIParsedCampaign(BaseModel):
     role_families: list[RoleFamily] = Field(default_factory=list)
     max_people_per_company: int = 1
     require_email: bool = True
-    accepted_email_statuses: list[EmailStatus] = Field(default_factory=lambda: [EmailStatus.SAFE])
+    accepted_email_statuses: list[EmailStatus] = Field(default_factory=lambda: [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE])
     minimum_icp_score: int | None = None
     exclusion: AIExclusion = Field(default_factory=AIExclusion)
     enrichments: list[EnrichmentRequest] = Field(default_factory=list)
@@ -119,7 +119,7 @@ intelligence app. Rules:
   with exclude_list_names. "from my uploaded file / import" → exclude_latest_import=true. "it's okay if the company is
   already in my database" → allow_new_people_at_existing_companies=true. "a different person at my existing companies"
   → seed_from_current_list=true, EXCLUDE_PREVIOUS_PEOPLE.
-- Professional/verified email required → require_email=true, accepted_email_statuses=[SAFE] unless the user accepts risky.
+- Professional/verified email required → require_email=true, accepted_email_statuses=[SAFE, LIKELY_SAFE]; [SAFE] only when the user says strictly SAFE/SMTP-verified; add RISKY when the user accepts risky.
 - Never invent constraints the user did not express.
 """
 
@@ -486,9 +486,13 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
     require_email = mode == CampaignMode.people and not re.search(
         r"\b(no email|email optional|sans email|pas besoin d.?email)\b", low
     )
-    statuses = [EmailStatus.SAFE]
+    # Professional email: SAFE (confirmed) or LIKELY_SAFE (confirmed domain convention + MX + strong name
+    # affinity). "strictly verified / SAFE only" keeps SAFE alone; "risky ok" widens.
+    statuses = [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE]
+    if re.search(r"\b(safe only|only safe|strictly verified|smtp[- ]verified|v[ée]rifi[ée]s? smtp|uniquement safe)\b", low):
+        statuses = [EmailStatus.SAFE]
     if re.search(r"\brisky\b.*\b(ok|fine|accept)|accept\w* risky|catch[- ]all ok", low):
-        statuses = [EmailStatus.SAFE, EmailStatus.RISKY]
+        statuses = [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE, EmailStatus.RISKY]
     # exclusion
     ex = AIExclusion()
     default_mode = default_exclusion_for_prompt(raw)
@@ -655,7 +659,7 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
             max_people_per_company=parsed.max_people_per_company,
         ),
         required_fields=required,
-        accepted_email_statuses=parsed.accepted_email_statuses or [EmailStatus.SAFE],
+        accepted_email_statuses=parsed.accepted_email_statuses or [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE],
         exclusion=exclusion,
         enrichments=parsed.enrichments,
         seed=seed,
