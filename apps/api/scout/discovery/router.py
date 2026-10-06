@@ -31,6 +31,7 @@ def _registry() -> tuple[DiscoverySource, ...]:
     from scout.discovery.gemini_search import GeminiSearchSource
     from scout.discovery.github import GitHubSource
     from scout.discovery.google_maps import GoogleMapsSource
+    from scout.discovery.google_places import GooglePlacesSource
     from scout.discovery.hn import HNHiringSource
     from scout.discovery.osm import OsmSource
     from scout.discovery.web_search import WebSearchSource
@@ -39,6 +40,7 @@ def _registry() -> tuple[DiscoverySource, ...]:
     return (
         FixtureSource(),
         FrRegistrySource(),
+        GooglePlacesSource(),
         GoogleMapsSource(),
         OsmSource(),
         YCSource(),

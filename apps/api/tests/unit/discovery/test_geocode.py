@@ -43,7 +43,9 @@ async def test_inside_the_requested_city_only() -> None:
 
 
 def test_the_gate_uses_the_geocoded_verdict_outside_france() -> None:
-    d = CampaignDefinition.model_validate({"company_filters": {"industries": ["web agency"], "cities": ["Austin"], "countries": ["US"]}})
+    d = CampaignDefinition.model_validate(
+        {"company_filters": {"industries": ["web agency"], "cities": ["Austin"], "countries": ["US"]}}
+    )
     assert location_fit(d, "US", "Dallas", None, None, geo_match=False) == 0.0
     assert location_fit(d, "US", "Austin", None, None, geo_match=True) == 1.0
 
@@ -51,7 +53,9 @@ def test_the_gate_uses_the_geocoded_verdict_outside_france() -> None:
 @respx.mock
 async def test_locate_honours_the_cache() -> None:
     route = respx.get("https://nominatim.openstreetmap.org/search").mock(
-        return_value=httpx.Response(200, json=[{"lat": "30.27", "lon": "-97.74", "boundingbox": ["30.1", "30.5", "-97.9", "-97.5"]}])
+        return_value=httpx.Response(
+            200, json=[{"lat": "30.27", "lon": "-97.74", "boundingbox": ["30.1", "30.5", "-97.9", "-97.5"]}]
+        )
     )
     geocode._throttle.min_interval = 0  # type: ignore[attr-defined]
     assert await geocode.locate("Austin", "US") is not None

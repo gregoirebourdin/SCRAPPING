@@ -82,6 +82,8 @@ class Settings(BaseSettings):
 
     # --- discovery sources -----------------------------------------------------------------
     gmaps_scraper_url: str | None = None  # e.g. http://maps-scraper.railway.internal:8080
+    google_places_api_key: SecretStr | None = None  # official Places API (New); free tier ~1,000 calls/month
+    google_places_monthly_cap: int = 900  # stop before Google's free monthly cap instead of billing
     fr_registry_url: str = "https://recherche-entreprises.api.gouv.fr"
     business_type_check_enabled: bool = True  # AI check that a company really is the requested business type
     geo_api_url: str = "https://geo.api.gouv.fr"  # French communes (INSEE code + postal codes)

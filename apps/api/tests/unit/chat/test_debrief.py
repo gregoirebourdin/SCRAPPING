@@ -9,7 +9,9 @@ from scout.schemas.campaign import CampaignDefinition
 
 
 def _defn(**kw) -> CampaignDefinition:
-    base = {"company_filters": {"industries": ["electronics company"], "countries": ["FR"], "cities": ["Lyon"]}}
+    base = {
+        "company_filters": {"industries": ["electronics company"], "countries": ["FR"], "cities": ["Lyon"]}
+    }
     base.update(kw)
     return CampaignDefinition.model_validate(base)
 
@@ -17,7 +19,9 @@ def _defn(**kw) -> CampaignDefinition:
 def test_reasons_are_bucketed() -> None:
     assert bucket("Website not found", "resolve_website") == "no_website"
     assert bucket("Altium: not found on website", "website_conditions") == "website_condition"
-    assert bucket("Not a web agency: Développe une app de running", "company_qualification") == "business_type"
+    assert (
+        bucket("Not a web agency: Développe une app de running", "company_qualification") == "business_type"
+    )
     assert bucket("Email status UNKNOWN not accepted", "people") == "email"
     assert bucket("Location not confirmed in Annecy", "company_qualification") == "location"
 

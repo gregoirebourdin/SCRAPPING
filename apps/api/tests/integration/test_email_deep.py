@@ -281,7 +281,9 @@ async def test_twenty_requests_pilot_then_one_rcpt_each(env, workspace, stub):
     verifier = WorldDeepVerifier(world, monitor=env)
     summary = await deep.process_domain("acme.fr", verifier=verifier, concluder=stub, monitor=env)
 
-    assert world.sessions == 2 and world.rcpt_commands == 3 + 2 + 19  # pilot's 3 guesses + 2 random, then 1 each
+    assert (
+        world.sessions == 2 and world.rcpt_commands == 3 + 2 + 19
+    )  # pilot's 3 guesses + 2 random, then 1 each
     assert world.connections == 1 + 7  # ≤ 3 targets per connection
     assert summary["claimed"] == 20 and summary["done"] == 20 and summary["probed"]
     assert len(stub.calls) == 20 and len(stub.persisted) == 20
@@ -334,7 +336,9 @@ async def test_greylisting_retries_with_backoff_then_concludes(env, workspace, s
     assert len(saved) == 2
 
     # not due yet: nothing is probed
-    n1 = world.sessions  # pilot greylisted → everyone else probed too, so every address starts its greylist timer
+    n1 = (
+        world.sessions
+    )  # pilot greylisted → everyone else probed too, so every address starts its greylist timer
     s_early = await deep.process_domain("grey.fr", verifier=verifier, concluder=stub, monitor=env)
     assert s_early["claimed"] == 0 and world.sessions == n1
 

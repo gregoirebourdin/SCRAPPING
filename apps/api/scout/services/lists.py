@@ -253,7 +253,9 @@ async def purge_list_leads(s: AsyncSession, workspace_id: uuid.UUID, list_id: uu
     if people:
         await s.execute(sa.delete(Person).where(Person.workspace_id == workspace_id, Person.id.in_(people)))
     if companies:
-        await s.execute(sa.delete(Company).where(Company.workspace_id == workspace_id, Company.id.in_(companies)))
+        await s.execute(
+            sa.delete(Company).where(Company.workspace_id == workspace_id, Company.id.in_(companies))
+        )
     return {"people_deleted": len(people), "companies_deleted": len(companies)}
 
 

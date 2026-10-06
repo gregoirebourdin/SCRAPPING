@@ -192,6 +192,8 @@ def test_plan_and_suitability() -> None:
     assert us[0].params["kl"] == "us-en" and us[0].params["q"].endswith("New York")
     # an activity outside the taxonomy is searched with its own words instead of being ignored
     assert src.suitability(defn(industries=["quantum blorp"])) > 0
-    assert src.plan(defn(industries=["quantum blorp"], countries=["FR"], cities=["Lyon"]))[0].params["q"].startswith(
-        "quantum blorp"
+    assert (
+        src.plan(defn(industries=["quantum blorp"], countries=["FR"], cities=["Lyon"]))[0]
+        .params["q"]
+        .startswith("quantum blorp")
     )

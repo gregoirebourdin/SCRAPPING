@@ -51,6 +51,7 @@ def test_registry_and_lookup() -> None:
     assert {s.key for s in all_sources()} == {
         "fixture",
         "fr_registry",
+        "google_places",
         "google_maps",
         "osm",
         "yc",

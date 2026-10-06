@@ -41,6 +41,14 @@ SOURCE_CATALOG: dict[str, CatalogEntry] = {
             90,
         ),
         CatalogEntry(
+            "google_places",
+            "Google Maps (official Places API)",
+            "both",
+            0.9,
+            "Local businesses with website, phone and exact address; free tier ~1,000 searches / month.",
+            85,
+        ),
+        CatalogEntry(
             "google_maps",
             "Google Maps (gosom scraper service)",
             "both",

@@ -484,7 +484,9 @@ async def test_delete_permanently_purges_only_leads_that_are_in_no_other_list(wo
         kept, _ = await lists_svc.create_list(s, ws, name="A garder", user_id=user)
         doomed_id, kept_id = doomed.id, kept.id
     async with session_scope() as s:
-        await lists_svc.add_to_list(s, ws, doomed_id, EntityType.person, [p_only.id, p_shared.id], user_id=user)
+        await lists_svc.add_to_list(
+            s, ws, doomed_id, EntityType.person, [p_only.id, p_shared.id], user_id=user
+        )
         await lists_svc.add_to_list(s, ws, kept_id, EntityType.person, [p_shared.id], user_id=user)
     async with session_scope() as s:
         out = await lists_svc.purge_list_leads(s, ws, doomed_id)
