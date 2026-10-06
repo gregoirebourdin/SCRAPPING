@@ -1197,6 +1197,38 @@ async def live_snapshot(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: u
     last_event_at = recent[0]["at"] if recent else None
     c = await s.get(Campaign, cid)
     from scout.config import get_settings
+    from scout.db.enums import VerificationRequestStatus
+    from scout.db.models import EmailVerificationRequest
+
+    # What a quiet run is waiting on (not stuck): SMTP retries, a source cooling down, sources already done.
+    emails = (
+        await s.execute(
+            sa.select(sa.func.count(), sa.func.min(EmailVerificationRequest.next_attempt_at)).where(
+                EmailVerificationRequest.campaign_id == cid,
+                EmailVerificationRequest.status.in_(
+                    [
+                        VerificationRequestStatus.pending,
+                        VerificationRequestStatus.processing,
+                        VerificationRequestStatus.retry,
+                    ]
+                ),
+            )
+        )
+    ).one()
+    next_discovery_at = await s.scalar(
+        sa.select(sa.func.min(Job.run_after)).where(
+            Job.campaign_id == cid,
+            Job.type == "campaign.discover",
+            Job.status.in_([JobStatus.pending, JobStatus.retrying]),
+            Job.run_after > sa.func.now(),
+        )
+    )
+    source_states = [
+        x.value if hasattr(x, "value") else str(x)
+        for x in (
+            await s.scalars(sa.select(CampaignSource.status).where(CampaignSource.campaign_id == cid))
+        ).all()
+    ]
 
     return {
         **status,
@@ -1214,6 +1246,11 @@ async def live_snapshot(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: u
             else None,
             "last_error": last_error,
             "workers_enabled": get_settings().worker_enabled,
+            "pending_emails": int(emails[0] or 0),
+            "next_email_at": emails[1],
+            "next_discovery_at": next_discovery_at,
+            "sources_done": sum(1 for x in source_states if x in ("exhausted", "failed", "disabled")),
+            "sources_total": len(source_states),
         },
     }
 

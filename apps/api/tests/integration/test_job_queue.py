@@ -115,3 +115,32 @@ async def test_worker_runs_handlers_and_retries(workspace):
         await s.execute(sa.update(Job).where(Job.id == jid).values(run_after=sa.func.now()))
     await w.run_until_idle(timeout_s=10)
     assert await _status(jid) == JobStatus.completed and calls["n"] == 2
+
+
+async def test_stopping_worker_hands_unfinished_jobs_back_at_once(workspace):
+    import asyncio
+
+    ws, _ = workspace
+    started = asyncio.Event()
+
+    @job_handler("t.worker_slow")
+    async def slow(ctx: JobContext):
+        started.set()
+        await asyncio.sleep(60)  # a deploy lands in the middle of this job
+        return {"done": True}
+
+    async with session_scope() as s:
+        jid = await queue.enqueue(s, workspace_id=ws, type="t.worker_slow")
+    w = Worker(slots=1, types=["t.worker_slow"])
+    assert await w._claim_once() == 1
+    await asyncio.wait_for(started.wait(), timeout=5)
+    await w.stop(grace_s=0.2)
+    async with session_scope() as s:
+        job = await s.get(Job, jid)
+        assert job is not None
+        assert job.status == JobStatus.pending and job.locked_by is None and job.attempts == 0
+    # due now: the next worker takes it immediately, no lease to wait for
+    again = await queue.claim("w2", ["t.worker_slow"], 1, 60)
+    assert again and again[0].id == jid and again[0].attempts == 1
+    # releasing never touches a job another worker holds
+    assert await queue.release([jid], "someone-else") == 0

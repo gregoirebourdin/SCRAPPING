@@ -13,7 +13,7 @@ import { type CampaignLiveSnapshot, useCampaign, useCampaignLive } from "@/lib/q
 export const ACTIVE = ["running", "planning"];
 export const STOPPED = ["completed", "exhausted", "budget_reached", "limit_reached", "failed", "cancelled"];
 export type Lang = "fr" | "en";
-export type Stall = "none" | "slow" | "stuck";
+export type Stall = "none" | "slow" | "waiting" | "stuck";
 
 export const STUCK_AFTER_S = 45;
 export const SLOW_AFTER_S = 120;
@@ -46,6 +46,12 @@ export interface RunView {
   disconnectedAt: number | null;
   loaded: boolean;
   error: Error | null;
+}
+
+/** The run has something scheduled: emails in verification, or a discovery query due later (rate limit). */
+export function isWaiting(h: NonNullable<CampaignLiveSnapshot["health"]>, serverNow: number): boolean {
+  if ((h.pending_emails ?? 0) > 0) return true;
+  return Boolean(h.next_discovery_at && Date.parse(h.next_discovery_at) > serverNow);
 }
 
 /** Re-render every `ms` while `on` (relative times, stall timers). */
@@ -110,6 +116,8 @@ export function useRunView(id: string | null): RunView | null {
       if (silence > STUCK_AFTER_S) stall = "stuck";
       else if (live?.lastProgressAt && (now - live.lastProgressAt) / 1000 > SLOW_AFTER_S) stall = "slow";
     }
+    // quiet but not stuck: emails being verified (SMTP retries) or a source cooling down, and no job left waiting
+    if (stall !== "none" && health && !health.overdue_jobs && isWaiting(health, Date.parse(health.server_time))) stall = "waiting";
     const qualified = Math.max(live?.qualified ?? 0, st.qualified ?? 0);
     return {
       id,

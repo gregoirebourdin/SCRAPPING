@@ -49,15 +49,26 @@ class Worker:
         ]
         log.info("worker.started", worker_id=self.worker_id, slots=self.slots)
 
-    async def stop(self, grace_s: float = 20.0) -> None:
+    async def stop(self, grace_s: float = 8.0) -> None:
+        """Stop claiming, give running jobs ``grace_s`` to finish, then hand the rest back to the queue at once
+        (a deploy must not freeze campaigns until the leases expire)."""
         self._stop.set()
         self._wake.set()
         for t in self._tasks:
             t.cancel()
         if self._running:
-            _done, pending = await asyncio.wait(list(self._running.values()), timeout=grace_s)
+            running = dict(self._running)
+            _done, pending = await asyncio.wait(list(running.values()), timeout=grace_s)
+            unfinished = [jid for jid, t in running.items() if t in pending]
             for t in pending:
                 t.cancel()
+            if pending:
+                await asyncio.wait(pending, timeout=2)
+            try:
+                released = await queue.release(unfinished, self.worker_id)
+                log.info("worker.released_jobs", count=released)
+            except Exception as exc:  # the lease reaper is the fallback
+                log.warning("worker.release_failed", error=str(exc))
         if self._listen_conn is not None:
             with suppress(Exception):
                 await self._listen_conn.close()

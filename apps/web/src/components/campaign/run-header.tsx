@@ -292,6 +292,31 @@ export function StallNotice({ run, lang = "en" }: { run: RunView; lang?: Lang })
     );
   if (h && !h.workers_enabled) known.push(fr ? "les workers sont désactivés sur ce serveur" : "workers are disabled on this server");
   if (run.conn !== "open") known.push(fr ? "flux temps réel déconnecté" : "live stream disconnected");
+  if (run.stall === "waiting" && h) {
+    const at = (iso: string | null | undefined) =>
+      iso ? new Date(iso).toLocaleTimeString(fr ? "fr-FR" : "en-GB", { hour: "2-digit", minute: "2-digit" }) : null;
+    const parts: string[] = [];
+    const n = h.pending_emails ?? 0;
+    if (n > 0) {
+      const next = at(h.next_email_at);
+      parts.push(
+        fr
+          ? `vérification de ${n} email${n > 1 ? "s" : ""}${next ? ` (prochain essai ${next})` : ""}`
+          : `verifying ${n} email${n > 1 ? "s" : ""}${next ? ` (next try ${next})` : ""}`,
+      );
+    }
+    const nextSearch = h.next_discovery_at && Date.parse(h.next_discovery_at) > Date.parse(h.server_time) ? at(h.next_discovery_at) : null;
+    if (nextSearch) parts.push(fr ? `recherche en pause jusqu'à ${nextSearch} (limite de débit)` : `search paused until ${nextSearch} (rate limit)`);
+    if (h.sources_total)
+      parts.push(fr ? `${h.sources_done ?? 0}/${h.sources_total} sources parcourues` : `${h.sources_done ?? 0}/${h.sources_total} sources done`);
+    return (
+      <p className="flex flex-wrap items-center gap-x-1.5 text-meta text-fg-3 animate-fade-in">
+        <Spinner size={10} />
+        <span className="font-medium text-fg-2">{fr ? "En attente, pas bloqué" : "Waiting, not stuck"}</span>
+        <span>— {parts.join(" · ")}</span>
+      </p>
+    );
+  }
   if (run.stall === "slow") {
     return (
       <p className="flex items-center gap-1.5 text-meta text-fg-3 animate-fade-in">

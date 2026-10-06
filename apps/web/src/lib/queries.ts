@@ -137,6 +137,11 @@ export interface CampaignLiveSnapshot extends CampaignStatus {
     oldest_overdue_s: number | null;
     last_error: string | null;
     workers_enabled: boolean;
+    pending_emails?: number;
+    next_email_at?: string | null;
+    next_discovery_at?: string | null;
+    sources_done?: number;
+    sources_total?: number;
   };
 }
 

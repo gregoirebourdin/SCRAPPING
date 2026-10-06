@@ -312,6 +312,35 @@ async def reschedule(
         await _close_attempt(s, job.id, job.attempts, "rescheduled", None, None)
 
 
+async def release(job_ids: list[uuid.UUID], worker_id: str) -> int:
+    """A stopping worker hands its unfinished jobs back: due now, the attempt not counted (a deploy is not a
+    failure), so another worker picks them up at once instead of after the lease expires."""
+    if not job_ids:
+        return 0
+    async with session_scope() as s:
+        res = await s.execute(
+            sa.text(
+                """
+                UPDATE jobs SET status = 'pending', attempts = GREATEST(attempts - 1, 0),
+                  locked_by = NULL, lease_expires_at = NULL, run_after = now(), updated_at = now()
+                WHERE id = ANY(:ids) AND locked_by = :worker AND status IN ('claimed', 'running')
+                RETURNING id, type
+                """
+            ),
+            {"ids": list(job_ids), "worker": worker_id},
+        )
+        rows = res.all()
+        if rows:
+            await s.execute(
+                sa.update(JobAttempt)
+                .where(JobAttempt.job_id.in_([r.id for r in rows]), JobAttempt.finished_at.is_(None))
+                .values(status="released", finished_at=sa.func.now())
+            )
+            for t in {r.type for r in rows}:
+                await s.execute(sa.text("SELECT pg_notify(:ch, :t)"), {"ch": JOBS_CHANNEL, "t": t})
+    return len(rows)
+
+
 async def reap_expired_leases() -> int:
     """Jobs whose worker died (lease expired) go back to retrying — no job is lost."""
     async with session_scope() as s:

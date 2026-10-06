@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # --- workers -------------------------------------------------------------------------
     worker_enabled: bool = True
     worker_slots: int = 16
-    worker_lease_seconds: int = 120
+    worker_lease_seconds: int = 60  # heartbeat every lease/3; a lost worker frees its jobs within ~75 s
     worker_poll_interval: float = 1.0
     worker_id: str | None = None
 

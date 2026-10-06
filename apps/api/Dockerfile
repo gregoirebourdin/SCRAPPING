@@ -25,4 +25,4 @@ ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 APP_ENV=production LOG_JSON=t
 USER scout
 EXPOSE 8000
 # Migrations run as Railway's pre-deploy command (railway.json); locally: `alembic upgrade head`.
-CMD ["sh", "-c", "exec uvicorn scout.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*' --timeout-graceful-shutdown 25"]
+CMD ["sh", "-c", "exec uvicorn scout.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*' --timeout-graceful-shutdown 5"]
