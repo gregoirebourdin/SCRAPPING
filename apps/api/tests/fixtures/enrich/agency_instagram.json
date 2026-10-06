@@ -1,0 +1,89 @@
+{
+  "company": {
+    "name": "La Ruche Sociale",
+    "domain": "larushesociale.fr",
+    "website_url": "https://larushesociale.fr/",
+    "city": "Lyon",
+    "country": "FR",
+    "industry": "Marketing agency",
+    "employee_min": 11,
+    "employee_max": 50,
+    "description": "Agence social media lyonnaise."
+  },
+  "pages": [
+    {
+      "url": "https://larushesociale.fr/",
+      "page_type": "home",
+      "language": "fr",
+      "title": "La Ruche Sociale — Agence Instagram à Lyon",
+      "meta_description": "Agence social media à Lyon : gestion de comptes Instagram, création de Reels et campagnes Meta Ads pour les marques lifestyle.",
+      "content_text": "La Ruche Sociale\nRéserver un appel\n\nFaites de votre Instagram un moteur de ventes\nAgence social media basée à Lyon, nous accompagnons les marques lifestyle et e-commerce.\n\nCe que disent nos clients\n« Grâce à La Ruche, notre compte Instagram a doublé en six mois. » — Julie, fondatrice de Maison Lune\n\nNos offres\nDécouvrez nos forfaits\n\nSuivez-nous sur Instagram\nTikTok",
+      "links": {
+        "social": {
+          "instagram": "https://www.instagram.com/larushesociale/",
+          "tiktok": "https://www.tiktok.com/@larushesociale"
+        },
+        "internal": [
+          {"url": "https://larushesociale.fr/services", "text": "Services"},
+          {"url": "https://larushesociale.fr/tarifs", "text": "Tarifs"},
+          {"url": "https://larushesociale.fr/recrutement", "text": "Nous rejoindre"}
+        ],
+        "external": [
+          {"url": "https://calendly.com/larushesociale/decouverte", "text": "Réserver un appel"}
+        ]
+      },
+      "emails": [],
+      "phones": [],
+      "structured_data": [],
+      "head_html": "<head><script src=\"https://client.crisp.chat/l.js\" async></script><script src=\"https://cdn.shopify.com/s/files/1/theme.js\"></script></head>"
+    },
+    {
+      "url": "https://larushesociale.fr/services",
+      "page_type": "services",
+      "language": "fr",
+      "title": "Services — La Ruche Sociale",
+      "meta_description": null,
+      "content_text": "Nos services\nGestion de comptes Instagram\nNous gérons vos comptes Instagram de A à Z : stratégie éditoriale, création de contenu, Reels et animation de communauté.\nPublicité Meta Ads\nDes campagnes Instagram et Facebook Ads pilotées chaque semaine.\nAccompagnement TikTok\nStratégie de vidéos courtes et collaborations avec des créateurs.\n\nSuivez-nous sur Instagram",
+      "links": {"social": {"instagram": "https://www.instagram.com/larushesociale/"}, "internal": [], "external": []},
+      "emails": [],
+      "phones": [],
+      "structured_data": []
+    },
+    {
+      "url": "https://larushesociale.fr/tarifs",
+      "page_type": "pricing",
+      "language": "fr",
+      "title": "Tarifs — La Ruche Sociale",
+      "meta_description": null,
+      "content_text": "Tarifs\nForfait Essentiel : gestion Instagram à partir de 690 € HT par mois.\nForfait Croissance : Instagram + TikTok à partir de 1 190 € HT par mois.",
+      "links": {"social": {}, "internal": [], "external": []},
+      "emails": [],
+      "phones": [],
+      "structured_data": []
+    },
+    {
+      "url": "https://larushesociale.fr/a-propos",
+      "page_type": "about",
+      "language": "fr",
+      "title": "À propos — La Ruche Sociale",
+      "meta_description": null,
+      "content_text": "À propos\nLa Ruche Sociale est une agence créée en 2019 à Lyon par Thomas Bernard.\nNous travaillons principalement avec des marques de mode, de cosmétique et de décoration vendues en ligne.",
+      "links": {"social": {}, "internal": [], "external": []},
+      "emails": [],
+      "phones": [],
+      "structured_data": []
+    },
+    {
+      "url": "https://larushesociale.fr/contact",
+      "page_type": "contact",
+      "language": "fr",
+      "title": "Contact — La Ruche Sociale",
+      "meta_description": null,
+      "content_text": "Contact\nhello@larushesociale.fr\n+33 4 78 00 11 22\n8 quai Saint-Antoine, 69002 Lyon",
+      "links": {"social": {}, "internal": [], "external": []},
+      "emails": ["hello@larushesociale.fr"],
+      "phones": ["+33 4 78 00 11 22"],
+      "structured_data": []
+    }
+  ]
+}

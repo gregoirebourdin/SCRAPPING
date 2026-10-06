@@ -1,0 +1,94 @@
+{
+  "company": {
+    "name": "Studio Lumière",
+    "domain": "studiolumiere.fr",
+    "website_url": "https://studiolumiere.fr/",
+    "city": "Paris",
+    "country": "FR",
+    "industry": "Marketing agency",
+    "employee_min": 6,
+    "employee_max": 10,
+    "description": null
+  },
+  "pages": [
+    {
+      "url": "https://studiolumiere.fr/",
+      "page_type": "home",
+      "language": "fr",
+      "title": "Studio Lumière — Agence SEO & création de sites à Paris",
+      "meta_description": "Studio Lumière est une agence web parisienne spécialisée en référencement naturel (SEO) et en création de sites WordPress pour les PME.",
+      "content_text": "Studio Lumière\nAccueil\nServices\nÀ propos\nContact\nDemander un devis\n\nVotre site, enfin visible sur Google\nNous aidons les PME et les artisans à gagner des clients grâce au référencement naturel et à des sites rapides.\n\nNos expertises\nRéférencement naturel (SEO) : audit technique, contenus optimisés, netlinking.\nCréation de sites WordPress sur mesure.\nCampagnes Google Ads pour les entreprises locales.\n\nIls nous font confiance\nBoulangerie Martin · Garage Dupuis · Cabinet Legrand\nPrendre rendez-vous\n\nStudio Lumière — 12 rue des Lilas, 75011 Paris\nSuivez-nous sur Instagram\nLinkedIn\nMentions légales",
+      "links": {
+        "social": {
+          "instagram": "https://www.instagram.com/studiolumiere/",
+          "linkedin": "https://www.linkedin.com/company/studio-lumiere/"
+        },
+        "internal": [
+          {"url": "https://studiolumiere.fr/services", "text": "Services"},
+          {"url": "https://studiolumiere.fr/contact", "text": "Demander un devis"},
+          {"url": "https://studiolumiere.fr/a-propos", "text": "À propos"},
+          {"url": "https://studiolumiere.fr/blog", "text": "Blog"}
+        ],
+        "external": [
+          {"url": "https://www.instagram.com/p/C1xYz/", "text": "Notre dernier post"}
+        ]
+      },
+      "emails": [],
+      "phones": [],
+      "structured_data": [
+        {"@type": "LocalBusiness", "name": "Studio Lumière",
+         "address": {"@type": "PostalAddress", "streetAddress": "12 rue des Lilas", "postalCode": "75011",
+                     "addressLocality": "Paris", "addressCountry": "FR"}}
+      ],
+      "head_html": "<head><script src=\"https://www.googletagmanager.com/gtag/js?id=G-XYZ\"></script><link rel=\"stylesheet\" href=\"/wp-content/themes/lumiere/style.css\"></head>"
+    },
+    {
+      "url": "https://studiolumiere.fr/services",
+      "page_type": "services",
+      "language": "fr",
+      "title": "Nos services — Studio Lumière",
+      "meta_description": null,
+      "content_text": "Nos services\nRéférencement naturel (SEO)\nNous réalisons un audit complet de votre site puis nous optimisons la structure, les contenus et la popularité.\nCréation de sites internet\nDes sites WordPress rapides, pensés pour convertir vos visiteurs en clients.\nPublicité Google Ads\nNous gérons vos campagnes Google Ads avec un suivi mensuel des résultats.\nDemander un devis\n\nStudio Lumière — 12 rue des Lilas, 75011 Paris\nSuivez-nous sur Instagram\nLinkedIn",
+      "links": {"social": {"instagram": "https://www.instagram.com/studiolumiere/"}, "internal": [], "external": []},
+      "emails": [],
+      "phones": [],
+      "structured_data": []
+    },
+    {
+      "url": "https://studiolumiere.fr/a-propos",
+      "page_type": "about",
+      "language": "fr",
+      "title": "À propos — Studio Lumière",
+      "meta_description": null,
+      "content_text": "À propos\nFondée en 2015 par Claire Martin, Studio Lumière accompagne les PME d'Île-de-France dans leur visibilité en ligne grâce au référencement et à la création de sites.\nNotre équipe de six consultants combine expertise technique et sens du contenu.\n\nSuivez-nous sur Instagram\nLinkedIn",
+      "links": {"social": {}, "internal": [], "external": []},
+      "emails": [],
+      "phones": [],
+      "structured_data": []
+    },
+    {
+      "url": "https://studiolumiere.fr/contact",
+      "page_type": "contact",
+      "language": "fr",
+      "title": "Contact — Studio Lumière",
+      "meta_description": null,
+      "content_text": "Contact\nUne question ? Un projet ? Écrivez-nous à contact@studiolumiere.fr ou appelez le 01 42 33 44 55.\nStudio Lumière\n12 rue des Lilas\n75011 Paris\nInscrivez-vous à notre newsletter pour recevoir nos conseils SEO.",
+      "links": {"social": {}, "internal": [], "external": []},
+      "emails": ["claire.martin@studiolumiere.fr", "contact@studiolumiere.fr"],
+      "phones": ["01 42 33 44 55"],
+      "structured_data": []
+    },
+    {
+      "url": "https://studiolumiere.fr/mentions-legales",
+      "page_type": "legal",
+      "language": "fr",
+      "title": "Mentions légales",
+      "meta_description": null,
+      "content_text": "Mentions légales\nStudio Lumière SAS au capital de 5 000 €\nRCS Paris 812 345 678\nDirectrice de la publication : Claire Martin\nHébergeur : OVH",
+      "links": {"social": {}, "internal": [], "external": []},
+      "emails": [],
+      "phones": [],
+      "structured_data": []
+    }
+  ]
+}
