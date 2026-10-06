@@ -887,19 +887,38 @@ class CreateColumnArgs(Strict):
     CreateColumnArgs,
 )
 async def create_column(a: CreateColumnArgs, ctx: ToolContext) -> ToolOutcome:
-    from scout.enrich.engine import column_entity_ids, enqueue_column, estimate_coverage
+    from scout.enrich.engine import (
+        column_entity_ids,
+        enqueue_column,
+        estimate_coverage,
+        update_column_definition,
+    )
     from scout.enrich.engine import create_column as _create
     from scout.enrich.planner import describe_plan
     from scout.enrich.types import EnrichmentPlan
 
     list_id = ctx.ui.list_id if a.scope == "list" else None
-    col = await _create(
-        ctx.ws.workspace_id,
-        name=a.name,
-        instruction=a.instruction,
-        list_id=list_id,
-        created_by=ctx.ws.user_id,
-    )
+    # The same column asked again ("are you sure it's enriching?") is the existing column re-planned and re-run,
+    # never a duplicate.
+    async with session_scope() as s:
+        existing = await s.scalar(
+            sa.select(CustomColumn).where(
+                CustomColumn.workspace_id == ctx.ws.workspace_id,
+                CustomColumn.list_id.is_not_distinct_from(list_id),
+                sa.func.lower(CustomColumn.name) == a.name.strip().lower(),
+            )
+        )
+    reused = existing is not None
+    if existing is not None:
+        col = await update_column_definition(ctx.ws.workspace_id, existing.id, instruction=a.instruction)
+    else:
+        col = await _create(
+            ctx.ws.workspace_id,
+            name=a.name,
+            instruction=a.instruction,
+            list_id=list_id,
+            created_by=ctx.ws.user_id,
+        )
     plan = EnrichmentPlan.model_validate(col.configuration)
     desc = describe_plan(plan)
     async with session_scope() as s:
@@ -909,17 +928,28 @@ async def create_column(a: CreateColumnArgs, ctx: ToolContext) -> ToolOutcome:
         ids = await column_entity_ids(ctx.ws.workspace_id, col_db, list_id=ctx.ui.list_id)
         coverage = await estimate_coverage(ctx.ws.workspace_id, col_db, ids)
     queued = (
-        await enqueue_column(ctx.ws.workspace_id, col.id, entity_ids=ids, list_id=ctx.ui.list_id)
+        await enqueue_column(
+            ctx.ws.workspace_id,
+            col.id,
+            entity_ids=ids,
+            list_id=ctx.ui.list_id,
+            only_missing=not reused,
+            force=reused,
+        )
         if a.run
         else 0
     )
-    audit_id = await _log(
-        ctx,
-        "column.create",
-        f'Created column "{col.name}"',
-        entity_type="column",
-        ids=[col.id],
-        undo={"op": "delete_column", "column_id": str(col.id)},
+    audit_id = (
+        None
+        if reused
+        else await _log(
+            ctx,
+            "column.create",
+            f'Created column "{col.name}"',
+            entity_type="column",
+            ids=[col.id],
+            undo={"op": "delete_column", "column_id": str(col.id)},
+        )
     )
     return ToolOutcome(
         {
@@ -929,10 +959,11 @@ async def create_column(a: CreateColumnArgs, ctx: ToolContext) -> ToolOutcome:
             "kind": plan.kind.value,
             "queued": queued,
             "coverage": coverage,
+            "reused_existing_column": reused,
         },
         {
             "kind": "column_created",
-            "title": f"Created “{col.name}”",
+            "title": f"Re-running “{col.name}”" if reused else f"Created “{col.name}”",
             "column_id": str(col.id),
             "describe": desc,
             "coverage": coverage,

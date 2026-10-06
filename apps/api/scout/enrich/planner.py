@@ -664,8 +664,18 @@ def _website_field_rule(name: str, dtype: ColumnDataType, ask: _Ask) -> _Rule:
     )
 
 
+# Value-seeking asks ("trouver le nom d'un client cité sur le site", "find the name of …") want an extracted value,
+# never a yes/no "does the site mention X" column — even when they say "mentioned on the website".
+_VALUE_LEAD = re.compile(
+    r"^(?:find|get|extract|give|list|what|which|who|name|the name|trouv\w*|recup\w*|donn\w*|extrai\w*|"
+    r"quel\w*|qui|nom|le nom|la liste|liste|identifi\w*)\b"
+)
+
+
 def _rule_keyword(ask: _Ask) -> _Rule | None:
     core = ask.core
+    if _VALUE_LEAD.search(core):
+        return None
     m = _MENTION.search(core)
     if not m:
         return None
