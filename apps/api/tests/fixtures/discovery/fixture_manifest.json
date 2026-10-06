@@ -1,0 +1,108 @@
+{
+ "companies": [
+  {
+   "name": "Agence Lumière",
+   "website": "https://agence-lumiere.fr",
+   "city": "Lyon",
+   "country": "FR",
+   "category": "Agence marketing",
+   "employees": "2-10",
+   "registry_id": "812345678",
+   "people": [
+    {
+     "full_name": "Claire Dubois",
+     "title": "Fondatrice"
+    }
+   ]
+  },
+  {
+   "name": "Pixel Studio",
+   "website": "https://pixel-studio-lyon.fr",
+   "city": "Lyon",
+   "country": "FR",
+   "category": "Web agency",
+   "employees": 12
+  },
+  {
+   "name": "Kréa Com",
+   "website": "https://kreacom.fr",
+   "city": "Lyon",
+   "country": "France",
+   "category": "Agence de communication",
+   "employees": {
+    "min": 3,
+    "max": 5
+   }
+  },
+  {
+   "name": "Boréal",
+   "website": "https://www.agence-boreal.fr",
+   "city": "Villeurbanne",
+   "country": "FR",
+   "category": "Marketing agency"
+  },
+  {
+   "name": "Atelier Nord",
+   "website": "https://atelier-nord.studio",
+   "city": "Lyon",
+   "country": "FR",
+   "category": "Studio de design"
+  },
+  {
+   "name": "Okidoki",
+   "website": "https://okidoki-agence.fr",
+   "city": "Lyon",
+   "country": "FR",
+   "category": "Agence marketing digital"
+  },
+  {
+   "name": "Médiapilote Lyon",
+   "website": "https://mediapilote-lyon.fr",
+   "city": "Lyon",
+   "country": "FR",
+   "category": "Agence de publicité"
+  },
+  {
+   "name": "Bruxelles Média",
+   "website": "https://bruxelles-media.be",
+   "city": "Bruxelles",
+   "country": "BE",
+   "category": "Agence marketing"
+  },
+  {
+   "name": "Cabinet Dentaire Bellecour",
+   "website": "https://dentaire-bellecour.fr",
+   "city": "Lyon",
+   "country": "FR",
+   "category": "Dentiste"
+  },
+  {
+   "name": "Growthly",
+   "website": "https://growthly.fr",
+   "city": "Paris",
+   "country": "FR",
+   "category": "Agence growth marketing"
+  },
+  {
+   "name": "Socialize",
+   "website": "https://socialize-agency.fr",
+   "city": "Paris",
+   "country": "FR",
+   "category": "Agence social media"
+  },
+  {
+   "name": "Lumen Ads",
+   "website": "https://lumen-ads.fr",
+   "city": "Marseille",
+   "country": "FR",
+   "category": "Agence marketing",
+   "phone": "+33 4 91 00 00 00"
+  },
+  {
+   "name": "No Category Co",
+   "website": "https://nocategory.fr",
+   "city": "Nantes",
+   "country": "FR"
+  }
+ ]
+}

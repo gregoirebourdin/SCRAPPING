@@ -1,0 +1,110 @@
+{
+ "exhaustive": {
+  "nbHits": true,
+  "typo": true
+ },
+ "exhaustiveNbHits": true,
+ "exhaustiveTypo": true,
+ "hits": [
+  {
+   "_tags": [
+    "story",
+    "author_whoishiring",
+    "story_49922569",
+    "ask_hn"
+   ],
+   "author": "whoishiring",
+   "created_at": "2026-10-01T15:02:07Z",
+   "created_at_i": 1790866927,
+   "num_comments": 317,
+   "objectID": "49922569",
+   "points": 269,
+   "story_id": 49922569,
+   "title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T23:56:29Z"
+  },
+  {
+   "_tags": [
+    "story",
+    "author_whoishiring",
+    "story_49922568",
+    "ask_hn"
+   ],
+   "author": "whoishiring",
+   "created_at": "2026-10-01T15:02:07Z",
+   "created_at_i": 1790866927,
+   "num_comments": 546,
+   "objectID": "49922568",
+   "points": 132,
+   "story_id": 49922568,
+   "title": "Ask HN: Who wants to be hired? (October 2026)",
+   "updated_at": "2026-10-05T23:56:59Z"
+  },
+  {
+   "_tags": [
+    "story",
+    "author_whoishiring",
+    "story_49522897",
+    "ask_hn"
+   ],
+   "author": "whoishiring",
+   "created_at": "2026-09-01T15:01:17Z",
+   "created_at_i": 1788274877,
+   "num_comments": 394,
+   "objectID": "49522897",
+   "points": 254,
+   "story_id": 49522897,
+   "title": "Ask HN: Who is hiring? (September 2026)",
+   "updated_at": "2026-10-05T14:48:44Z"
+  },
+  {
+   "_tags": [
+    "story",
+    "author_whoishiring",
+    "story_49522896",
+    "ask_hn"
+   ],
+   "author": "whoishiring",
+   "created_at": "2026-09-01T15:01:17Z",
+   "created_at_i": 1788274877,
+   "num_comments": 562,
+   "objectID": "49522896",
+   "points": 114,
+   "story_id": 49522896,
+   "title": "Ask HN: Who wants to be hired? (September 2026)",
+   "updated_at": "2026-10-05T22:11:15Z"
+  },
+  {
+   "_tags": [
+    "story",
+    "author_whoishiring",
+    "story_49156683",
+    "ask_hn"
+   ],
+   "author": "whoishiring",
+   "created_at": "2026-08-03T15:00:54Z",
+   "created_at_i": 1785769254,
+   "num_comments": 378,
+   "objectID": "49156683",
+   "points": 237,
+   "story_id": 49156683,
+   "title": "Ask HN: Who is hiring? (August 2026)",
+   "updated_at": "2026-10-04T19:17:40Z"
+  }
+ ],
+ "hitsPerPage": 5,
+ "nbHits": 512,
+ "nbPages": 103,
+ "page": 0,
+ "params": "tags=story%2Cauthor_whoishiring&hitsPerPage=5&advancedSyntax=true&analyticsTags=backend",
+ "processingTimeMS": 1,
+ "processingTimingsMS": {
+  "_request": {
+   "queue": 49,
+   "roundTrip": 17
+  },
+  "total": 1
+ },
+ "query": "",
+ "serverTimeMS": 51
+}

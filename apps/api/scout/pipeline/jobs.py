@@ -313,7 +313,10 @@ async def discover(ctx: JobContext) -> dict[str, Any] | None:
             cs.last_run_at = datetime.now(UTC)
         await emit(workspace_id, "campaign.progress", {"campaign_id": str(campaign_id), **result, "source": key},
                    campaign_id=campaign_id, session=s)
-    ctx.later(0.2 if page.candidates or page.next_cursor else 0.5)
+    if not page.candidates and page.next_cursor and page.next_cursor.get("poll_after_s"):
+        ctx.later(float(page.next_cursor["poll_after_s"]))  # remote job still running (e.g. Maps scraper)
+    else:
+        ctx.later(0.2 if page.candidates or page.next_cursor else 0.5)
     return None
 
 

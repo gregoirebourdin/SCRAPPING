@@ -1,0 +1,78 @@
+{
+ "version": 0.6,
+ "generator": "Overpass API 0.7.62.7 375dc00a",
+ "osm3s": {
+  "timestamp_osm_base": "2026-10-05T21:50:12Z",
+  "timestamp_areas_base": "2026-10-05T19:21:09Z",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+ },
+ "elements": [
+  {
+   "type": "node",
+   "id": 4567890123,
+   "lat": 45.764,
+   "lon": 4.8357,
+   "tags": {
+    "amenity": "dentist",
+    "healthcare": "dentist",
+    "name": "Cabinet Dentaire des Terreaux",
+    "website": "https://www.dentiste-terreaux.fr/",
+    "phone": "+33 4 72 00 00 10",
+    "addr:housenumber": "3",
+    "addr:street": "Place des Terreaux",
+    "addr:postcode": "69001",
+    "addr:city": "Lyon",
+    "opening_hours": "Mo-Fr 09:00-19:00"
+   }
+  },
+  {
+   "type": "way",
+   "id": 223344556,
+   "center": {
+    "lat": 45.7485,
+    "lon": 4.8467
+   },
+   "tags": {
+    "healthcare": "dentist",
+    "name": "Clinique Dentaire Jean Macé",
+    "contact:website": "http://www.clinique-jeanmace.fr",
+    "contact:email": "accueil@clinique-jeanmace.fr",
+    "addr:street": "Avenue Jean Jaurès",
+    "addr:postcode": "69007",
+    "addr:city": "Lyon"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4567890124,
+   "lat": 45.77,
+   "lon": 4.83,
+   "tags": {
+    "amenity": "dentist",
+    "name": "Dr Paul Durand"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4567890125,
+   "lat": 45.77,
+   "lon": 4.84,
+   "tags": {
+    "amenity": "dentist",
+    "name": "Sourire Croix-Rousse",
+    "website": "https://www.facebook.com/sourirecroixrousse"
+   }
+  },
+  {
+   "type": "node",
+   "id": 4567890123,
+   "lat": 45.764,
+   "lon": 4.8357,
+   "tags": {
+    "amenity": "dentist",
+    "name": "Cabinet Dentaire des Terreaux",
+    "website": "https://www.dentiste-terreaux.fr/"
+   }
+  }
+ ]
+}

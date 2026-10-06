@@ -1,0 +1,517 @@
+{
+ "exhaustive": {
+  "nbHits": true,
+  "typo": true
+ },
+ "exhaustiveNbHits": true,
+ "exhaustiveTypo": true,
+ "hits": [
+  {
+   "_tags": [
+    "comment",
+    "author_lizwoodfieldta",
+    "story_49922569"
+   ],
+   "author": "lizwoodfieldta",
+   "comment_text": "SentiLink | <a href=\"https:&#x2F;&#x2F;www.sentilink.com&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.sentilink.com&#x2F;</a> | Engineering &amp; Data Science | REMOTE, HYBRID, and ONSITE (UNITED STATES ONLY) | Full Time<p>Primarily hiring in the U.S. for more senior level roles.<p>We’re hiring across Engineering (Primarily Backend&#x2F;Data Platform) and Data Science &#x2F; ML roles. Hiring at Manager&#x2F;Director level as well as Senior IC levels. We’re language-agnostic and hire for fundamentals.<p>Across the team you’ll see: • Python, Go, Rust, Scala • PostgreSQL, Snowflake • Kafka, Redis • Terraform, Kubernetes • ML: XGBoost, PyTorch, Feature stores, real-time scoring pipelines<p>If you love solving complex distributed systems challenges, building customer-facing ML products, or working on detection systems that must be both high-precision and low-latency, you’ll fit right in.<p>Roles are here: <a href=\"https:&#x2F;&#x2F;jobs.ashbyhq.com&#x2F;sentilink?utm_source=hacker_news\" rel=\"nofollow\">https:&#x2F;&#x2F;jobs.ashbyhq.com&#x2F;sentilink?utm_source=hacker_news</a>\nIf you have questions, feel free to reach out directly at liz.woodfield at sentilink dot com.<p>At SentiLink, we stop identity fraud at scale. Our products protect banks, fintechs, marketplaces, and leading financial institutions from synthetic identity fraud, identity theft, and emerging threat. We analyze millions of applications while keeping real users moving fast.<p>We’ve seen tremendous traction and are growing extremely quickly. Our real-time APIs have helped verify hundreds of millions of identities, starting with financial services and rapidly expanding into new markets. SentiLink is backed by world-class investors including Craft Ventures, Andreessen Horowitz, NYCA, and Max Levchin.<p>SentiLink supports a variety of ways to work, ranging from fully remote to in-office. We operate as a digital-first company with strong collaboration across the U.S. and India. We maintain physical offices in Austin, San Francisco, New York City, Seattle, Los Angeles, and Chicago in the U.S. If you’re located near one of these offices, we would love for you to spend time in the office regularly. Some roles are hybrid or in-office by design.<p>We’re a small, high-impact team solving one of the most interesting and adversarial problems in fintech: how do you build systems that reliably determine whether a real human is on the other side of a financial transaction?",
+   "created_at": "2026-10-05T23:19:50Z",
+   "created_at_i": 1791242390,
+   "objectID": "49972097",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T23:23:15Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_Paulyonewaytech",
+    "story_49922569"
+   ],
+   "author": "Paulyonewaytech",
+   "comment_text": "Early-stage Startup | Software Engineer &amp; Data Analyst | Full-Time | REMOTE (US &amp; Canada) | $150,000 - $180,000 USD<p>We’re hiring for two roles: a strong generalist Software Engineer and a Data Analyst.<p>For the Software Engineer role, we’re looking for someone with solid technical ability and strong computer science fundamentals. Experience building reliable systems, performance optimization, clean architecture, and solving complex problems matters more to us than any specific tech stack.<p>For the Data Analyst role, we’re looking for someone who can turn messy data into clear insights. Strong SQL&#x2F;Python skills and the ability to drive product and business decisions with data are key.<p>Some reasons you may enjoy working with us:<p>* Collaborative and innovative environment where your voice is heard\n* Fully remote with flexible hours\n* Long-term, full-time role (not a fixed-term contract)\n* High ownership and interesting technical&#x2F;data challenges\n* Work with a talented team shipping products customers use every day<p>Only US and Canadian applicants will be considered.<p>If you’re interested, send your resume to paulephraimebuka@gmail.com and mention which role you’re applying for.",
+   "created_at": "2026-10-05T22:31:30Z",
+   "created_at_i": 1791239490,
+   "objectID": "49971729",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T22:41:31Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_calebjosue",
+    "story_49922569"
+   ],
+   "author": "calebjosue",
+   "comment_text": "I got:<p>We can&#x27;t take applications from your country right now. We can currently only hire people based in the EEA, the UK, or the US. If you move to one of those, we&#x27;d be glad to hear from you.<p>While trying to apply for this job offer.  \nThe instructions for people posting jobs states:  \ninclude REMOTE for remote work, REMOTE (US) or similar if the country is restricted...<p>Not a big deal, just saying.",
+   "created_at": "2026-10-05T21:17:47Z",
+   "created_at_i": 1791235067,
+   "objectID": "49970907",
+   "parent_id": 49966852,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T21:23:00Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_preetamjinka",
+    "story_49922569"
+   ],
+   "author": "preetamjinka",
+   "comment_text": "FunnelStory | MTS, AI&#x2F;ML | Remote (India) | Full-Time | <a href=\"https:&#x2F;&#x2F;funnelstory.ai\" rel=\"nofollow\">https:&#x2F;&#x2F;funnelstory.ai</a><p>FunnelStory is building agents to autonomously protect and grow revenue for post-sales teams. Our agents need evidence-backed signals from large-scale structured and unstructured enterprise datasets.<p>You&#x27;d work on cohort analysis, prediction models, experiments, and whatever else it takes to make those signals hold up. Our tech stack is primarily Go.<p>Please email preetam @ funnelstory.ai with &quot;HN - AI&#x2F;ML&quot; in the subject if you are interested.",
+   "created_at": "2026-10-05T19:19:05Z",
+   "created_at_i": 1791227945,
+   "objectID": "49969213",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T20:54:15Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_OktaRecruiter",
+    "story_49922569"
+   ],
+   "author": "OktaRecruiter",
+   "comment_text": "Okta (Auth0)\nSenior Product Manager, Auth0 AI and Identity Products (Auth0)\nToronto, Canada - Hybrid\nI am a Recruiter at Okta\nActively hiring<p><a href=\"https:&#x2F;&#x2F;www.okta.com&#x2F;company&#x2F;careers&#x2F;rd&#x2F;senior-product-manager-auth0-ai-and-identity-products-auth0-7905576&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.okta.com&#x2F;company&#x2F;careers&#x2F;rd&#x2F;senior-product-manag...</a>",
+   "created_at": "2026-10-05T18:58:49Z",
+   "created_at_i": 1791226729,
+   "objectID": "49968954",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T19:01:30Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_CactusBlue",
+    "story_49922569"
+   ],
+   "author": "CactusBlue",
+   "comment_text": "Mechanize | San Francisco, CA (Onsite) | Junior SWE ($300k + equity + bonus), SWE ($350k + equity + bonus), Research Engineer, Alignment ($300k-$400k + equity + bonus)<p>Applying takes &lt;2 min: <a href=\"https:&#x2F;&#x2F;www.mechanize.work&#x2F;apply&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.mechanize.work&#x2F;apply&#x2F;</a><p>We build environments that frontier AI labs use to train their models to do real-world software engineering. We have more demand than we can keep up with, so we&#x27;re hiring fast.",
+   "created_at": "2026-10-05T18:03:58Z",
+   "created_at_i": 1791223438,
+   "objectID": "49968228",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T18:09:14Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_sebselassie",
+    "story_49922569"
+   ],
+   "author": "sebselassie",
+   "comment_text": "telli hiring in Eng, GTM, Design [Berlin] - <a href=\"https:&#x2F;&#x2F;telli.com&#x2F;careers\">https:&#x2F;&#x2F;telli.com&#x2F;careers</a>",
+   "created_at": "2026-10-05T17:59:16Z",
+   "created_at_i": 1791223156,
+   "objectID": "49968179",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T18:04:00Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_xai-tutor",
+    "story_49922569"
+   ],
+   "author": "xai-tutor",
+   "comment_text": "They are a big waste of time.",
+   "created_at": "2026-10-05T17:39:22Z",
+   "created_at_i": 1791221962,
+   "objectID": "49967915",
+   "parent_id": 49925489,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T17:43:00Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_Shiggy_",
+    "story_49922569"
+   ],
+   "author": "Shiggy_",
+   "comment_text": "Pretty much.",
+   "created_at": "2026-10-05T17:21:17Z",
+   "created_at_i": 1791220877,
+   "objectID": "49967711",
+   "parent_id": 49926942,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T17:22:13Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_veraalb1",
+    "story_49922569"
+   ],
+   "author": "veraalb1",
+   "comment_text": "Close | Backend Engineers, Sr. Software Engineer (Marketing) | REMOTE (US) \n<a href=\"https:&#x2F;&#x2F;close.com&#x2F;careers\" rel=\"nofollow\">https:&#x2F;&#x2F;close.com&#x2F;careers</a><p>Close is a CRM for small and midsize sales teams (11,000+ paying customers). In 2026 we shipped Chloe, our AI agent that makes sales calls and works inside the CRM.<p>Backend Engineers (Senior &#x2F; Staff). Python, Flask&#x2F;FastAPI, MongoDB, PostgreSQL, Elasticsearch. Two teams:\n- CRM: agentic enrichment, AI search, making the CRM usable by any MCP agent. Elasticsearch experience is a big plus.\n- Backend Platforms: a new team building paved roads for our engineers (API patterns, observability, Flask to FastAPI) and guardrails for agent-written code\nYou&#x27;ve shipped LLM features to real users and owned production systems.<p>Sr. Software Engineer, Marketing. Our first engineer dedicated to close.com (Astro, Sanity, Vercel). You&#x27;d own motion and interactivity, performance, SEO, and conversion tracking, and build tools so Marketing can ship without waiting on engineering. 5+ years building marketing sites, with Segment&#x2F;Amplitude-style analytics.",
+   "created_at": "2026-10-05T17:05:50Z",
+   "created_at_i": 1791219950,
+   "objectID": "49967489",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T17:11:29Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_mvsSphinx",
+    "story_49922569"
+   ],
+   "author": "mvsSphinx",
+   "comment_text": "Sphinx Defense | Software Engineering | Remote (US Only) | <a href=\"https:&#x2F;&#x2F;www.sphinxdefense.com\" rel=\"nofollow\">https:&#x2F;&#x2F;www.sphinxdefense.com</a><p>Sphinx Defense builds software to solve complex national security problems for America and its allies. Founded by engineers and technologists with deep experience across commercial and defense technology, we&#x27;re building a vehicle-agnostic communication infrastructure to enable satellite operators to securely utilize antenna networks and maneuver satellites in real-time. We&#x27;re bootstrapped, profitable, and growing aggressively.<p>To learn more about who we are, our engineering culture, and whether this is the right place for you,  <a href=\"https:&#x2F;&#x2F;sphinxdefense.com&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;sphinxdefense.com&#x2F;</a><p>Our current openings are:\nSr.. Backend Engineer - Colorado Springs, CO: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;auntb4us8us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;auntb4us8us</a> \nSr.. Backend Engineer - Remote: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;kp0xwi9b8us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;kp0xwi9b8us</a> \nBackend Engineer - Colorado Springs, CO: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;z0jox39h8us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;z0jox39h8us</a> \nBackend Engineer - Remote: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;bd3zrpcg8us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;bd3zrpcg8us</a> \nInfrastructure Deployment Manager - Colorado Springs, CO: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;fibm1r478us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;fibm1r478us</a> \nInfrastructure Deployment Manager - Chantilly, VA: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;a70fgkh58us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;a70fgkh58us</a> \nSr. Network Engineer - Colorado Springs, CO: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;v1c47kta8us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;v1c47kta8us</a>\nSr. Full Stack Engineer - Colorado Springs, CO: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;dugo9l3i8us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;dugo9l3i8us</a> \nSr. Full Stack Engineer - Chantilly, VA: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;ndhlbbo18us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;ndhlbbo18us</a> \nSr. Full Stack Engineer - El Segundo, CA: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;vj6j0s6j8us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;vj6j0s6j8us</a> \nFull Stack Engineer - Remote: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;sw2e30pl8us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;sw2e30pl8us</a><p>Don’t see a role that aligns with your interests or don’t have the specific Space&#x2F; Command &amp; Control experience? Apply to the general interest application and list what type of role you would be interested in :  <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;4ce199d68us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;4ce199d68us</a>",
+   "created_at": "2026-10-05T16:29:47Z",
+   "created_at_i": 1791217787,
+   "objectID": "49967017",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T16:34:47Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_iliketrains",
+    "story_49922569"
+   ],
+   "author": "iliketrains",
+   "children": [
+    49970907
+   ],
+   "comment_text": "MaFi Games | Senior SWE&#x2F;Game dev | Contract preferred | Remote | C#<p>Hi, I’m the co-founder of MaFi Games, an indie studio behind the game Captain of Industry. We’re a small but passionate team building the best factory simulation game we can, and we need more hands!<p>We’re looking for an experienced software engineer to join our team and help us speed up the development. While experience in game dev is a plus, what matters to us most is strong technical ability and computer science fundamentals, e.g. experience with technically demanding programs, 3D graphics, simulation, or performance optimization.<p>Some reasons you may enjoy working with us:<p>* A multicultural, collaborative, and innovative work environment where your voice is heard.<p>* Fully remote work with flexible working hours and vacation schedule.<p>* Long-term, full-time collaboration (not a fixed-term contract).<p>* A high-quality C# codebase, code reviews, tests.<p>* Interesting technical challenges and a lot of ownership over your work.<p>* Work with a talented team on a popular video game with a wonderful community.<p>For an example of some of our technical work see <a href=\"https:&#x2F;&#x2F;www.captain-of-industry.com&#x2F;post&#x2F;cd-31\" rel=\"nofollow\">https:&#x2F;&#x2F;www.captain-of-industry.com&#x2F;post&#x2F;cd-31</a>. We’ve also built a unique signal-free train system <a href=\"https:&#x2F;&#x2F;www.captain-of-industry.com&#x2F;post&#x2F;cd-46\" rel=\"nofollow\">https:&#x2F;&#x2F;www.captain-of-industry.com&#x2F;post&#x2F;cd-46</a>.<p>If you’re interested, you can find detailed information, requirements, and application instructions here:\n<a href=\"https:&#x2F;&#x2F;coigame.com&#x2F;jobs-swe-hn\" rel=\"nofollow\">https:&#x2F;&#x2F;coigame.com&#x2F;jobs-swe-hn</a><p>Thanks!<p>P.S. We’re also looking for 2D and 3D game asset artists, in case you know someone.",
+   "created_at": "2026-10-05T16:18:23Z",
+   "created_at_i": 1791217103,
+   "objectID": "49966852",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T21:18:44Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_camperegrine",
+    "story_49922569"
+   ],
+   "author": "camperegrine",
+   "comment_text": "Backed by Sequoia Capital, Peregrine is the operational AI platform powering decision making and operations SF &#x2F; NYC &#x2F; DC | In-office 4 days | $175,000 - $300,000<p>Staff SWE, Platform (SF) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;h4368vl55us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;h4368vl55us</a><p>Staff SWE, Product Security (SF&#x2F;NYC) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;b2kbmt3j5us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;b2kbmt3j5us</a><p>Staff SWE, AI (SF) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;cq0caps45us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;cq0caps45us</a><p>Staff Systems Engineer (SF) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;gbus43dg5us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;gbus43dg5us</a><p>Staff &amp; Sr SWE (SF, NYC, DC)  <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;6jhp864a5us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;6jhp864a5us</a> &#x2F;&#x2F; <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;gwf63pot5us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;gwf63pot5us</a><p>Senior SWE, Foundations (SF&#x2F;NYC) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;mn995net5us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;mn995net5us</a><p>Sr SWE, Data Infrastructure (SF&#x2F;NYC&#x2F;DC) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;bq138yn05us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;bq138yn05us</a><p>Senior SWE, Federal Platform (DC) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;pma2hbgx5us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;pma2hbgx5us</a><p>Sr SWE, Traffic (SF) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;tdpez89u5us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;tdpez89u5us</a><p>SWE &amp; Sr SWE, Product Experiences (SF&#x2F;NYC) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;7xs79ny75us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;7xs79ny75us</a> &#x2F;&#x2F; <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;lhr3w2lz5us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;lhr3w2lz5us</a><p>Product Operations Manager (SF) <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;0lopbszc5us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;0lopbszc5us</a>",
+   "created_at": "2026-10-05T16:06:31Z",
+   "created_at_i": 1791216391,
+   "objectID": "49966712",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T16:08:29Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_maddie1SP",
+    "story_49922569"
+   ],
+   "author": "maddie1SP",
+   "comment_text": "G-Research | London, UK | On-site | <a href=\"https:&#x2F;&#x2F;www.gresearch.com&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.gresearch.com&#x2F;</a><p>We are a quantitative research and technology firm. Researchers and engineers work side by side on difficult problems in financial markets, with the computing resources and the long-term outlook to do the work properly.<p>Engineering is central to that. Our teams build the platforms and systems that take research into production and make large-scale experimentation possible. If you enjoy complex technical problems and working with people who value curiosity and rigour, we would like to hear from you.<p>Current roles in technology:<p>- Performance Engineering Manager: <a href=\"https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;performance-engineering-manager&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;performance-engineering-...</a><p>- Functional Programmer: <a href=\"https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;software-engineer-realtime-quant-frameworks&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;software-engineer-realti...</a><p>- Quant Developer: <a href=\"https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;quantitative-developer&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;quantitative-developer&#x2F;</a><p>- Machine Learning Engineer: <a href=\"https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;machine-learning-engineer-2&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;machine-learning-enginee...</a><p>- NLP Performance Engineer: <a href=\"https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;nlp-performance-engineer&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.gresearch.com&#x2F;vacancies&#x2F;nlp-performance-engineer...</a>",
+   "created_at": "2026-10-05T15:47:30Z",
+   "created_at_i": 1791215250,
+   "objectID": "49966427",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T15:52:44Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_jurajmasar",
+    "story_49922569"
+   ],
+   "author": "jurajmasar",
+   "comment_text": "Better Stack | <a href=\"https:&#x2F;&#x2F;betterstack.com&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;betterstack.com&#x2F;</a> | &#x2F;^Full-?stack Engineer$&#x2F;i | Remote (North America &amp; Europe)<p>We are software builders at :heart: CEO is a software engineer, COO is a software engineer, and you guessed it, CTO is an engineer, too. We are engineers, making the tools we always wanted. If you love building amazing software, you&#x27;re at the right address.<p>We are looking for software engineers who, given enough time, could build Better Stack on their own = looking for full-stack product engineer generalists to help us create high-quality software with exceptional UX, end-to-end.<p>Apply at <a href=\"https:&#x2F;&#x2F;betterstack.com&#x2F;careers&#x2F;fullstack-engineer\" rel=\"nofollow\">https:&#x2F;&#x2F;betterstack.com&#x2F;careers&#x2F;fullstack-engineer</a><p>How we operate: <a href=\"https:&#x2F;&#x2F;betterstack.com&#x2F;careers\" rel=\"nofollow\">https:&#x2F;&#x2F;betterstack.com&#x2F;careers</a> – <a href=\"https:&#x2F;&#x2F;betterstack.com&#x2F;careers&#x2F;engineering\" rel=\"nofollow\">https:&#x2F;&#x2F;betterstack.com&#x2F;careers&#x2F;engineering</a> – <a href=\"https:&#x2F;&#x2F;juraj.blog&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;juraj.blog&#x2F;</a>",
+   "created_at": "2026-10-05T15:21:49Z",
+   "created_at_i": 1791213709,
+   "objectID": "49966033",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T19:00:44Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_8XEnergy",
+    "story_49922569"
+   ],
+   "author": "8XEnergy",
+   "comment_text": "8X Energy | AI &#x2F; Machine Learning Lead (fast track to CTO) | Frederick MD or Remote | Equity<p>We are building the AI-powered energy decision infrastructure SaaS for the commercial energy transition. USPTO non-provisional patent pending on the core methodology. Live pilot project underway at a Maryland nonprofit technology incubator.<p>The company is pre-investment. We are in active seed raise discussions and have enterprise pilot confirmations from Pharmaceutical, Electric Companies, National Energy trading platforms, and federal agencies.<p>What we need:\nAn AI and machine learning lead who has shipped production SaaS before. Not a researcher. Not a consultant. Someone who has taken software from prototype to deployed, maintained it in production, and knows what breaks when real users engage. You should be comfortable with the full stack from model development through deployment and understand what it means to build AI systems that need to be auditable, accurate, and defensible in a regulated environment. Energy domain experience is a plus but not required. The ability to learn a domain fast is required.<p>Specific experience we are looking for:\nYou have built and deployed at least one production AI or ML system that real customers use today. You have legacy software development capability meaning you can work in an existing codebase, not just greenfield. You understand the difference between a model that performs well in testing and a system that works reliably in production. You have led or been a senior contributor on a SaaS product from architecture through deployment. You are comfortable working with a non-technical founder CEO and translating business requirements into technical specifications without waiting for someone to tell you exactly what to build.<p>The role:\nYou would be leading the AI and machine learning layer across three energy specific products, working directly with the CEO and the existing development team. The fast track to CTO is real. We need a technical leader, who may be an individual contributor today, and the equity structure reflects that.<p>Compensation:\nPre-investment: equity only, 3.5% to 7.5% depending on experience and contribution level, with vesting on a standard 4-year schedule with a 1-year cliff. Post-investment: market-rate salary plus retained equity. We are not asking you to work for free indefinitely. We are asking you to believe in the upside long enough to get to the raise, which is actively in process.<p>Location:\nFrederick, Maryland preferred. Remote for the right person. \nT\no apply or learn more:\nEmail john.dukes@8xenergy.com with a brief description of the production AI system you are most proud of shipping and why. No recruiters.",
+   "created_at": "2026-10-05T14:21:02Z",
+   "created_at_i": 1791210062,
+   "objectID": "49965266",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T14:23:44Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_luxor_recru_it",
+    "story_49922569"
+   ],
+   "author": "luxor_recru_it",
+   "comment_text": "Tenki Cloud by Luxor Tech | San Francisco, CA | Founding Sales | Full-time | SF-based preferred | <a href=\"https:&#x2F;&#x2F;tenki.cloud&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;tenki.cloud&#x2F;</a><p>We&#x27;re building Tenki, Luxor&#x27;s compute platform for developers and AI agents: faster, cheaper GitHub Actions runners, code-review agents, and isolated sandboxes where agents run code. Next up: agent workflows and CPU&#x2F;GPU compute.<p>Tenki was built by the founding team behind Luxor Technology, a leading provider of Bitcoin mining and AI infrastructure. Teams like Anchor, Omnara, and Naive already rely on it, and MAU has grown ~3.5x since April. We&#x27;re building the infrastructure layer for the next generation of AI companies, and we want Tenki to be the go-to platform for AI teams worldwide. Now we need someone to sell it.<p>You&#x27;ve sold technical products to technical buyers and can talk CI pipelines and infra costs without hiding behind a sales engineer. Dev tools or cloud infra experience is a big plus.<p>What you&#x27;ll do:\n- Own the full cycle, from prospecting to close to expansion\n- Turn self-serve signups into revenue\n- Work closely with engineering and product, and bring customer feedback into the roadmap\n- Build the playbook from scratch\n- Show up at SF meetups, hackathons, and dev events<p>You&#x27;d be the first sales hire on a small, technical team. No playbook yet, full ownership.<p>Apply: <a href=\"https:&#x2F;&#x2F;jobs.ashbyhq.com&#x2F;luxor&#x2F;8d215a01-8cac-4b0e-add6-507db315c9ec?utm_source=YC\" rel=\"nofollow\">https:&#x2F;&#x2F;jobs.ashbyhq.com&#x2F;luxor&#x2F;8d215a01-8cac-4b0e-add6-507db...</a>",
+   "created_at": "2026-10-05T14:00:02Z",
+   "created_at_i": 1791208802,
+   "objectID": "49965012",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T14:02:45Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_meetalbert",
+    "story_49922569"
+   ],
+   "author": "meetalbert",
+   "comment_text": "ALBERT | REMOTE ALMOST ANYWHERE IN THE WORLD| Hiring principal and distinguished engineers to build net new products | up to ~ $750k\nHiring: exceptional consumer product engineers at Albert.<p>We&#x27;re a consumer fintech with 20M+ users who trust us to budget, save, invest, and bank in one place. Profitable for 4+ years. And as of today, our average employee tenure is 3.6 years, a number you almost never see in startup tech, and one we&#x27;re quietly proud of. People stay because the work is good, the people are sharp, and we&#x27;ve built something worth staying for.<p>Now we&#x27;re building net-new consumer products from zero, and we&#x27;re looking for people who love to tinker and build stuff to ship them with us.<p>The kind of person we&#x27;re looking for: • Top fraction of a percentile in craft, the kind of good that&#x27;s hard to fake • Builds for fun, not just for work. The kind who ships a working prototype over the weekend and can&#x27;t help themselves • Comfortable owning 0 to 1 consumer products end-to-end • Allergic to politics, theater, and bureaucracy<p>What you get: • Remote, anywhere with reasonable timezone overlap (and for someone truly exceptional, we&#x27;ll make async work) • Real scale from day one (20M+ users, real money, real consequences) • Compensation that beats the market. We pay well and we mean it. Base, discretionary year-end bonus, meaningful 401(k) match, and meaningful equity in a profitable, growing unicorn (the kind that&#x27;s actually worth something) • Platinum PPO health benefits with Blue Shield, top of the top of the line, covering your entire family • A mission worth your time: make money simple, so people spend less time managing it and keep more of it • Small senior-heavy teams, direct ownership, no layers • Forthcoming with the business metrics that matter, so you always know how the company is actually doing • The startup perks done right: catered lunches, wellness stipend, team offsites, casual dress. The stuff that compounds when you&#x27;re showing up engaged for years, not months • Profitable for 4+ years, so you build with conviction, not runway anxiety<p>Stack: python, claude, postgres, react.js &#x2F;react native<p>If this is you, email us at recruiting@albert.com<p>Also, we carefully review every application. If we think there may be a fit, we&#x27;ll reach out within a few business days. Either way, thank you for your interest in what we&#x27;re building and for taking the time to connect with us.",
+   "created_at": "2026-10-05T13:15:08Z",
+   "created_at_i": 1791206108,
+   "objectID": "49964448",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T13:20:45Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_seebq2",
+    "story_49922569"
+   ],
+   "author": "seebq2",
+   "comment_text": "Greenzie | Robotics Software Engineer (Experienced, 3–6 yrs) | Atlanta, GA | ONSITE&#x2F;HYBRID | Full-time | <a href=\"https:&#x2F;&#x2F;greenzie.applytojob.com&#x2F;apply&#x2F;UdRcDlWSzs&#x2F;Robotics-Software-Engineer-Experienced\" rel=\"nofollow\">https:&#x2F;&#x2F;greenzie.applytojob.com&#x2F;apply&#x2F;UdRcDlWSzs&#x2F;Robotics-So...</a><p>Greenzie builds the autonomy software that runs on commercial mowers. We don&#x27;t sell the iron — Wright, Mean Green, Bobcat, and Greenworks Commercial do, with our stack on them. Mission is to free humans from repetitive outdoor labor. The software is on hundreds of machines in the field today.<p>We&#x27;re hiring an experienced roboticist who wants production robots doing real outdoor work, not lab demos. C++, Python, ROS&#x2F;ROS2. You&#x27;ll own a subsystem, debug messy field data, and ship to machines that mow for a living.<p>Apply on that page and mention HN. Questions: cbq@greenzie.com",
+   "created_at": "2026-10-05T12:57:25Z",
+   "created_at_i": 1791205045,
+   "objectID": "49964254",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T12:59:47Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_mwapinska",
+    "story_49922569"
+   ],
+   "author": "mwapinska",
+   "comment_text": "Senior Python Backend Engineer | REMOTE (EMEA&#x2F;APAC)<p>We&#x27;re looking for Python backend engineers to work on a trustless supercluster of performance-proofed GPU-enabled sandboxed docker container runners controlled by truly decentralized algorithms (not just PAXOS or RAFT).<p>Wow, that was a mouthful...<p>If you found it interesting, join Reef Technologies and tackle complex technical challenges like this on your own terms:<p>- Contribute from wherever you like; we are fully remote<p>- Set your own time commitment, as long as it&#x27;s at least 30h per week<p>- See how we work in our handbook: github.com&#x2F;reef-technologies&#x2F;handbook<p>- Influence the way we operate through our Sociocracy 3.0 decision-making process<p>Salary on a B2B contract:<p>- 45-70 USD or 180-280 PLN per hour<p>- Flexible work schedule (as measured with a time tracker)<p>- We automatically adjust rates based on inflation twice a year<p>We&#x27;re looking for someone with 5+ years of programming experience, including at least a year with Python (including open-source and significant personal projects).<p>So, what do you think? You don&#x27;t even need a CV; just go to <a href=\"https:&#x2F;&#x2F;careers.reef.pl&#x2F;?utm_source=hackernews\" rel=\"nofollow\">https:&#x2F;&#x2F;careers.reef.pl&#x2F;?utm_source=hackernews</a> and shoot a few quick commands to apply.<p>Edit: If you applied and haven&#x27;t heard back, please check the spam folder of the email associated with the GitHub account you used to apply — our replies sometimes end up there.",
+   "created_at": "2026-10-05T12:51:37Z",
+   "created_at_i": 1791204697,
+   "objectID": "49964196",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T12:54:28Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_RentmanJan",
+    "story_49922569"
+   ],
+   "author": "RentmanJan",
+   "comment_text": "Rentman | DevOps Engineer, Senior Frontend Developer | Utrecht, NL | HYBRID | Full-time | <a href=\"https:&#x2F;&#x2F;rentman.io\" rel=\"nofollow\">https:&#x2F;&#x2F;rentman.io</a><p>Rentman is B2B SaaS that event and media production teams in 70+ countries use to manage gear, crew and scheduling. 100+ people, office in Utrecht and Toronto.<p>DevOps Engineer: own our AWS infrastructure, CI&#x2F;CD, observability and cloud security. The main projects are moving from ClickOps to infrastructure as code and getting Fargate and Kubernetes onto one standard. You&#x27;ve led an IaC migration (Terraform&#x2F;Pulumi&#x2F;CDK) and you write code.\n<a href=\"https:&#x2F;&#x2F;rentman.io&#x2F;jobs&#x2F;devops-engineer\" rel=\"nofollow\">https:&#x2F;&#x2F;rentman.io&#x2F;jobs&#x2F;devops-engineer</a><p>Senior Frontend Developer: build the onboarding flows, data import tools and setup wizards that get new customers live fast. Angular SPA with 3,500+ components and AG-Grid; we move to new Angular versions within weeks of release. Angular is a plus but not required; 3+ years as a senior in product-led SaaS is.\n<a href=\"https:&#x2F;&#x2F;rentman.io&#x2F;jobs&#x2F;senior-frontend-developer-customer-lifecycle\" rel=\"nofollow\">https:&#x2F;&#x2F;rentman.io&#x2F;jobs&#x2F;senior-frontend-developer-customer-l...</a><p>If you apply, please mention HN",
+   "created_at": "2026-10-05T12:25:01Z",
+   "created_at_i": 1791203101,
+   "objectID": "49963937",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T12:59:13Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_scanr",
+    "story_49922569"
+   ],
+   "author": "scanr",
+   "comment_text": "InfoHawk | Software Engineer | London, UK or NYC | HYBRID (UK or US), occasional onsite | Full-time | <a href=\"https:&#x2F;&#x2F;www.infohawk.com\" rel=\"nofollow\">https:&#x2F;&#x2F;www.infohawk.com</a><p>Fraud reaches people through ads, cloned brand sites, counterfeit shops and AI-generated video, and it moves faster than any manual review. InfoHawk detects it while it is still running, correlates it across platforms and formats, and surfaces it early enough for our customers to act. We are a small team of engineers plus security, privacy and fraud specialists. Pre-seed, $2.25M led by Moonshots Capital: <a href=\"https:&#x2F;&#x2F;www.infohawk.com&#x2F;news&#x2F;2026-06-08-pre-seed-funding-an\" rel=\"nofollow\">https:&#x2F;&#x2F;www.infohawk.com&#x2F;news&#x2F;2026-06-08-pre-seed-funding-an</a>...<p>You’d own how data gets in: scrapers and collectors that survive source changes, official APIs where they exist, undocumented endpoints where they don’t. Sources break constantly. Can you figure out how to use AI to spot the change and adapt automatically? Stack: TypeScript, Node, SvelteKit, Postgres, Playwright, heavy AI-assisted development.<p>We’re looking for ~3-5 years building scraping or integration systems in production, but if you’re a great engineer who doesn’t tick every box we’d still like to hear from you. UK-based for London, US-based for NYC; we cannot sponsor visas. Two of our three founders are engineers, one in each city, and you’ll work with them directly.<p>james@infohawk.com",
+   "created_at": "2026-10-05T12:22:10Z",
+   "created_at_i": 1791202930,
+   "objectID": "49963906",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T12:22:58Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_Ghulam909",
+    "story_49922569"
+   ],
+   "author": "Ghulam909",
+   "comment_text": "Hi Sam, \nDense vehicle data visualization done right is an art. I have sent an email to careers@cardog.app with live examples of Tailwind&#x2F;Next.js data tables handling 50K+ rows!",
+   "created_at": "2026-10-05T11:22:38Z",
+   "created_at_i": 1791199358,
+   "objectID": "49963430",
+   "parent_id": 49926872,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T11:25:13Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_dorottyag",
+    "story_49922569"
+   ],
+   "author": "dorottyag",
+   "comment_text": "Axmed | AI Engineer (Agentic Systems) | REMOTE (preferred CET ±2: Spain, UK, Poland, Romania) | Full-time<p>Axmed runs a live B2B marketplace connecting healthcare providers in low- and middle-income countries with pharmaceutical suppliers, working to make sure geography and income never stand between someone and the medicine they need. Backed by the Gates Foundation and Founderful. We&#x27;re past proving it works and into scaling it — this role is what takes us there.<p>You&#x27;ll design and ship autonomous agents that run real steps of the marketplace (sourcing, quoting, order matching, supplier follow-up) on real transactions and real money, with a human in the loop only where risk demands it. Not research: you consume LLMs via API and build the judgment, guardrails, and monitoring around them, end to end, and own what you ship.<p>Stack: Python, LangChain&#x2F;LangGraph&#x2F;LlamaIndex&#x2F;CrewAI (your choice), LLM APIs, cloud infra, CI&#x2F;CD.<p>No visa sponsorship&#x2F;relocation.<p>Apply: <a href=\"https:&#x2F;&#x2F;axmed.teamtailor.com&#x2F;jobs&#x2F;8175859-ai-engineer\" rel=\"nofollow\">https:&#x2F;&#x2F;axmed.teamtailor.com&#x2F;jobs&#x2F;8175859-ai-engineer</a>",
+   "created_at": "2026-10-05T11:08:51Z",
+   "created_at_i": 1791198531,
+   "objectID": "49963332",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T11:09:28Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_moustafakhedr",
+    "story_49922569"
+   ],
+   "author": "moustafakhedr",
+   "comment_text": "Elman (Deep Science Ventures) | Co-founder &amp; CTO | London, UK-based preferred &#x2F; REMOTE considered | Full-time | Pre-seed<p>We&#x27;re building AI to predict clinical trial and drug development outcomes, and quantify how much confidence those predictions deserve. By linking the evidence available at a decision to the judgement made and what happened next, we aim to learn which experimental findings predict outcomes in which therapeutic settings. The platform is already running, with work from an Allen Institute collaboration described in this preprint <a href=\"https:&#x2F;&#x2F;elman.ai&#x2F;preprint\" rel=\"nofollow\">https:&#x2F;&#x2F;elman.ai&#x2F;preprint</a>.<p>We want a hands-on technical co-founder to lead development, build the evaluation programme and hire the first technical team once funded. Benchmark design, applied statistics and production LLM systems. The modelling approach is open. Biology experience useful, not required.<p>Founder equity.<p>Role and application: <a href=\"https:&#x2F;&#x2F;elman.ai&#x2F;hn\" rel=\"nofollow\">https:&#x2F;&#x2F;elman.ai&#x2F;hn</a>",
+   "created_at": "2026-10-05T08:54:10Z",
+   "created_at_i": 1791190450,
+   "objectID": "49962303",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T08:58:13Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_seharetimad",
+    "story_49922569"
+   ],
+   "author": "seharetimad",
+   "comment_text": "Revieve Oy | Senior Product Engineer | REMOTE [Europe &#x2F; (GMT+2)] | Contract, full-time |<p>Revieve (Helsinki, with a US office and a team in Asia) builds AI, AR and computer-vision personalization for beauty brands and retailers: skin analysis, virtual try-on and product recommendations. We work with 120+ brands and retailers in 40+ countries, and our product reaches millions of end users.<p>We&#x27;re a small team (30+ people, about a dozen engineers) spread across eight time zones, and we&#x27;ve reorganized around the idea that one builder with the right tools can do what a team used to. This role exists because we believe that.<p>A typical week: a real customer problem lands in front of you with full context, and you decide what to build. Tuesday you sketch it in an AI design tool and prototype in Claude Code. Wednesday it&#x27;s on staging and you send the founders a Loom. Thursday it&#x27;s in production. About 1-2 hours of meetings a week, mostly async. No standups, no sprints, no PM or designer in the loop.<p>What we&#x27;re looking for:<p>- Public proof of building: repos, products or side projects we can click around\n- AI in production, with an opinion about agents, evals, latency and what fails\n- Fluency with agentic coding (Claude Code, Codex, MCP, custom harnesses)\n- Design taste: you can take an idea to a working interface without a designer\n- Generalist instincts: TypeScript&#x2F;React up front, comfortable with backend integrations and infra\n- Clear written thinking: READMEs, PRs, post-mortems<p>Process: intro call, then a paid build session where we work on a real problem together (that&#x27;s where the hire decision happens, for both sides), a short presentation to the team, then an offer.<p>Perks: flexible hours, performance-based option plan, equipment budget, five weeks&#x27; vacation, paid parental leave.<p>Details and apply: <a href=\"https:&#x2F;&#x2F;revieve.factorialhr.com&#x2F;job_posting&#x2F;senior-product-engineer-299899\" rel=\"nofollow\">https:&#x2F;&#x2F;revieve.factorialhr.com&#x2F;job_posting&#x2F;senior-product-e...</a> (please mention HN)",
+   "created_at": "2026-10-05T08:17:54Z",
+   "created_at_i": 1791188274,
+   "objectID": "49962075",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T08:21:27Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_panchamkhaitan",
+    "story_49922569"
+   ],
+   "author": "panchamkhaitan",
+   "children": [
+    49962938
+   ],
+   "comment_text": "SingleStore | Software Engineer, AI Platform | Full Time, Remote India<p>SingleStore is a distributed SQL database built for high-performance transactional and real-time analytical workloads. As data systems evolve, we’re building the platform for AI applications that operate directly over enterprise data, including retrieval, reasoning, agent workflows, and intelligent automation.<p>Our AI Platform team works at the intersection of distributed systems, cloud infrastructure, and applied AI. Some of the technical problems we’re working on include:<p>- Agent runtimes, orchestration, and MCP-style tool integration<p>- Retrieval&#x2F;RAG pipelines, embeddings, and vector search<p>- Model integrations, evaluation, and observability<p>- Secure multi-tenant AI infrastructure<p>- Reliability, latency, cost controls, and scaling AI systems in production<p>Our stack includes Go, Python, Kubernetes, cloud infrastructure, distributed systems, APIs, and modern AI&#x2F;ML tooling.<p>We’re currently hiring a Software Engineer located in India to join the AI Platform team, along with several other roles across SingleStore.<p>Careers page with all open positions: <a href=\"https:&#x2F;&#x2F;grnh.se&#x2F;ipvpz7d61us\" rel=\"nofollow\">https:&#x2F;&#x2F;grnh.se&#x2F;ipvpz7d61us</a> | <a href=\"https:&#x2F;&#x2F;www.singlestore.com&#x2F;careers&#x2F;jobs&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.singlestore.com&#x2F;careers&#x2F;jobs&#x2F;</a><p>If you want to learn more about the engineering work we do, check out <a href=\"https:&#x2F;&#x2F;www.singlestore.com&#x2F;blog&#x2F;category&#x2F;engineering&#x2F;\" rel=\"nofollow\">https:&#x2F;&#x2F;www.singlestore.com&#x2F;blog&#x2F;category&#x2F;engineering&#x2F;</a>.<p>Feel free to email me directly via pkhaitan at singlestore dot com.",
+   "created_at": "2026-10-05T08:08:30Z",
+   "created_at_i": 1791187710,
+   "objectID": "49962002",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T10:17:58Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_comograph",
+    "story_49922569"
+   ],
+   "author": "comograph",
+   "comment_text": "Founding Head of Growth — Comograph - Fully Remote - Worldwide<p>Comograph is building the global Proof-of-Work network for human capability.<p>We’re looking for an experienced growth&#x2F;sales leader to join our founding team and own our path to the first 10 paying employers.<p>You’ll own:<p>\\ B2B growth &amp; GTM\n\\ Employer acquisition &amp; closing\n\\ Strategic partnerships\n\\ Building our first repeatable sales engine\n\\ Working directly with the CEO<p>We want someone who has actually grown an early-stage company, knows how to open doors, sell, build relationships, and execute independently.<p>Equity-only at this stage. No salary yet.<p>This is a true founding opportunity—you won’t inherit a growth function; you’ll build it.<p>Interested? Send your CV&#x2F;LinkedIn to ceo@comograph.com with a short note on what you’ve grown and how you’d get Comograph its first 10 paying employers.",
+   "created_at": "2026-10-05T07:06:29Z",
+   "created_at_i": 1791183989,
+   "objectID": "49961597",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T08:13:41Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_AssumeAI",
+    "story_49922569"
+   ],
+   "author": "AssumeAI",
+   "comment_text": "AssumeAI | AI Engineer (£30&#x2F;hr) and Senior AI Engineer (£50&#x2F;hr) | Contract | REMOTE (UK) | <a href=\"https:&#x2F;&#x2F;assume-ai.com\" rel=\"nofollow\">https:&#x2F;&#x2F;assume-ai.com</a><p>We are a fast-growing AI startup. We help SMEs find where AI will produce a measurable return, then build the systems that deliver it: AI agents, Claude skills and production-grade business software, up to full business and enterprise systems. Stack: Claude Code, Vercel, Supabase.<p>A good fit for software engineers moving into AI engineering:<p>- Two weeks of paid AI training in our framework and methods before your first project.<p>- Projects typically run over several months, and each one is substantial.<p>- Large token limits for every contractor.<p>You need to: read code in Python, JS&#x2F;TS, SQL, HTML&#x2F;CSS and Bash; design and build databases; use Git and GitHub confidently; and be professional and clear on client calls. The senior role also needs complete products or systems you have designed and shipped.<p>Nice to have: Claude Code or similar AI tools, building Claude skills, embeddings and vector databases, Vercel&#x2F;Supabase, project or account management.<p>Process: introductory interview, short practical exercise, final interview. Starting as soon as possible.<p>To apply email hugh@assume-ai.com with your CV",
+   "created_at": "2026-10-05T07:01:46Z",
+   "created_at_i": 1791183706,
+   "objectID": "49961551",
+   "parent_id": 49922569,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T07:26:42Z"
+  },
+  {
+   "_tags": [
+    "comment",
+    "author_zshrdlu",
+    "story_49922569"
+   ],
+   "author": "zshrdlu",
+   "comment_text": "Well how many people are working on truly novel features?",
+   "created_at": "2026-10-05T07:01:20Z",
+   "created_at_i": 1791183680,
+   "objectID": "49961546",
+   "parent_id": 49935129,
+   "story_id": 49922569,
+   "story_title": "Ask HN: Who is hiring? (October 2026)",
+   "updated_at": "2026-10-05T07:03:27Z"
+  }
+ ],
+ "hitsPerPage": 30,
+ "nbHits": 318,
+ "nbPages": 1,
+ "page": 0,
+ "params": "tags=comment%2Cstory_49922569&hitsPerPage=30&page=0&advancedSyntax=true&analyticsTags=backend",
+ "processingTimeMS": 1,
+ "processingTimingsMS": {
+  "_request": {
+   "queue": 91,
+   "roundTrip": 23
+  },
+  "afterFetch": {
+   "format": {
+    "highlighting": 3,
+    "total": 4
+   }
+  },
+  "total": 1
+ },
+ "query": "",
+ "serverTimeMS": 97
+}
