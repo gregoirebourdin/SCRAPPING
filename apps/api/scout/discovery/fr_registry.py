@@ -271,13 +271,14 @@ class FrRegistrySource:
         if towns and len(towns) == len(cf.cities):
             for gi, naf in enumerate(groups):
                 for rank, town in enumerate(towns):
+                    codes = communes.registry_codes(town)
                     queries.append(
                         DiscoveryQuery(
                             key=f"naf:{','.join(naf)}|commune:{town.code}"
                             + (f"|t:{','.join(tranches)}" if tranches else ""),
                             params={
                                 "naf": naf,
-                                "code_commune": town.code,
+                                "code_commune": ",".join(codes),
                                 "departement": town.department,
                                 "tranches": tranches,
                                 "restricted": True,

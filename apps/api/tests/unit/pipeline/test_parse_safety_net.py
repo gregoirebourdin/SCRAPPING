@@ -36,3 +36,10 @@ async def test_location_and_trade_come_back_from_the_heuristic_parser() -> None:
     assert cf.cities == ["Annecy"] and cf.countries == ["FR"] and cf.industries == ["personal trainer"]
     keys = [s.key for s, _ in select_sources(defn)]
     assert "fr_registry" in keys  # the campaign has somewhere to search
+
+
+def test_a_specialty_restated_as_a_website_condition_is_not_a_hard_filter() -> None:
+    from scout.pipeline.icp import _restates_target
+
+    assert _restates_target("offers growth marketing services", ["marketing agency", "growth marketing"])
+    assert not _restates_target("uses Shopify Plus for e-commerce", ["marketing agency"])

@@ -602,6 +602,50 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
     )
 
 
+_FILLER = {
+    "offers",
+    "offer",
+    "offering",
+    "provides",
+    "provide",
+    "providing",
+    "sells",
+    "sell",
+    "services",
+    "service",
+    "specialized",
+    "specializes",
+    "specialised",
+    "specialises",
+    "in",
+    "of",
+    "and",
+    "the",
+    "a",
+    "an",
+    "company",
+    "companies",
+    "agency",
+    "agencies",
+    "propose",
+    "proposent",
+    "offre",
+    "offrent",
+    "de",
+    "des",
+    "en",
+    "la",
+    "le",
+}
+
+
+def _restates_target(concept: str, targets: list[str]) -> bool:
+    """True when a "semantic" website condition only repeats the requested business type / specialty."""
+    words = {w for w in normalize_key(concept).split() if w not in _FILLER and len(w) > 2}
+    target = {w for t in targets for w in normalize_key(t).split() if len(w) > 2}
+    return bool(words) and len(words & target) / len(words) >= 0.6
+
+
 def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> CampaignDefinition:
     """Deterministic mapping + safety defaults (exclusion triggers, list/import resolution)."""
     conds: list[Any] = []
@@ -610,6 +654,12 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
             conds.append(KeywordCondition(type=c.kind, terms=[x.strip() for x in c.terms if x.strip()][:10]))
         elif c.kind == "semantic" and (c.concept or c.terms):
             concept = c.concept or " ".join(c.terms)
+            if _restates_target(concept, [*parsed.industries, *parsed.keywords]):
+                # "agences de growth marketing" → the specialty is the business type itself: the business-type
+                # check verifies it on each site; a required website condition on top only loses real agencies.
+                if concept not in parsed.keywords:
+                    parsed.keywords.append(concept)
+                continue
             conds.append(
                 SemanticCondition(
                     type="semantic_service", concept=concept, keywords=[x for x in c.terms if x][:8]

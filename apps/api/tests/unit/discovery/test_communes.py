@@ -103,3 +103,15 @@ async def test_resolve_calls_the_geo_api_once() -> None:
     assert (await communes.resolve("annecy")).code == "74010"  # type: ignore[union-attr]
     assert (await communes.resolve("Annecy")).code == "74010"  # type: ignore[union-attr]
     assert route.call_count == 1
+
+
+def test_paris_lyon_marseille_are_queried_by_arrondissement() -> None:
+    paris = communes.Commune(code="75056", name="Paris", department="75", postal_codes=("75001",))
+    assert communes.registry_codes(paris)[0] == "75101" and len(communes.registry_codes(paris)) == 20
+    assert communes.registry_codes(ANNECY) == ("74010",)
+    communes.remember(paris)
+    d = CampaignDefinition.model_validate(
+        {"company_filters": {"industries": ["marketing agency"], "countries": ["FR"], "cities": ["Paris"]}}
+    )
+    q = FrRegistrySource().plan(d)[0]
+    assert q.params["code_commune"].split(",")[0] == "75101"

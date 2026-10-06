@@ -36,6 +36,20 @@ def _key(name: str) -> str:
     return normalize_key(name or "").replace("-", " ").strip()
 
 
+# Paris, Lyon and Marseille: establishments are registered under their arrondissements' INSEE codes, never
+# under the city's own code (75056 / 69123 / 13055), so the registry must be queried with those.
+_ARRONDISSEMENTS: dict[str, tuple[str, ...]] = {
+    "75056": tuple(f"751{n:02d}" for n in range(1, 21)),
+    "69123": tuple(f"6938{n}" for n in range(1, 10)),
+    "13055": tuple(f"132{n:02d}" for n in range(1, 17)),
+}
+
+
+def registry_codes(c: Commune) -> tuple[str, ...]:
+    """INSEE codes to query the company registry with for this commune."""
+    return _ARRONDISSEMENTS.get(c.code, (c.code,))
+
+
 def remember(c: Commune, *aliases: str) -> None:
     """Seed the cache (tests, or a commune resolved elsewhere)."""
     for n in (c.name, *aliases):

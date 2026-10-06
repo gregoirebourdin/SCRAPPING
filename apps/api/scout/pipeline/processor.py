@@ -458,8 +458,9 @@ async def _business_verdict(ctx: Ctx, comp: Company, text: str | None) -> Any:
     cached = ctx.stage_data.get("business_check")
     if isinstance(cached, dict):
         return BusinessVerdict.from_dict(cached)
+    cf = ctx.defn.company_filters
     verdict = await check_business_type(
-        ctx.defn.company_filters.industries,
+        [*cf.industries, *[k for k in cf.keywords if k not in cf.industries]][:4],
         name=comp.name,
         registry_activity=comp.category_raw,
         pages_text=text,
