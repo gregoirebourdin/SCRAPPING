@@ -99,3 +99,7 @@ then check `/stats` (private) for engine error rates.
 * Upstream engines scrape third-party search engines whose terms may forbid automated queries. Keep volumes
   modest (per-lead lookups are cached and bounded), do not add proxy rotation to evade blocking, and treat
   enabling more engines (e.g. Google) as an operator decision.
+
+**Bind address.** The container listens on `[::]:8080` when IPv6 sockets are available (Railway private
+networking is IPv6) and falls back to `0.0.0.0:8080` otherwise (e.g. local Docker without IPv6). Set
+`SEARXNG_BIND_HOST` to force a value.

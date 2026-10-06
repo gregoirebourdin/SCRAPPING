@@ -76,7 +76,7 @@ function UndoButton({ auditId }: { auditId?: unknown }) {
   );
 }
 
-export function ToolCard({ card, status }: { card: Card; status?: string }) {
+export function ToolCard({ card, status, compact }: { card: Card; status?: string; compact?: boolean }) {
   const failed = status === "failed" || card.kind === "error";
   if (failed) {
     return (
@@ -118,7 +118,7 @@ export function ToolCard({ card, status }: { card: Card; status?: string }) {
       );
     case "campaign_started":
     case "campaign_progress":
-      return <CampaignCard card={card} />;
+      return compact ? <CampaignLine card={card} /> : <CampaignCard card={card} />;
     case "campaign_amended":
       return <AmendedCard card={card} />;
     case "column_created":
@@ -355,6 +355,27 @@ function CampaignCard({ card }: { card: Card }) {
           <RunActions run={run} lang={lang} showOpen />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** An earlier card of a run that has a newer card further down: one quiet line, the live card stays below. */
+function CampaignLine({ card }: { card: Card }) {
+  const id = String(card.campaign_id ?? "");
+  const lang = card.lang === "fr" ? "fr" : "en";
+  const run = useRunView(id || null);
+  return (
+    <div className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-meta text-fg-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
+      <Radar className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">
+        {card.event ? `${eventLabel(String(card.event), lang)} · ` : ""}
+        {run?.name ?? String(card.title ?? "")}
+      </span>
+      {run?.loaded && (
+        <span className="tabular shrink-0">
+          {run.qualified.toLocaleString()} / {run.target.toLocaleString()}
+        </span>
+      )}
     </div>
   );
 }

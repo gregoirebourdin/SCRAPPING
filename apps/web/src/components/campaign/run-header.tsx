@@ -371,7 +371,7 @@ export function RunHeader({ campaignId, onDismiss }: { campaignId: string; onDis
           ) : (
             <p className="text-meta text-fg-3">
               {run.reason}
-              {run.status === "exhausted" && " Broadening the criteria (another city, a wider size, more roles) usually finds more."}
+              {run.status === "exhausted" && !/broaden/i.test(run.reason ?? "") && " Broadening the criteria (another city, a wider size, more roles) usually finds more."}
             </p>
           )}
         </div>

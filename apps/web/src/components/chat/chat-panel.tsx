@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowRight, ArrowUp, Check, ChevronDown, History, PanelRightClose, Plus, RotateCcw, Square } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { api, download, readSSE } from "@/lib/api";
@@ -413,6 +413,20 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
     }
   }
 
+  // Only the newest card of each run is the full live card; earlier ones fold into one line.
+  const latestRuns = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const m of messages) {
+      m.parts
+        .filter((p) => p.type !== "ui_effect")
+        .forEach((p, i) => {
+          const cid = p.card?.campaign_id as string | undefined;
+          if (p.type === "card" && cid && RUN_KINDS.includes(p.card!.kind)) out[cid] = `${m.id}:${i}`;
+        });
+    }
+    return out;
+  }, [messages]);
+
   function startResize(e: React.PointerEvent) {
     e.preventDefault();
     const startX = e.clientX;
@@ -508,6 +522,7 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
                   <MessageView
                     key={m.id}
                     m={m}
+                    latestRuns={latestRuns}
                     busy={streaming}
                     onConfirm={(a, ok) => confirm(a, ok, m.id)}
                     onRetry={() => retry(m.id)}
@@ -591,8 +606,11 @@ function EmptyChat({ onPick }: { onPick: (t: string) => void }) {
   );
 }
 
+const RUN_KINDS = ["campaign_started", "campaign_progress"];
+
 function MessageView({
   m,
+  latestRuns,
   busy,
   onConfirm,
   onRetry,
@@ -601,6 +619,7 @@ function MessageView({
   onEdit,
 }: {
   m: ChatMessage;
+  latestRuns: Record<string, string>;
   busy: boolean;
   onConfirm: (actionId: string, approve: boolean) => Promise<void>;
   onRetry: () => void;
@@ -629,7 +648,11 @@ function MessageView({
         if (p.type === "tool_call") return null; // the step list shows running tools
         if (p.type === "card" && p.card?.kind === "clarify") return <ClarifyCard key={i} card={p.card} disabled={busy} onSubmit={(s) => onAnswer(p.card, s)} />;
         if (p.type === "card" && p.card?.kind === "campaign_plan") return <PlanCard key={i} card={p.card} onLaunch={busy ? undefined : onLaunch} onEdit={onEdit} />;
-        if (p.type === "card" && p.card) return <ToolCard key={i} card={p.card} status={p.status} />;
+        if (p.type === "card" && p.card) {
+          const cid = p.card.campaign_id as string | undefined;
+          const compact = Boolean(cid && RUN_KINDS.includes(p.card.kind) && latestRuns[cid] && latestRuns[cid] !== `${m.id}:${i}`);
+          return <ToolCard key={i} card={p.card} status={p.status} compact={compact} />;
+        }
         if (p.type === "confirm") return <ConfirmPart key={i} p={p} lang={lang} onConfirm={onConfirm} />;
         if (p.type === "error")
           return (
@@ -659,6 +682,15 @@ function MessageView({
   );
 }
 
+const TITLES_FR: Record<string, string> = {
+  "Updated search": "Modification de la recherche",
+  "Cancelled campaign": "Arrêt de la recherche",
+  "Deleted list": "Suppression de la liste",
+  "Removed from list": "Retrait de la liste",
+  "Deleted column": "Suppression de la colonne",
+  "Suppressed leads": "Suppression des contacts",
+};
+
 function ConfirmPart({ p, lang, onConfirm }: { p: ChatPart; lang: "fr" | "en"; onConfirm: (actionId: string, approve: boolean) => Promise<void> }) {
   const [busy, setBusy] = useState<"yes" | "no" | null>(null);
   const fr = lang === "fr";
@@ -680,7 +712,7 @@ function ConfirmPart({ p, lang, onConfirm }: { p: ChatPart; lang: "fr" | "en"; o
       )}
     >
       <div className={cn("text-meta font-medium", danger ? "text-warning" : "text-fg-2")}>
-        {p.title} · {danger ? (fr ? "confirmation requise" : "confirmation required") : fr ? "à valider" : "review the change"}
+        {fr ? (TITLES_FR[p.title ?? ""] ?? p.title) : p.title} · {danger ? (fr ? "confirmation requise" : "confirmation required") : fr ? "à valider" : "review the change"}
       </div>
       {p.changes?.length ? (
         <ul className="mt-1.5 space-y-0.5">
