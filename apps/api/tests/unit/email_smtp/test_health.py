@@ -262,3 +262,19 @@ async def test_module_level_api_uses_overridable_monitor(clock):
         assert not (await health.gate(claim_canary=True)).may_probe
     finally:
         health.set_monitor(None)
+
+
+async def test_provider_policies_never_block_the_global_path(mon, clock):
+    # Real Railway run: Microsoft 365 refused us (Spamhaus) and OVH too (no reverse DNS) before any Google
+    # session — Google Workspace domains must keep being verified.
+    ovh = MailProvider.ovh
+    for d, p in (("m1.fr", MS), ("o1.fr", ovh), ("m2.fr", MS), ("o2.fr", ovh), ("m3.fr", MS), ("o3.fr", ovh)):
+        await mon.record_session(p, S.policy_block, domain=d)
+        clock.advance(seconds=1)
+    assert mon.store.records.get("global") is None or mon.store.records["global"].state != H.BLOCKED  # type: ignore[attr-defined]
+    assert (await mon.gate(GOOGLE, claim_canary=True)).may_probe
+    # an unattributed policy block, or our port 25 being cut, still counts globally
+    await record(mon, clock, S.infra_failure, "x1.fr", n=2)
+    await record(mon, clock, S.infra_failure, "x2.fr", n=2)
+    await record(mon, clock, S.infra_failure, "x3.fr", n=2)
+    assert await mon.current_state(GOOGLE) == H.BLOCKED

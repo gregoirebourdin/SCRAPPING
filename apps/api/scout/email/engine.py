@@ -500,7 +500,9 @@ def narrow_after_pilot(
     accepted = {
         c.pattern
         for c in pilot
-        if c.pattern and (rv := probe.verdicts.get(c.address)) is not None and rv.result == SmtpResult.accepted
+        if c.pattern
+        and (rv := probe.verdicts.get(c.address)) is not None
+        and rv.result == SmtpResult.accepted
     }
     if len(accepted) != 1:
         return None

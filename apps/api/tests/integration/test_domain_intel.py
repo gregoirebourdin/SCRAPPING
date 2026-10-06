@@ -308,6 +308,7 @@ async def test_component_freshness_and_mx_change(workspace, resolver):
             "mx": True,
             "website": True,
             "github": True,
+            "search": False,  # not needed: the company's own pages already show named addresses
             "rdap": True,
             "patterns": True,
             "profile": False,

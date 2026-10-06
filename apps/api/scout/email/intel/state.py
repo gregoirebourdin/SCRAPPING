@@ -26,7 +26,7 @@ MX_CHANGED = "MX_CHANGED"
 PATTERN_CHANGED = "PATTERN_CHANGED"
 CATCH_ALL_FLIPPED = "CATCH_ALL_FLIPPED"
 
-COMPONENTS = ("mx", "website", "github", "rdap", "patterns")
+COMPONENTS = ("mx", "website", "github", "search", "rdap", "patterns")
 
 _entries: dict[Hashable, tuple[float, DomainIntel]] = {}
 _locks: dict[str, asyncio.Lock] = {}

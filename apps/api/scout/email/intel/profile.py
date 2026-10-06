@@ -48,7 +48,7 @@ from scout.db.models import (
 )
 from scout.email import dns as edns
 from scout.email.contracts import DomainIntel, DomainProbeResult, ObservedEmail, PatternStat, SessionOutcome
-from scout.email.intel import github, learning, rdap, samples, state
+from scout.email.intel import github, learning, rdap, samples, state, web_search
 from scout.email.intel.providers import detect_provider, provider_notes
 from scout.email.lists import is_disposable_domain, is_free_provider, is_role_local_part
 from scout.email.patterns import infer_pattern
@@ -176,6 +176,7 @@ class _WorkspaceContext:
     fingerprint: str = "none"
     company_size_max: int | None = None
     country: str | None = None
+    people: list[tuple[str | None, str | None]] = field(default_factory=list)
 
 
 async def _workspace_context(
@@ -232,6 +233,7 @@ async def _workspace_context(
         fingerprint=fp,
         company_size_max=max((c.employee_max for c in companies if c.employee_max), default=None),
         country=next((c.country for c in companies if c.country), None),
+        people=names,
     )
 
 
@@ -481,6 +483,7 @@ async def _build(
     include_rdap: bool,
     company_size_max: int | None,
     country: str | None,
+    include_search: bool = True,
 ) -> DomainIntel:
     started = time.monotonic()
     now = state.utcnow()
@@ -565,6 +568,27 @@ async def _build(
             if gh.completed:
                 refreshed.append("github")
 
+    # 3b. Web search: the domain's addresses published elsewhere (directories, PDFs, press) — only when the
+    # company's own pages show no named address, and at most once per domain per SEARCH_FRESHNESS
+    ws: web_search.WebSearchEvidence | None = None
+    if include_search and network and workspace_id is not None:
+        stale = refresh or not _fresh(
+            state.parse_iso(prev_stats.get("search_checked_at")), web_search.SEARCH_FRESHNESS, now
+        )
+        backoff = not refresh and _fresh(
+            state.parse_iso(prev_stats.get("search_error_at")), web_search.SEARCH_ERROR_BACKOFF, now
+        )
+        named_on_site = any(i.first_name for i in ctx.items)
+        if not stale:
+            hits["search"] = True
+        elif not named_on_site and ctx.people and not backoff and await _claim(d, "search", now):
+            ws = await web_search.fetch_search_evidence(d, people=ctx.people)
+            if ws.emails:
+                n = await samples.record_observed_emails(d, ws.emails, relearn=False)
+                samples_changed = samples_changed or n > 0
+            if ws.completed:
+                refreshed.append("search")
+
     # 4. RDAP
     rd: rdap.RdapResult | None = None
     if include_rdap and network:
@@ -646,6 +670,14 @@ async def _build(
                 }
             elif gh.error:
                 stats["github_error_at"] = state.iso(now)
+        if ws is not None:
+            claims.pop("search", None)
+            if ws.completed:
+                stats["search_checked_at"] = state.iso(now)
+                stats.pop("search_error_at", None)
+                stats["web_search"] = {"queries": ws.queries, "results": ws.results, "emails": len(ws.emails)}
+            elif ws.error:
+                stats["search_error_at"] = state.iso(now)
         if rd is not None:
             claims.pop("rdap", None)
             if rd.completed:

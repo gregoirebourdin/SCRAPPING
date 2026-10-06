@@ -6,6 +6,8 @@ recorded) into a bounded sliding window (last 40 sessions, at most 2 h old). Sta
 
 * ``UNKNOWN``  — fewer than 5 sessions in the window (also: SMTP probing disabled).
 * ``BLOCKED``  — infra_failure + policy_block ≥ 80 % of ≥ 5 sessions spanning ≥ 3 distinct domains
+                 (the global scope only records a policy block when the provider is unknown: a provider's
+                 policy — Microsoft's Spamhaus check, OVH's reverse-DNS rule — blocks that provider, not us)
                  (one dead MX can never mark us blocked), or — provider scopes only — a circuit breaker:
                  the last 5 sessions are all policy blocks across ≥ 2 domains (Microsoft blocking us
                  must not stall Google domains). Probing stops until ``blocked_until``: cooldown 15 min,
@@ -426,7 +428,14 @@ class SmtpHealthMonitor:
             return await self.current_state(provider)
         now = self.now()
         states: dict[str, SmtpHealthState] = {}
-        for scope in scopes_for(provider):
+        scopes = scopes_for(provider)
+        for scope in scopes:
+            if scope == SCOPE_GLOBAL and outcome == SessionOutcome.policy_block and len(scopes) > 1:
+                # A known provider's policy (Microsoft 365 checking Spamhaus, OVH requiring reverse DNS) blocks
+                # that provider only: it must not pause probing of Google Workspace & co., which still answer.
+                rec_g = await self._load(SCOPE_GLOBAL)
+                states[scope] = view(rec_g, now)[0] if rec_g is not None else SmtpHealthState.UNKNOWN
+                continue
             before: dict[str, SmtpHealthState] = {}
 
             def mutate(rec: HealthRecord, _before: dict[str, SmtpHealthState] = before) -> bool:

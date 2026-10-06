@@ -506,8 +506,10 @@ async def test_worker_runs_the_deep_job(env, workspace, stub):
 
 async def test_health_state_is_persisted_in_smtp_health(env):
     mon = SmtpHealthMonitor(DbHealthStore(), cache_ttl_s=0, enabled=lambda: True)
+    # port 25 cut (infrastructure): global + provider scopes; a provider's *policy* blocks never reach the
+    # global scope (see test_health.test_provider_policies_never_block_the_global_path)
     for d in ("a.fr", "b.fr", "c.fr", "d.fr", "e.fr"):
-        await mon.record_session(MailProvider.microsoft_365, SessionOutcome.policy_block, domain=d)
+        await mon.record_session(MailProvider.microsoft_365, SessionOutcome.infra_failure, domain=d)
     fresh = SmtpHealthMonitor(DbHealthStore(), cache_ttl_s=0, enabled=lambda: True)
     assert await fresh.current_state(MailProvider.microsoft_365) == SmtpHealthState.BLOCKED
     assert (
