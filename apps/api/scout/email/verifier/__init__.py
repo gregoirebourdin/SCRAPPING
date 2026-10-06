@@ -14,7 +14,7 @@ from scout.config import Settings, get_settings
 from scout.email.verifier.base import EmailVerifier
 from scout.email.verifier.builtin import BuiltinVerifier
 from scout.email.verifier.fixture import FixtureVerifier
-from scout.email.verifier.service import ServiceVerifier
+from scout.email.verifier.service import ServiceVerifier, shared_breaker
 
 log = structlog.get_logger(__name__)
 
@@ -44,7 +44,12 @@ def build_verifier(settings: Settings | None = None) -> EmailVerifier:
             log.warning("email.verifier.service_url_missing", fallback="builtin")
             return BuiltinVerifier()
         token = s.verifier_service_token.get_secret_value() if s.verifier_service_token else None
-        return ServiceVerifier(s.verifier_service_url, token, fallback=BuiltinVerifier())
+        return ServiceVerifier(
+            s.verifier_service_url,
+            token,
+            fallback=BuiltinVerifier(),
+            breaker=shared_breaker(s.verifier_service_url),
+        )
     return BuiltinVerifier()
 
 

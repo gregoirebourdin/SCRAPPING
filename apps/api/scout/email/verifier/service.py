@@ -1,12 +1,18 @@
 """HTTP client for the Go email-verifier service (AfterShip/email-verifier, Railway service B).
 
 Any service failure (network, HTTP status, malformed JSON) falls back to the builtin verifier
-for that call: the pipeline never crashes because Service B is down.
+for that call: the pipeline never crashes because Service B is down. So does an answer that only says the
+service could not open a connection to the mail server on port 25 (its host's outbound port 25 still blocked by
+the provider, typically): this host may well get through. After ``TRIP_AFTER`` such failures in a row the
+service is skipped for ``COOLDOWN_S`` (no connect timeout per address), then tried again, so unblocking the
+port is picked up without a redeploy.
 """
 
 from __future__ import annotations
 
+import re
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -24,6 +30,57 @@ from scout.services.usage import record_usage
 log = structlog.get_logger(__name__)
 
 DEFAULT_TIMEOUT_S = 45.0
+TRIP_AFTER = 3
+COOLDOWN_S = 900.0
+
+# The service never reached the mail server: no TCP connection on port 25.
+_UNREACHABLE = re.compile(
+    r"dial tcp \S+:25: (?:i/o timeout|connect: (?:connection refused|connection timed out|no route to host"
+    r"|network is unreachable))",
+    re.IGNORECASE,
+)
+
+
+def unreachable(error: Any) -> bool:
+    return bool(error) and _UNREACHABLE.search(str(error)) is not None
+
+
+class Breaker:
+    """Consecutive failures of the service (down, or unable to reach any mail server) → skip it for a while."""
+
+    def __init__(
+        self,
+        *,
+        trip_after: int = TRIP_AFTER,
+        cooldown_s: float = COOLDOWN_S,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.trip_after = max(1, trip_after)
+        self.cooldown_s = cooldown_s
+        self._clock = clock
+        self._misses = 0
+        self._until = 0.0
+
+    def open(self) -> bool:
+        return self._clock() < self._until
+
+    def miss(self, reason: str) -> None:
+        self._misses += 1
+        if self._misses >= self.trip_after:
+            self._misses = 0
+            self._until = self._clock() + self.cooldown_s
+            log.warning("email.verifier_service.skipped", cooldown_s=self.cooldown_s, reason=reason[:300])
+
+    def ok(self) -> None:
+        self._misses = 0
+
+
+_shared: dict[str, Breaker] = {}
+
+
+def shared_breaker(base_url: str) -> Breaker:
+    """One breaker per service URL for the whole process (fast and deep paths see the same service)."""
+    return _shared.setdefault(base_url.rstrip("/"), Breaker())
 
 
 def _opt_bool(v: Any) -> bool | None:
@@ -66,8 +123,10 @@ class ServiceVerifier:
         fallback: EmailVerifier | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         use_db_cache: bool = True,
+        breaker: Breaker | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.breaker = breaker or Breaker()
         self._headers = {"Authorization": f"Bearer {token}"} if token else {}
         self._timeout = timeout
         self._transport = transport
@@ -92,16 +151,31 @@ class ServiceVerifier:
             raise ValueError("unexpected verifier response")
         return data
 
+    async def _via_fallback(self, address: str, why: str) -> VerificationResult:
+        res = await self._fallback_verifier().verify(address)
+        res.raw = {**res.raw, "service_error": why[:300]}
+        return res
+
     async def verify(self, address: str) -> VerificationResult:
         t0 = time.monotonic()
         addr = normalize_address(address) or (address or "").strip().lower()
+        if self.breaker.open():
+            return await self._via_fallback(address, "service skipped after repeated failures")
         try:
             data = await self._post("/v1/verify", {"email": addr})
         except (httpx.HTTPError, ValueError) as exc:
             log.warning("email.verifier_service.failed", error=str(exc), fallback="builtin")
-            res = await self._fallback_verifier().verify(address)
-            res.raw = {**res.raw, "service_error": str(exc)[:300]}
-            return res
+            self.breaker.miss(str(exc))
+            return await self._via_fallback(address, str(exc))
+        raw_smtp = data.get("smtp")
+        smtp: dict[str, Any] = raw_smtp if isinstance(raw_smtp, dict) else {}
+        if unreachable(smtp.get("error")):
+            self.breaker.miss(str(smtp["error"]))
+            return await self._via_fallback(
+                address, f"service could not reach the mail server: {smtp['error']}"
+            )
+        if smtp.get("host_exists"):
+            self.breaker.ok()
         try:
             await record_usage(
                 UsageCategory.verification_request, cost_usd=get_settings().cost_verification_usd
@@ -155,10 +229,16 @@ class ServiceVerifier:
             return None
         if self.use_db_cache and (cached := await dns.cached_catch_all(d)) is not None:
             return cached
+        if self.breaker.open():
+            return await self._fallback_verifier().is_catch_all(d)
         try:
             data = await self._post("/v1/catch-all", {"domain": d})
         except (httpx.HTTPError, ValueError) as exc:
             log.warning("email.verifier_service.catch_all_failed", error=str(exc), fallback="builtin")
+            self.breaker.miss(str(exc))
+            return await self._fallback_verifier().is_catch_all(d)
+        if unreachable(data.get("error")):
+            self.breaker.miss(str(data["error"]))
             return await self._fallback_verifier().is_catch_all(d)
         value = _opt_bool(data.get("catch_all"))
         if self.use_db_cache:

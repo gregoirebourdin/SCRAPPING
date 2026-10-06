@@ -4,7 +4,8 @@
 * ``ServiceDeepVerifier`` — the Go/AfterShip service (``scout.email.verifier.service.ServiceVerifier``),
   called per address and folded into one ``DomainProbeResult`` (catch-all from the service's
   ``/v1/catch-all`` endpoint); its error texts are re-read by our classifier so 4xx/policy answers are
-  never mistaken for anything final.
+  never mistaken for anything final. While the service is skipped (down, or its port 25 blocked — see the
+  service's breaker) whole domains go to the ``fallback`` deep verifier (our own batched prober).
 * ``WorldDeepVerifier`` — the deterministic simulated mail world (``world.py``).
 
 ``get_deep_verifier()`` follows ``settings.verifier_backend`` like ``scout.email.verifier.build_verifier``:
@@ -35,7 +36,7 @@ from scout.email.smtp.session import (
 from scout.email.smtp.world import MailWorld, WorldDeepVerifier
 from scout.email.syntax import normalize_address, normalize_domain, split_address
 from scout.email.types import VerificationResult
-from scout.email.verifier.service import ServiceVerifier
+from scout.email.verifier.service import ServiceVerifier, shared_breaker
 
 log = structlog.get_logger(__name__)
 
@@ -113,8 +114,10 @@ class ServiceDeepVerifier:
         concurrency: int = 4,
         monitor: SmtpHealthMonitor | None = None,
         record_health: bool = True,
+        fallback: DeepVerifier | None = None,
     ) -> None:
         self.service = service
+        self.fallback = fallback
         self.concurrency = max(1, concurrency)
         self._monitor = monitor
         self.record_health = record_health
@@ -129,7 +132,17 @@ class ServiceDeepVerifier:
         random_probes: int = DEFAULT_RANDOM_PROBES,
         provider: MailProvider | None = None,
         catch_all_addresses: list[str] | None = None,
-    ) -> ProbeReport:
+    ) -> DomainProbeResult:
+        if self.fallback is not None and self.fallback.enabled and self.service.breaker.open():
+            return await self.fallback.probe_domain(
+                domain,
+                mx_hosts,
+                addresses,
+                check_catch_all=check_catch_all,
+                random_probes=random_probes,
+                provider=provider,
+                catch_all_addresses=catch_all_addresses,
+            )
         t0 = time.monotonic()
         d = normalize_domain(domain) or (domain or "").strip().lower()
         report = ProbeReport(domain=d, session=SessionOutcome.not_attempted, verifier=self.name)
@@ -252,7 +265,13 @@ def build_deep_verifier(settings: Settings | None = None) -> DeepVerifier:
         from scout.email.verifier.builtin import BuiltinVerifier
 
         token = s.verifier_service_token.get_secret_value() if s.verifier_service_token else None
-        return ServiceDeepVerifier(ServiceVerifier(s.verifier_service_url, token, fallback=BuiltinVerifier()))
+        service = ServiceVerifier(
+            s.verifier_service_url,
+            token,
+            fallback=BuiltinVerifier(),
+            breaker=shared_breaker(s.verifier_service_url),
+        )
+        return ServiceDeepVerifier(service, fallback=BuiltinDeepVerifier())
     return BuiltinDeepVerifier()
 
 
