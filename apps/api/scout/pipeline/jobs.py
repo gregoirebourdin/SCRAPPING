@@ -90,7 +90,13 @@ async def bump_stats(s: Any, campaign_id: uuid.UUID, **deltas: int) -> None:
 async def plan_campaign(ctx: JobContext) -> dict[str, Any]:
     from scout.discovery.health import health_snapshot
     from scout.discovery.router import select_sources
+    from scout.pipeline.campaigns import ensure_campaign_columns
 
+    async with session_scope() as s:
+        c0 = await s.get(Campaign, ctx.campaign_id)
+        cols = (c0.workspace_id, c0.target_list_id, c0.definition, c0.created_by) if c0 is not None else None
+    if cols is not None:
+        await ensure_campaign_columns(*cols)
     async with session_scope() as s:
         c = await s.get(Campaign, ctx.campaign_id)
         if c is None or c.status in CAMPAIGN_TERMINAL:

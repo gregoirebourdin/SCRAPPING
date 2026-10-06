@@ -43,3 +43,51 @@ def test_a_specialty_restated_as_a_website_condition_is_not_a_hard_filter() -> N
 
     assert _restates_target("offers growth marketing services", ["marketing agency", "growth marketing"])
     assert not _restates_target("uses Shopify Plus for e-commerce", ["marketing agency"])
+
+
+class ManyChatModel:
+    """What Gemini returns for "agences social media qui utilisent potentiellement ManyChat": a required tech."""
+
+    name = "gemini"
+    available = True
+
+    async def structured(self, *, schema: Any, **_: Any) -> AIResult[Any]:
+        from scout.pipeline.icp import AIWebsiteCondition
+
+        value = AIParsedCampaign(
+            name="ManyChat agencies",
+            target_count=30,
+            industries=["social media marketing agency"],
+            countries=["FR"],
+            titles=["Founder"],
+            website_conditions=[AIWebsiteCondition(kind="technology", terms=["ManyChat"])],
+        )
+        return AIResult(value=value, usage=AIUsage(model="fake"))
+
+
+async def _parse(prompt: str):
+    set_ai(ManyChatModel())  # type: ignore[arg-type]
+    try:
+        defn, _ = await parse_prompt(prompt)
+    finally:
+        set_ai(None)
+    return defn
+
+
+async def test_a_hedged_criterion_is_a_bonus_column_not_a_filter() -> None:
+    defn = await _parse("Trouve 30 agences social media en France qui utilisent potentiellement ManyChat")
+    (cond,) = defn.website_conditions
+    assert cond.type == "technology" and cond.required is False
+    assert [(e.name, e.instruction) for e in defn.enrichments] == [("ManyChat", "Uses ManyChat?")]
+    strict = await _parse("Trouve 30 agences social media en France qui utilisent ManyChat")
+    assert strict.website_conditions[0].required is True and strict.enrichments == []
+
+
+async def test_catch_all_emails_are_accepted_unless_verified_only() -> None:
+    from scout.db.enums import EmailStatus
+
+    defn = await _parse("Trouve 30 agences social media en France")
+    assert EmailStatus.CATCH_ALL in defn.accepted_email_statuses
+    strict = await _parse("Trouve 30 agences social media en France, emails vérifiés uniquement")
+    assert EmailStatus.CATCH_ALL not in strict.accepted_email_statuses
+    assert EmailStatus.SAFE in strict.accepted_email_statuses

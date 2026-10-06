@@ -224,3 +224,27 @@ async def test_unsupported_field_fails_cleanly(local_ai):
     )
     res = await resolve(_ctx(plan, None))
     assert res.status == CellStatus.failed and "Unsupported" in res.error
+
+
+async def test_tech_named_in_page_text_counts_for_agencies(fake_detector, local_ai):
+    # agencies show they work with a tool by naming it on their service pages, not by embedding it
+    plan = await plan_column("ManyChat", "Uses ManyChat?", use_ai=False)
+    ctx = _ctx(plan, "agency_social_follow")
+    page = ctx.pages[-1]
+    page.content_text = (
+        page.content_text or ""
+    ) + " Nous créons vos chatbots ManyChat pour Instagram et Messenger."
+    res = await resolve(ctx)
+    assert res.value is True and res.resolver == "page_text" and res.confidence == 0.7
+    assert "Mentions ManyChat" in res.evidence and res.source_url == page.url
+    absent = await resolve(_ctx(plan, "agency_social_follow"))
+    assert absent.value is False  # never mentioned, never embedded
+
+
+def test_ordinary_words_are_not_text_mentions():
+    from scout.enrich.resolvers.tech_detection import _text_mention
+
+    page = types.SimpleNamespace(
+        url="https://x.fr/", content_text="La notion de marque est au cœur", title=None
+    )
+    assert _text_mention([page], "Notion") is None

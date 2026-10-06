@@ -234,7 +234,8 @@ async def test_campaign_end_to_end_and_identical_rerun(env, workspace):
     assert "Agence Lumière (bureau de Lyon)" not in events
     assert events["Spam Agency"].outcome == CandidateOutcome.suppressed
     assert events["Kréa Com"].outcome == CandidateOutcome.rejected
-    assert "Email status CATCH_ALL not accepted" in (events["Kréa Com"].reason or "")
+    # catch-all addresses are accepted (and marked) by default, but a weak guess stays below the quality floor
+    assert "Email confidence 39 < 50" in (events["Kréa Com"].reason or "")
     assert events["Pixel Factory"].outcome == CandidateOutcome.rejected
     assert events["Pixel Factory"].reason == "No decision maker found"
     assert events["Agence Optout"].outcome == CandidateOutcome.rejected

@@ -54,6 +54,14 @@ class ParseContext:
 # ---- AI-facing schema (simple types; mapped deterministically to CampaignDefinition) -------------
 
 
+# Catch-all addresses are accepted by default and marked as such (badge in the table); "verified only" drops them.
+DEFAULT_EMAIL_STATUSES: tuple[EmailStatus, ...] = (
+    EmailStatus.SAFE,
+    EmailStatus.LIKELY_SAFE,
+    EmailStatus.CATCH_ALL,
+)
+
+
 class AIWebsiteCondition(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["keyword_any", "keyword_all", "semantic", "technology"] = Field(
@@ -64,6 +72,11 @@ class AIWebsiteCondition(BaseModel):
     concept: str | None = Field(
         default=None,
         description="For semantic: what must be true, e.g. 'offers Instagram marketing services'",
+    )
+    required: bool = Field(
+        default=True,
+        description="False when the user hedges (potentially, maybe, ideally, preferably, if possible, "
+        "potentiellement, peut-être, idéalement, de préférence, si possible): a bonus shown as a column, not a filter",
     )
 
 
@@ -101,9 +114,7 @@ class AIParsedCampaign(BaseModel):
     role_families: list[RoleFamily] = Field(default_factory=list)
     max_people_per_company: int = 1
     require_email: bool = True
-    accepted_email_statuses: list[EmailStatus] = Field(
-        default_factory=lambda: [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE]
-    )
+    accepted_email_statuses: list[EmailStatus] = Field(default_factory=lambda: list(DEFAULT_EMAIL_STATUSES))
     minimum_icp_score: int | None = None
     exclusion: AIExclusion = Field(default_factory=AIExclusion)
     enrichments: list[EnrichmentRequest] = Field(default_factory=list)
@@ -126,7 +137,13 @@ intelligence app. Rules:
   with exclude_list_names. "from my uploaded file / import" → exclude_latest_import=true. "it's okay if the company is
   already in my database" → allow_new_people_at_existing_companies=true. "a different person at my existing companies"
   → seed_from_current_list=true, EXCLUDE_PREVIOUS_PEOPLE.
-- Professional/verified email required → require_email=true, accepted_email_statuses=[SAFE, LIKELY_SAFE]; [SAFE] only when the user says strictly SAFE/SMTP-verified; add RISKY when the user accepts risky.
+- Professional email required → require_email=true, accepted_email_statuses=[SAFE, LIKELY_SAFE, CATCH_ALL]
+  (catch-all addresses are kept and marked as such); [SAFE, LIKELY_SAFE] when the user wants only verified
+  emails or no catch-all; [SAFE] only when the user says strictly SAFE/SMTP-verified; add RISKY when the user
+  accepts risky.
+- A hedged website criterion ("potentially / maybe / ideally / preferably uses X", "qui utilisent
+  potentiellement X", "idéalement", "de préférence", "si possible") → the condition with required=false: a bonus
+  shown as a column, never a filter.
 - Location is mandatory whenever the user names one: cities with proper capitalization ("annecy" → "Annecy"),
   regions, and countries as ISO alpha-2 (a French city → "FR").
 - Local professions and trades (coachs sportifs, kinés, ostéopathes, plombiers, avocats, photographes…) are the
@@ -502,14 +519,16 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
     )
     # Professional email: SAFE (confirmed) or LIKELY_SAFE (confirmed domain convention + MX + strong name
     # affinity). "strictly verified / SAFE only" keeps SAFE alone; "risky ok" widens.
-    statuses = [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE]
+    statuses = list(DEFAULT_EMAIL_STATUSES)
+    if _NO_CATCH_ALL.search(low):
+        statuses = [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE]
     if re.search(
         r"\b(safe only|only safe|strictly verified|smtp[- ]verified|v[ée]rifi[ée]s? smtp|uniquement safe)\b",
         low,
     ):
         statuses = [EmailStatus.SAFE]
-    if re.search(r"\brisky\b.*\b(ok|fine|accept)|accept\w* risky|catch[- ]all ok", low):
-        statuses = [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE, EmailStatus.RISKY]
+    if re.search(r"\brisky\b.*\b(ok|fine|accept)|accept\w* risky", low):
+        statuses = [*statuses, EmailStatus.RISKY]
     # exclusion
     ex = AIExclusion()
     default_mode = default_exclusion_for_prompt(raw)
@@ -639,6 +658,40 @@ _FILLER = {
 }
 
 
+_NO_CATCH_ALL = re.compile(
+    r"\b(no catch[- ]?all|sans catch[- ]?all|pas de catch[- ]?all|only verified|uniquement v[ée]rifi[ée]s?"
+    r"|v[ée]rifi[ée]s? uniquement)\b",
+    re.IGNORECASE,
+)
+_HEDGE = re.compile(
+    r"\b(potentiel+ement|peut[- ]?[eê]tre|probablement|id[ée]alement|de pr[ée]f[ée]rence|si possible|[ée]ventuellement"
+    r"|potentially|possibly|maybe|perhaps|ideally|preferably|if possible|likely|probably|might)\b",
+    re.IGNORECASE,
+)
+
+
+def _hedged(prompt: str, terms: list[str]) -> bool:
+    """The user hedged this criterion ("qui utilisent potentiellement ManyChat"): a hedge word shortly before
+    one of its terms."""
+    low = prompt.lower()
+    for t in terms:
+        t = (t or "").strip().lower()
+        if len(t) < 3:
+            continue
+        for m in re.finditer(re.escape(t), low):
+            if _HEDGE.search(low[max(0, m.start() - 40) : m.start()]):
+                return True
+    return False
+
+
+def _email_statuses(statuses: list[EmailStatus], prompt: str) -> list[EmailStatus]:
+    """Catch-all addresses are accepted (and marked) unless the user asked for verified-only emails."""
+    out = list(statuses) or list(DEFAULT_EMAIL_STATUSES)
+    if _NO_CATCH_ALL.search(prompt):
+        out = [x for x in out if x != EmailStatus.CATCH_ALL]
+    return out
+
+
 def _restates_target(concept: str, targets: list[str]) -> bool:
     """True when a "semantic" website condition only repeats the requested business type / specialty."""
     words = {w for w in normalize_key(concept).split() if w not in _FILLER and len(w) > 2}
@@ -649,9 +702,20 @@ def _restates_target(concept: str, targets: list[str]) -> bool:
 def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> CampaignDefinition:
     """Deterministic mapping + safety defaults (exclusion triggers, list/import resolution)."""
     conds: list[Any] = []
+    bonus_columns: list[EnrichmentRequest] = []
     for c in parsed.website_conditions:
+        must = c.required and not _hedged(prompt, [*c.terms, c.concept or ""])
+        if not must and c.kind in ("technology", "keyword_any", "keyword_all") and c.terms:
+            # a bonus, not a filter: a column on every lead (Yes / No + evidence), cheap and deterministic
+            name = " / ".join(c.terms[:3])[:60]
+            ask = f"Uses {name}?" if c.kind == "technology" else f"Website mentions {name}?"
+            bonus_columns.append(EnrichmentRequest(name=name, instruction=ask))
         if c.kind in ("keyword_any", "keyword_all") and c.terms:
-            conds.append(KeywordCondition(type=c.kind, terms=[x.strip() for x in c.terms if x.strip()][:10]))
+            conds.append(
+                KeywordCondition(
+                    type=c.kind, terms=[x.strip() for x in c.terms if x.strip()][:10], required=must
+                )
+            )
         elif c.kind == "semantic" and (c.concept or c.terms):
             concept = c.concept or " ".join(c.terms)
             if _restates_target(concept, [*parsed.industries, *parsed.keywords]):
@@ -662,11 +726,14 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
                 continue
             conds.append(
                 SemanticCondition(
-                    type="semantic_service", concept=concept, keywords=[x for x in c.terms if x][:8]
+                    type="semantic_service",
+                    concept=concept,
+                    keywords=[x for x in c.terms if x][:8],
+                    required=must,
                 )
             )
         elif c.kind == "technology" and c.terms:
-            conds.append(TechnologyCondition(technologies=c.terms[:5]))
+            conds.append(TechnologyCondition(technologies=c.terms[:5], required=must))
     ex_in = parsed.exclusion
     mode = ex_in.mode
     trigger = default_exclusion_for_prompt(prompt)
@@ -727,9 +794,16 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
             max_people_per_company=parsed.max_people_per_company,
         ),
         required_fields=required,
-        accepted_email_statuses=parsed.accepted_email_statuses or [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE],
+        accepted_email_statuses=_email_statuses(parsed.accepted_email_statuses, prompt),
         exclusion=exclusion,
-        enrichments=parsed.enrichments,
+        enrichments=[
+            *parsed.enrichments,
+            *(
+                b
+                for b in bonus_columns
+                if normalize_key(b.name) not in {normalize_key(e.name) for e in parsed.enrichments}
+            ),
+        ][:10],
         seed=seed,
     )
     if parsed.minimum_icp_score is not None:

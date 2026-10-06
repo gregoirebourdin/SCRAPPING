@@ -1405,6 +1405,36 @@ async def _target_reached(s: AsyncSession, campaign_id: uuid.UUID) -> bool:
     return target is not None and target > 0 and qualified is not None and qualified >= target
 
 
+async def _run_campaign_columns(ctx: Ctx, *, company_id: uuid.UUID, person_id: uuid.UUID | None) -> None:
+    """The columns the search asked for are computed for each lead as it qualifies (not tied to the campaign:
+    the last lead's cells still run once the target is reached)."""
+    if not ctx.defn.enrichments or ctx.target_list_id is None:
+        return
+    from scout.db.models import CustomColumn
+    from scout.enrich.engine import enqueue_column
+    from scout.util.text import normalize_key
+
+    names = {normalize_key(e.name) for e in ctx.defn.enrichments}
+    try:
+        async with session_scope() as s:
+            cols = (
+                await s.scalars(
+                    sa.select(CustomColumn).where(
+                        CustomColumn.workspace_id == ctx.workspace_id,
+                        CustomColumn.list_id == ctx.target_list_id,
+                    )
+                )
+            ).all()
+        for col in cols:
+            if normalize_key(col.name) not in names:
+                continue
+            eid = person_id if col.entity_type == EntityType.person else company_id
+            if eid is not None:
+                await enqueue_column(ctx.workspace_id, col.id, entity_ids=[eid], list_id=ctx.target_list_id)
+    except Exception as exc:  # a column never fails a delivered lead
+        log.warning("campaign_columns.enqueue_failed", error=str(exc)[:300])
+
+
 async def _deliver_person(
     ctx: Ctx,
     comp: Company,
@@ -1515,6 +1545,7 @@ async def _deliver_person(
         await record_outcomes(ctx.source_key, qualified=1)
     except Exception as exc:  # source health is best-effort bookkeeping, never fails a delivered lead
         log.info("source_health.record_failed", source=ctx.source_key, error=str(exc))
+    await _run_campaign_columns(ctx, company_id=comp.id, person_id=person_id)
     return True
 
 
@@ -1671,6 +1702,7 @@ async def _deliver_company(ctx: Ctx, conditions: list[ConditionOutcome], fit: Fi
             campaign_id=ctx.campaign_id,
             session=s,
         )
+    await _run_campaign_columns(ctx, company_id=comp.id, person_id=None)
     return True
 
 

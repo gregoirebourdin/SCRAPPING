@@ -12,8 +12,10 @@ from typing import Any
 
 import orjson
 import sqlalchemy as sa
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from scout.db.engine import session_scope
 from scout.db.enums import (
     CAMPAIGN_TERMINAL,
     CampaignMode,
@@ -52,6 +54,8 @@ from scout.schemas.campaign import (
 )
 from scout.services import lists as lists_svc
 from scout.services.exclusion import compile_rules
+
+log = structlog.get_logger("campaigns")
 
 
 def definition_hash(defn: CampaignDefinition) -> str:
@@ -1118,6 +1122,50 @@ async def restore_definition(
 # ---------------------------------------------------------------------------------------------
 # Live snapshot — what the run header / chat run card restore after a refresh, plus stall diagnostics
 # ---------------------------------------------------------------------------------------------
+
+
+async def ensure_campaign_columns(
+    workspace_id: uuid.UUID,
+    list_id: uuid.UUID | None,
+    definition: dict[str, Any],
+    created_by: str | None = None,
+) -> int:
+    """The columns a search asked for ("ManyChat", "a client's name"…) exist on its list; a same-name column is
+    reused, never duplicated. Each qualified lead then gets them computed (``processor._run_campaign_columns``)."""
+    if list_id is None:
+        return 0
+    defn = CampaignDefinition.model_validate(definition)
+    if not defn.enrichments:
+        return 0
+    from scout.db.models import CustomColumn
+    from scout.enrich.engine import create_column
+    from scout.util.text import normalize_key
+
+    async with session_scope() as s:
+        existing = {
+            normalize_key(n)
+            for n in (
+                await s.scalars(
+                    sa.select(CustomColumn.name).where(
+                        CustomColumn.workspace_id == workspace_id, CustomColumn.list_id == list_id
+                    )
+                )
+            ).all()
+        }
+    created = 0
+    for e in defn.enrichments:
+        if normalize_key(e.name) in existing:
+            continue
+        try:
+            await create_column(
+                workspace_id, name=e.name, instruction=e.instruction, list_id=list_id, created_by=created_by
+            )
+        except Exception as exc:  # a column that cannot be planned never blocks the search
+            log.warning("campaign_columns.create_failed", column=e.name, error=str(exc)[:300])
+            continue
+        existing.add(normalize_key(e.name))
+        created += 1
+    return created
 
 
 async def live_snapshot(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: uuid.UUID) -> dict[str, Any]:

@@ -5,12 +5,26 @@ from __future__ import annotations
 from typing import Any
 
 from scout.db.enums import ColumnDataType
-from scout.enrich.matching import contains_any, fold, tokens
+from scout.enrich.matching import contains_any, excerpt, fold, tokens
 from scout.enrich.planner import known_technology_aliases
 from scout.enrich.resolvers.base import NOT_CRAWLED, ResolveContext, ok, ordered_pages, unknown
+from scout.enrich.resolvers.keyword import scan_pages
 from scout.enrich.types import CellResult
 
 RESOLVER = "tech_detection"
+# Names that are ordinary words too: a mention in page text proves nothing ("la notion de…", "front office").
+_COMMON_WORDS = {
+    "notion",
+    "square",
+    "slack",
+    "linear",
+    "monday",
+    "front",
+    "drift",
+    "close",
+    "copper",
+    "ghost",
+}
 
 
 def _canon(name: str) -> str:
@@ -27,6 +41,21 @@ def _script_hit(pages: list[Any], name: str) -> tuple[Any, str] | None:
         if head and (slug in fold(head).replace("-", "").replace(" ", "") or contains_any(head, [name])):
             return page, f"{name} referenced in page scripts of {page.url}"
     return None
+
+
+def _text_mention(pages: list[Any], name: str) -> tuple[Any, str] | None:
+    """The site names the tool in its own text ("Agence certifiée ManyChat", "chatbots ManyChat pour Instagram"):
+    for agencies and freelancers that is how they show they work with it — rarely by embedding it on their site."""
+    if len(_canon(name)) < 5 or _canon(name) in _COMMON_WORDS:
+        return None
+    found = scan_pages(ordered_pages(pages), [name])
+    hit = found.get(name)
+    if hit is None:
+        return None
+    return (
+        hit.page,
+        f"Mentions {name} on {hit.page.url}: {excerpt(hit.text, hit.hit.start, hit.hit.end, 140)}",
+    )
 
 
 async def resolve(rc: ResolveContext) -> CellResult:
@@ -85,6 +114,19 @@ async def resolve(rc: ResolveContext) -> CellResult:
                 True if boolean else wanted,
                 resolver="page_scripts",
                 confidence=0.8,
+                evidence=evidence,
+                source_url=page.url,
+                source_id="tech_scan",
+            )
+    for wanted in plan.technologies:
+        mention = _text_mention(rc.pages, wanted)
+        if mention:
+            page, evidence = mention
+            return ok(
+                plan,
+                True if boolean else wanted,
+                resolver="page_text",
+                confidence=0.7,
                 evidence=evidence,
                 source_url=page.url,
                 source_id="tech_scan",

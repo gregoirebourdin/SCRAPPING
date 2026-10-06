@@ -275,6 +275,13 @@ export function personColumns(): ColumnSpec[] {
         r.email ? (
           <span className="flex min-w-0 items-center gap-1">
             <span className="truncate font-mono text-[12px] text-fg">{r.email}</span>
+            {r.email_status === "CATCH_ALL" && (
+              <Tip content="Catch-all domain: the mail server accepts any address, so this one cannot be confirmed — it follows the most likely name format of the domain.">
+                <span className="shrink-0 rounded-[3px] px-1 text-micro font-medium text-warning shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--warning)_40%,transparent)]">
+                  catch-all
+                </span>
+              </Tip>
+            )}
             <CopyButton value={r.email} />
           </span>
         ) : (
