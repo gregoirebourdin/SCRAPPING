@@ -291,6 +291,23 @@ def is_plausible_person_name(s: str, *, require_known_first_name: bool = False) 
     return True
 
 
+def is_plausible_registry_name(s: str) -> bool:
+    """A director named by an official registry (structured first-name / surname fields).
+
+    Shape checks only: the website stopword heuristics of ``is_plausible_person_name`` would drop real people
+    such as "Jean Bois", "Marie Paris" or "Henri de La Tour d'Auvergne". Organisation names still fail.
+    """
+    if is_plausible_person_name(s):
+        return True
+    s = collapse_ws(s or "")
+    toks = _tokens(s)
+    if not (2 <= len(toks) <= 6) or len(s) > 80 or not s[:1].isupper():
+        return False
+    if not all(_NAME_TOKEN_RE.match(t) and not t.endswith(".") for t in toks):
+        return False
+    return len(name_tokens(s)) >= 2 and not looks_like_company_name(s)
+
+
 # Words that make a "name" a business: legal forms and unambiguous organisation nouns (deliberately narrower
 # than _STOPWORDS so real surnames such as "Bois" or "Paris" are never rejected).
 _COMPANY_MARKERS = frozenset(

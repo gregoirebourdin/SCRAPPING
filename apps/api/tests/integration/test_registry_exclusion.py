@@ -225,6 +225,32 @@ async def test_sole_proprietor_named_after_the_owner_is_still_a_person(workspace
     assert created and person.full_name == "Jean Dupont"
 
 
+async def test_registry_owner_of_an_ei_named_after_them_is_a_person(workspace):
+    """'Marie Bois' fails the website name heuristics ('bois' is a word); as the official owner of the EI
+    'MARIE BOIS' (registry evidence) she is still stored — organisation names are still refused."""
+    ws, _ = workspace
+    comp = await _company(ws, name="MARIE BOIS", website="https://mariebois-design.fr")
+    official = registry.Evidence(
+        source_type=SourceType.registry,
+        confidence=0.95,
+        source_key="fr_registry",
+        source_url="https://annuaire-entreprises.data.gouv.fr/entreprise/912345678",
+        evidence="Marie Bois — Chef d'entreprise (entrepreneur individuel) (official registry)",
+    )
+    with pytest.raises(ValidationFailed, match="looks like a company name"):
+        await _person(ws, comp.id, "Marie Bois")  # website evidence: a heading repeating the company name
+    async with session_scope() as s:
+        person, created = await registry.upsert_person(
+            s, ws, company_id=comp.id, full_name="Marie Bois", evidence=official
+        )
+    assert created and person.full_name == "Marie Bois"
+    async with session_scope() as s:
+        with pytest.raises(ValidationFailed, match="looks like a company name"):
+            await registry.upsert_person(
+                s, ws, company_id=comp.id, full_name="Groupe Martin", evidence=official
+            )
+
+
 async def test_person_requires_evidence(workspace):
     ws, _ = workspace
     comp = await _company(ws)

@@ -27,10 +27,11 @@ from scout.discovery.common import (
 from scout.discovery.employee_bands import range_for_tranche, tranches_for_range
 from scout.discovery.naf import naf_category
 from scout.errors import FetchError
+from scout.extract.names import is_plausible_registry_name
 from scout.schemas.campaign import CampaignDefinition
 from scout.services.usage import record_usage
 from scout.util.pools import pool
-from scout.util.text import collapse_ws, title_case_name
+from scout.util.text import collapse_ws, normalize_person_name, title_case_name
 
 log = structlog.get_logger(__name__)
 
@@ -41,6 +42,8 @@ ANNUAIRE_URL = "https://annuaire-entreprises.data.gouv.fr/entreprise/{siren}"
 
 _PAREN_SUFFIX = re.compile(r"\s*\([^()]*\)\s*$")
 _EXCLUDED_ROLES = re.compile(r"commissaire aux comptes", re.I)
+# An EI's owner runs the business; the title must read as such for role matching ("founder / CEO / owner").
+EI_OWNER_TITLE = "Chef d'entreprise (entrepreneur individuel)"
 
 _throttle = Throttle(1 / 6)  # ≤ 6 req/s (documented limit ~7 req/s)
 
@@ -78,7 +81,52 @@ def _to_float(v: Any) -> float | None:
         return None
 
 
+def is_sole_proprietorship(item: dict[str, Any]) -> bool:
+    """Entreprise individuelle: INSEE legal category 1xxx (or the API's ``est_entrepreneur_individuel`` flag)."""
+    complements = item.get("complements") or {}
+    return complements.get("est_entrepreneur_individuel") is True or str(
+        item.get("nature_juridique") or ""
+    ).startswith("1")
+
+
+def _owner(item: dict[str, Any], source_url: str) -> dict[str, Any] | None:
+    """The entrepreneur of an EI: the legal unit's name is the person ("JEAN DUPONT", "JEAN MARTIN (DUPONT)")."""
+    raw = collapse_ws(item.get("nom_complet") or item.get("nom_raison_sociale") or "")
+    name = title_case_name(_strip_sigle(raw))
+    if not is_plausible_registry_name(name):
+        return None  # "[NON-DIFFUSIBLE]" and other unusable legal names
+    first, _, last = name.partition(" ")
+    return {
+        "full_name": name,
+        "first_name": first,
+        "last_name": last,
+        "title": EI_OWNER_TITLE,
+        "source_url": source_url,
+        "raw": {"nom_complet": item.get("nom_complet"), "nature_juridique": item.get("nature_juridique")},
+    }
+
+
+def _name_key(p: dict[str, Any]) -> frozenset[str]:
+    return frozenset(normalize_person_name(p.get("full_name") or "").split())
+
+
 def _people(item: dict[str, Any], source_url: str) -> list[dict[str, Any]]:
+    """Physical-person directors (statutory auditors excluded); an EI's owner first, as its decision maker."""
+    out = _directors(item, source_url)
+    if not is_sole_proprietorship(item):
+        return out
+    owner = _owner(item, source_url)
+    if owner is None:
+        return out
+    # The owner's own director entry (structured first name / surname) is preferred; whatever its 'qualite',
+    # the entrepreneur runs the business. Entries sharing the owner's first name are the same person.
+    twin = next((p for p in out if _name_key(p) == _name_key(owner)), None)
+    first = normalize_person_name(owner["first_name"])
+    others = [p for p in out if p is not twin and normalize_person_name(p.get("first_name") or "") != first]
+    return [{**(twin or owner), "title": EI_OWNER_TITLE}, *others]
+
+
+def _directors(item: dict[str, Any], source_url: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for d in item.get("dirigeants") or []:
         if d.get("type_dirigeant") != "personne physique":

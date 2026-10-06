@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import httpx
 import pytest
 import respx
 
-from scout.search.people import people_from_results, serp_people
+from scout.search.people import MIN_QUERY_S, people_from_results, serp_people
 from scout.search.types import SearchResult
 
 from .conftest import SEARXNG_SEARCH, sx_payload, sx_result
@@ -132,6 +133,32 @@ async def test_serp_people_noop_without_provider_or_in_legacy_mode(
     route = respx.get(SEARXNG_SEARCH).mock(return_value=httpx.Response(200, json=sx_payload([])))
     assert await serp_people("Pixel Studio", domain="pixel-studio-lyon.fr", country="FR") == []
     assert not route.called
+
+
+@respx.mock
+async def test_serp_people_starts_no_query_it_has_no_time_for(stats: list[dict[str, Any]]) -> None:
+    route = respx.get(SEARXNG_SEARCH).mock(
+        return_value=httpx.Response(
+            200, json=sx_payload([sx_result("https://other.fr/", "Unrelated", "nothing")])
+        )
+    )
+    late = time.monotonic() + MIN_QUERY_S / 2
+    assert await serp_people("Pixel Studio", domain="pixel-studio-lyon.fr", deadline=late) == []
+    assert not route.called
+    roomy = time.monotonic() + 60
+    assert await serp_people("Pixel Studio", domain="pixel-studio-lyon.fr", deadline=roomy) == []
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_serp_people_stops_once_the_chain_cools_down(stats: list[dict[str, Any]]) -> None:
+    route = respx.get(SEARXNG_SEARCH).mock(
+        return_value=httpx.Response(
+            200, json=sx_payload([], unresponsive=[["google", "CAPTCHA"], ["bing", "timeout"]])
+        )
+    )
+    assert await serp_people("Pixel Studio", domain="pixel-studio-lyon.fr", country="FR") == []
+    assert route.call_count == 1  # engines blocked → cooldown → the open-web query is not even sent
 
 
 @respx.mock
