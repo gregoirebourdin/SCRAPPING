@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import pytest
 
 from scout.ai.factory import FakeProvider, LocalProvider, set_ai
@@ -74,6 +77,37 @@ async def test_ai_people_rejects_hallucinations(fake_ai):
     assert ines.title is None and ines.confidence < sarah.confidence
     # only team/about/home pages are sent, at most max_pages calls
     assert len(fake_ai.calls) == 3
+
+
+class _SlowProvider(FakeProvider):
+    """Each call takes 0.2 s; records the highest number of calls in flight."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_flight = self.max_in_flight = 0
+
+    async def structured(self, **kw):
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            await asyncio.sleep(0.2)
+            return await super().structured(**kw)
+        finally:
+            self.in_flight -= 1
+
+
+async def test_pages_are_read_concurrently_and_validated_in_page_order():
+    provider = _SlowProvider()
+    provider.on(AIPeopleExtraction.__name__, _answer)
+    set_ai(provider)
+    try:
+        t0 = time.monotonic()
+        people = await ai_extract_people(agence_pages(), company_name="Agence Lumière", max_pages=3)
+        elapsed = time.monotonic() - t0
+    finally:
+        set_ai(None)
+    assert provider.max_in_flight == 3 and elapsed < 0.5  # one round trip, not three
+    assert [p.full_name for p in people] == ["Sarah Benali", "Inès Garnier"]
 
 
 async def test_ai_unavailable_returns_nothing():

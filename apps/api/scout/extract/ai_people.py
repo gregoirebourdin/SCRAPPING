@@ -7,6 +7,7 @@ deterministic person-name checks. Anything else is dropped. Returns [] when AI i
 
 from __future__ import annotations
 
+import asyncio
 import re
 from collections.abc import Sequence
 
@@ -91,14 +92,12 @@ async def ai_extract_people(
         (p for p in pages if _ptype(p) in _PAGE_PRIORITY and len((p.content_text or "").strip()) >= 80),
         key=lambda p: _PAGE_PRIORITY[_ptype(p)],
     )[:max_pages]
-    out: list[PersonCandidate] = []
-    seen: set[str] = set()
-    for page in selected:
-        content = (page.content_text or "")[:MAX_CHARS_PER_PAGE]
+
+    async def ask(page: PageLike) -> list[AIPerson]:
         prompt = _PROMPT.format(
             company=company_name.replace('"', "'"),
             url=page.url,
-            content=wrap_untrusted(content, source=page.url),
+            content=wrap_untrusted((page.content_text or "")[:MAX_CHARS_PER_PAGE], source=page.url),
         )
         try:
             result = await ai.structured(
@@ -106,8 +105,16 @@ async def ai_extract_people(
             )
         except Exception as exc:  # AI failures never break the deterministic pipeline
             log.info("ai_people_failed", url=page.url, error=str(exc)[:200])
-            continue
-        for person in result.value.people:
+            return []
+        return result.value.people
+
+    # One call per page, all at once (bounded by the gemini pool); validated in page priority order.
+    answers = await asyncio.gather(*(ask(p) for p in selected))
+    out: list[PersonCandidate] = []
+    seen: set[str] = set()
+    for page, people in zip(selected, answers, strict=True):
+        content = (page.content_text or "")[:MAX_CHARS_PER_PAGE]
+        for person in people:
             name = re.sub(r"\s+", " ", person.full_name or "").strip()
             quote = (person.evidence_quote or "").strip()
             if not name or not quote:

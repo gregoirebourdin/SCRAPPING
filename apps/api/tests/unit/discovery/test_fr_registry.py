@@ -8,6 +8,7 @@ pagination metadata set to a single page.
 from __future__ import annotations
 
 import copy
+from typing import Any
 
 import httpx
 import pytest
@@ -15,7 +16,7 @@ import respx
 
 from scout.discovery.base import DiscoveryQuery
 from scout.discovery.common import Throttle
-from scout.discovery.fr_registry import FrRegistrySource, map_result
+from scout.discovery.fr_registry import EI_OWNER_TITLE, FrRegistrySource, is_sole_proprietorship, map_result
 from scout.errors import FetchError, PermanentError, RateLimitedError
 
 from .conftest import defn, fixture_json
@@ -77,6 +78,75 @@ def test_statutory_auditors_and_birth_names_are_handled() -> None:
         }
     ]
     assert map_result(tweaked).people[0]["full_name"] == "Carole Guillot"
+
+
+def sole_proprietorship(owner: str = "JEAN DUPONT", **changes: Any) -> dict:
+    """A live record turned into an entreprise individuelle (legal category 1000) named after its owner."""
+    item = copy.deepcopy(by_siren(fixture_json("fr_registry_page.json"), "839985603"))
+    item.update(
+        {
+            "nature_juridique": "1000",
+            "nom_complet": owner,
+            "nom_raison_sociale": None,
+            "sigle": None,
+            "dirigeants": [],
+        }
+    )
+    item["siege"].update({"nom_commercial": None, "liste_enseignes": None})
+    item.update(changes)
+    return item
+
+
+def test_sole_proprietorship_owner_is_the_decision_maker() -> None:
+    c = map_result(sole_proprietorship())
+    assert c is not None and c.name == "JEAN DUPONT"  # the company is its owner
+    assert [(p["full_name"], p["first_name"], p["last_name"], p["title"]) for p in c.people] == [
+        ("Jean Dupont", "Jean", "Dupont", EI_OWNER_TITLE)
+    ]
+    assert c.people[0]["source_url"].endswith("/839985603")
+    assert c.raw_data["nature_juridique"] == "1000"
+    # usage name in front, birth name in brackets: the name the owner goes by
+    assert map_result(sole_proprietorship("JEAN MARTIN (DUPONT)")).people[0]["full_name"] == "Jean Martin"
+    # a surname that is also a common word is still a person
+    assert map_result(sole_proprietorship("MARIE BOIS")).people[0]["full_name"] == "Marie Bois"
+    # unpublished identity: nobody is invented
+    assert map_result(sole_proprietorship("[NON-DIFFUSIBLE]")).people == []
+    # a company named after a person is not an EI: no owner derived from its name
+    assert map_result(sole_proprietorship(nature_juridique="5710")).people == []
+
+
+def test_sole_proprietorship_prefers_its_director_entry_without_duplicates() -> None:
+    directors = [
+        {"nom": "DUPONT", "prenoms": "JEAN PAUL", "qualite": None, "type_dirigeant": "personne physique"},
+        {
+            "nom": "DUPONT",
+            "prenoms": "MARIE",
+            "qualite": "Conjoint collaborateur",
+            "type_dirigeant": "personne physique",
+        },
+    ]
+    people = map_result(sole_proprietorship(dirigeants=directors)).people
+    assert [(p["full_name"], p["title"]) for p in people] == [
+        ("Jean Dupont", EI_OWNER_TITLE),
+        ("Marie Dupont", "Conjoint collaborateur"),
+    ]
+    assert people[0]["raw"]["prenoms"] == "JEAN PAUL"  # the structured director entry
+
+
+def test_sole_proprietorship_detection() -> None:
+    assert is_sole_proprietorship({"nature_juridique": "1000"})
+    assert is_sole_proprietorship(
+        {"nature_juridique": "5710", "complements": {"est_entrepreneur_individuel": True}}
+    )
+    assert not is_sole_proprietorship({"nature_juridique": "5710"})
+    assert not is_sole_proprietorship({"nature_juridique": None})
+
+
+def test_ei_owner_title_matches_founder_ceo_requests() -> None:
+    from scout.extract.titles import normalize_title, title_match_score
+
+    info = normalize_title(EI_OWNER_TITLE)
+    assert title_match_score(info, titles=["Founder / CEO"], role_families=[], seniorities=[]) >= 0.9
 
 
 def test_display_name_rules() -> None:

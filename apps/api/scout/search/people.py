@@ -40,6 +40,7 @@ from scout.util.urls import registrable_domain
 CONF_PROFILE = 0.65  # profile title "Name - Title - Company"
 CONF_PROFILE_SNIPPET = 0.55  # company only in the profile snippet
 CONF_OPEN_WEB = 0.55  # "Name, title de Company" in a press / directory snippet
+MIN_QUERY_S = 2.0  # time left below which another lookup query is not worth starting
 
 DEFAULT_ROLES: dict[str, list[str]] = {
     "fr": ["fondateur", "gérant", "CEO", "dirigeant"],
@@ -251,11 +252,14 @@ async def serp_people(
     titles: Sequence[str] = (),
     chain: SearchChain | None = None,
     max_people: int = 5,
+    deadline: float | None = None,
 ) -> list[PersonCandidate]:
     """Decision makers found by free web search; [] when unresolved (callers then try Gemini grounding).
 
     No-op (returns []) when ``GEMINI_SEARCH_FALLBACK_ONLY`` is off (legacy: Gemini directly) or when no lookup
-    provider is configured / healthy — the pipeline then behaves exactly as before.
+    provider is configured / healthy — the pipeline then behaves exactly as before. A query is not started
+    once the lookup chain is cooling down or less than ``MIN_QUERY_S`` remain before ``deadline``
+    (``time.monotonic()`` clock).
     """
     if not company_name or not gemini_fallback_only():
         return []
@@ -269,6 +273,8 @@ async def serp_people(
     found: list[PersonCandidate] = []
     for query, site, key in people_queries(company_name, _roles(titles, lang)):
         started = time.monotonic()
+        if (deadline is not None and deadline - started < MIN_QUERY_S) or not chain.available():
+            break
         res = await chain.search(
             query,
             num=10,

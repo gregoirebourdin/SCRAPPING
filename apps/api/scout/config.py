@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     gemini_search_fallback_only: bool = True  # False = legacy: Gemini grounding without the free-search pass
     web_research_crawl_top: int = 2  # top search results fetched (robots-checked) before Gemini grounding
 
+    # --- people stage: fallbacks when neither the registry nor the website names a decision maker -----------
+    # Wall-clock budget per company: AI page extraction ∥ free web search, then Gemini grounding (last resort)
+    # with the time left. Nothing runs past it.
+    people_fallback_budget_s: float = 25.0
+
     @field_validator("search_providers", "search_lookup_providers", mode="before")
     @classmethod
     def _split_search_providers(cls, v: object) -> object:

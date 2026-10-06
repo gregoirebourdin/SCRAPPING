@@ -6,9 +6,10 @@ person registry/exclusion/reservation → email finder → verification → scor
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -18,6 +19,7 @@ import structlog
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from scout.config import get_settings
 from scout.db.engine import session_scope
 from scout.db.enums import (
     CampaignMode,
@@ -512,7 +514,7 @@ async def _stage_company_fit(ctx: Ctx, conditions: list[ConditionOutcome]) -> Fi
 
 
 async def _stage_people(ctx: Ctx, hints: dict[str, Any]) -> list[PersonPick]:
-    from scout.extract.names import is_plausible_person_name, split_name
+    from scout.extract.names import is_plausible_registry_name, split_name
     from scout.extract.people import extract_people
     from scout.extract.titles import normalize_title, title_match_score
     from scout.extract.types import PersonCandidate
@@ -520,9 +522,9 @@ async def _stage_people(ctx: Ctx, hints: dict[str, Any]) -> list[PersonPick]:
     comp = await _company(ctx)
     pf = ctx.defn.people_filters
     candidates: list[PersonCandidate] = []
-    for p in hints.get("people") or []:
+    for p in hints.get("people") or []:  # official registry directors (and an EI's owner): free, always first
         name = (p.get("full_name") or "").strip()
-        if not name or not is_plausible_person_name(name):
+        if not name or not is_plausible_registry_name(name):
             continue
         first, last = split_name(name)
         candidates.append(
@@ -542,37 +544,153 @@ async def _stage_people(ctx: Ctx, hints: dict[str, Any]) -> list[PersonPick]:
         candidates.extend(extract_people(ctx.pages, company_name=comp.name, domain=comp.normalized_domain))
     # Empirical Source Scoring: learned per-source confidence + attempts per people source.
     learn = await PeopleLearning.start()
-    learn.website(ctx.pages, candidates, registry_hint="people" in hints)
+    learn.website(
+        ctx.pages, candidates, registry_hint=bool(hints.get("people") or hints.get("registry_source"))
+    )
     picks = _rank(learn.adjust(candidates), pf, normalize_title, title_match_score)
-    if not picks and ctx.pages:
-        from scout.extract.ai_people import ai_extract_people
-
-        t0 = time.monotonic()
-        try:
-            ai_found = await ai_extract_people(ctx.pages, company_name=comp.name)
-        except Exception as exc:
-            log.info("people.ai_failed", error=str(exc))
-            ai_found = []
-        learn.step("ai_extraction", ai_found, t0)
-        picks = _rank(learn.adjust(ai_found), pf, normalize_title, title_match_score)
-    if not picks:  # free web search (SearXNG) before any Gemini grounding; no-op when not configured
-        from scout.search.people import serp_people
-
-        found = await serp_people(
-            comp.name, domain=comp.normalized_domain, country=comp.country, titles=pf.titles
-        )
-        picks = _rank(learn.adjust(found), pf, normalize_title, title_match_score)
-    if not picks and await allow_expensive():
-        t0 = time.monotonic()
-        grounded = await _grounded_people(ctx, comp)
-        learn.step("gemini_grounded_result", grounded, t0)
-        picks = _rank(learn.adjust(grounded), pf, normalize_title, title_match_score)
+    if not picks:
+        picks = await _people_fallbacks(ctx, comp, learn)
     await learn.flush()
     if not picks:
         raise Rejection("No decision maker found", "people")
     await _count_once(ctx, "people_counted", people_found=1)
     await _set_stage(ctx, "people")
     return picks
+
+
+# People fallbacks (registry + website named nobody), all within settings.people_fallback_budget_s:
+GROUNDED_MIN_S = 8.0  # budget kept for the Gemini grounded lookup (at most 40 % of the budget)
+SEARCH_GRACE_S = 2.0  # once AI extraction found someone, how long the web search may still take to add to it
+
+StepFn = Callable[[], Awaitable[list[Any]]]
+
+
+async def _people_fallbacks(ctx: Ctx, comp: Company, learn: PeopleLearning) -> list[PersonPick]:
+    """AI extraction from the crawled pages and the free web search run concurrently; the best candidates of
+    both win. Gemini grounded search (paid) runs only when both found nobody, with what is left of the budget.
+    Each step is cancelled at its deadline, so the whole fallback never outlasts the budget."""
+    from scout.ai.factory import get_ai
+    from scout.extract.ai_people import ai_extract_people
+    from scout.extract.titles import normalize_title, title_match_score
+    from scout.search.chain import gemini_fallback_only, lookup_chain
+    from scout.search.people import serp_people
+
+    pf = ctx.defn.people_filters
+    budget = max(0.0, float(get_settings().people_fallback_budget_s))
+    started = time.monotonic()
+    deadline = started + budget
+    grounded_ok = get_ai().available and await allow_expensive()
+    free_until = deadline - (min(GROUNDED_MIN_S, budget * 0.4) if grounded_ok else 0.0)
+
+    def rank(found: list[Any]) -> list[PersonPick]:
+        return _rank(found, pf, normalize_title, title_match_score)
+
+    chain = lookup_chain("people")
+    ai_task = (
+        _spawn(
+            lambda: _learned_step(
+                learn, "ai_extraction", lambda: ai_extract_people(ctx.pages, company_name=comp.name)
+            )
+        )
+        if ctx.pages
+        else None
+    )
+    search_task = (  # skipped while the lookup chain is unconfigured or cooling down
+        _spawn(
+            lambda: serp_people(
+                comp.name,
+                domain=comp.normalized_domain,
+                country=comp.country,
+                titles=pf.titles,
+                chain=chain,
+                deadline=free_until,
+            )
+        )
+        if gemini_fallback_only() and chain.available()
+        else None
+    )
+    timed_out: list[str] = []
+    try:
+        ai_found = learn.adjust(await _settle(ai_task, free_until, "ai_extraction", timed_out))
+        picks = rank(ai_found)
+        search_until = min(free_until, time.monotonic() + SEARCH_GRACE_S) if picks else free_until
+        search_found = learn.adjust(await _settle(search_task, search_until, "search", timed_out))
+        if search_found:
+            picks = rank(ai_found + search_found)
+    finally:
+        await _cancel(ai_task, search_task)
+    grounded_ran = False
+    if not picks and grounded_ok and deadline - time.monotonic() > 0:
+        grounded_ran = True
+        grounded_task = _spawn(
+            lambda: _learned_step(learn, "gemini_grounded_result", lambda: _grounded_people(ctx, comp))
+        )
+        try:
+            picks = rank(learn.adjust(await _settle(grounded_task, deadline, "grounded", timed_out)))
+        finally:
+            await _cancel(grounded_task)
+    log.info(
+        "people.fallbacks",
+        domain=comp.normalized_domain,
+        ms=int((time.monotonic() - started) * 1000),
+        budget_s=budget,
+        ai=ai_task is not None,
+        search=search_task is not None,
+        grounded=grounded_ran,
+        timed_out=timed_out,
+        picks=len(picks),
+    )
+    return picks
+
+
+def _spawn(fn: StepFn) -> asyncio.Task[list[Any]]:
+    async def run() -> list[Any]:
+        return await fn()
+
+    return asyncio.create_task(run())
+
+
+async def _settle(
+    task: asyncio.Task[list[Any]] | None, until: float, name: str, timed_out: list[str]
+) -> list[Any]:
+    """The step's result, or [] when it failed or is still running at ``until`` (then it is cancelled)."""
+    if task is None:
+        return []
+    if not task.done():
+        await asyncio.wait({task}, timeout=max(0.0, until - time.monotonic()))
+    if not task.done():
+        timed_out.append(name)
+        await _cancel(task)
+        return []
+    if task.cancelled():
+        return []
+    exc = task.exception()
+    if exc is not None:
+        log.info("people.fallback_failed", step=name, error=str(exc)[:200])
+        return []
+    return task.result()
+
+
+async def _cancel(*tasks: asyncio.Task[list[Any]] | None) -> None:
+    """Cancel unfinished steps and wait for them to unwind (pools released, attempts recorded)."""
+    live = [t for t in tasks if t is not None and not t.done()]
+    for t in live:
+        t.cancel()
+    if live:
+        await asyncio.gather(*live, return_exceptions=True)
+
+
+async def _learned_step(learn: PeopleLearning, key: str, fn: StepFn) -> list[Any]:
+    """An AI fallback step, counted as a people-source attempt even when it fails or runs out of time."""
+    found: list[Any] = []
+    t0 = time.monotonic()
+    try:
+        found = await fn()
+    except Exception as exc:
+        log.info("people.ai_failed", step=key, error=str(exc)[:200])
+    finally:
+        learn.step(key, found, t0)
+    return found
 
 
 def _rank(candidates: list[Any], pf: Any, normalize_title: Any, title_match_score: Any) -> list[PersonPick]:

@@ -5,7 +5,13 @@ from __future__ import annotations
 import pytest
 
 from scout.db.enums import RoleFamily, Seniority
-from scout.extract.names import FIRST_NAMES, is_known_first_name, is_plausible_person_name, split_name
+from scout.extract.names import (
+    FIRST_NAMES,
+    is_known_first_name,
+    is_plausible_person_name,
+    is_plausible_registry_name,
+    split_name,
+)
 from scout.extract.titles import is_job_title, normalize_title, title_match_score
 
 
@@ -74,6 +80,26 @@ def test_plausible_names(name):
 )
 def test_implausible_names(text):
     assert not is_plausible_person_name(text)
+
+
+@pytest.mark.parametrize(
+    ("name", "ok"),
+    [
+        ("Pierre Calmard", True),
+        ("Jean Bois", True),  # surnames that are also common words: official directors are still people
+        ("Marie Paris", True),
+        ("Henri de la Tour D'Auvergne", True),
+        ("Jean Pierre Marie Dupont Durand", True),
+        ("[Non-Diffusible]", False),
+        ("Dupont", False),
+        ("Jean D.", False),
+        ("Agence Bois", False),
+        ("Pixel Studio Sas", False),
+        ("Groupe Martin", False),
+    ],
+)
+def test_plausible_registry_names(name, ok):
+    assert is_plausible_registry_name(name) is ok
 
 
 def test_require_known_first_name():

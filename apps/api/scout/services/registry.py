@@ -517,6 +517,8 @@ async def upsert_person(
     company_name = (
         await s.scalar(sa.select(Company.name).where(Company.id == company_id)) if company_id else None
     )
+    if evidence.source_type == SourceType.registry:  # official director: an EI is named after its owner
+        company_name = None
     if looks_like_company_name(full_name, company_name):
         raise ValidationFailed(f"'{full_name}' looks like a company name, not a person")
     person = await find_person(
