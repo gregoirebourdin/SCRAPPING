@@ -75,7 +75,14 @@ async def _has_address(resolver: dns.asyncresolver.Resolver, domain: str) -> boo
 
 
 async def resolve_mx(domain: str) -> MxInfo:
-    """Uncached MX (+ A/AAAA) resolution of an already normalized domain."""
+    """Uncached MX (+ A/AAAA) resolution of an already normalized domain, inside the bounded ``dns`` pool."""
+    from scout.util.pools import pool
+
+    async with pool("dns"):
+        return await _resolve_mx(domain)
+
+
+async def _resolve_mx(domain: str) -> MxInfo:
     resolver = resolver_factory()
     try:
         answer = await resolver.resolve(domain, "MX")

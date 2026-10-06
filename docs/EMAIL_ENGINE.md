@@ -102,9 +102,11 @@ keeps `SAFE`; "risky OK" adds `RISKY`. `LIKELY_SAFE` is labelled distinctly in t
 ## Performance rule
 
 Avoid "3,000 people × 10 permutations × SMTP". Instead: domain intelligence → pattern learning →
-1–3 candidates → SMTP only when ambiguous, batched per domain. Separate bounded pools for website,
-DNS, public sources (GitHub/RDAP) and SMTP; fast-path leads are delivered immediately while the deep
-path continues in the background (campaigns keep the reservation and deliver on conclusion).
+1–3 candidates → SMTP only when ambiguous, batched per domain. Separate bounded pools
+(`scout/util/pools.py`, sizes in settings): website `http` / `scrapling` / `browser`, DNS/MX `dns`,
+public sources `public_api` (GitHub, RDAP, registries) and `search`, and `smtp` (+ one deep job per
+domain, `DEEP_JOB_CONCURRENCY`); fast-path leads are delivered immediately while the deep path continues in
+the background (campaigns keep the reservation and deliver on conclusion).
 
 ## Benchmark
 

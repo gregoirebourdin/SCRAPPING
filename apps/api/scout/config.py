@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     pool_gemini: int = 6
     pool_search: int = 2
     pool_smtp: int = 4
+    pool_dns: int = 32  # concurrent MX/A lookups (email domain intelligence, website resolution)
     pool_public_api: int = 4
     per_domain_concurrency: int = 2
     per_domain_delay_ms: int = 400
