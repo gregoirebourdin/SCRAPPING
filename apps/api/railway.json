@@ -1,0 +1,17 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile",
+    "watchPatterns": ["apps/api/**"]
+  },
+  "deploy": {
+    "numReplicas": 1,
+    "preDeployCommand": ["alembic upgrade head"],
+    "healthcheckPath": "/v1/health",
+    "healthcheckTimeout": 60,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10,
+    "drainingSeconds": 30
+  }
+}

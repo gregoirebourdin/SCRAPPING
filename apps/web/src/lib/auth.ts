@@ -17,13 +17,20 @@ const pool =
   });
 if (process.env.NODE_ENV !== "production") globalForPool.scoutAuthPool = pool;
 
+/* On Vercel, fall back to the system URLs so production, branch and preview deployments all work. */
+const https = (host?: string) => (host ? `https://${host}` : undefined);
+const vercelOrigins = [process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_URL].map(https).filter((u): u is string => Boolean(u));
+const baseURL =
+  process.env.BETTER_AUTH_URL ?? (process.env.VERCEL_ENV === "production" ? https(process.env.VERCEL_PROJECT_PRODUCTION_URL) : https(process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL));
+
 const googleId = process.env.GOOGLE_CLIENT_ID;
 const googleSecret = process.env.GOOGLE_CLIENT_SECRET;
 
 export const auth = betterAuth({
   database: pool,
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL,
+  baseURL,
+  trustedOrigins: vercelOrigins,
   emailAndPassword: { enabled: true, minPasswordLength: 8, autoSignIn: true },
   socialProviders: googleId && googleSecret ? { google: { clientId: googleId, clientSecret: googleSecret } } : undefined,
   session: {
