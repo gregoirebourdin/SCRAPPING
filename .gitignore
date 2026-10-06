@@ -11,6 +11,8 @@ __pycache__/
 *.egg-info/
 # builds
 .next/
+.next-e2e/
+apps/web/e2e/.output/
 dist/
 build/
 out/

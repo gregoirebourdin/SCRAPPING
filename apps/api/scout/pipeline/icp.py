@@ -96,7 +96,9 @@ class AIParsedCampaign(BaseModel):
     role_families: list[RoleFamily] = Field(default_factory=list)
     max_people_per_company: int = 1
     require_email: bool = True
-    accepted_email_statuses: list[EmailStatus] = Field(default_factory=lambda: [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE])
+    accepted_email_statuses: list[EmailStatus] = Field(
+        default_factory=lambda: [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE]
+    )
     minimum_icp_score: int | None = None
     exclusion: AIExclusion = Field(default_factory=AIExclusion)
     enrichments: list[EnrichmentRequest] = Field(default_factory=list)
@@ -489,7 +491,10 @@ def heuristic_parse(prompt: str, ctx: ParseContext | None = None) -> AIParsedCam
     # Professional email: SAFE (confirmed) or LIKELY_SAFE (confirmed domain convention + MX + strong name
     # affinity). "strictly verified / SAFE only" keeps SAFE alone; "risky ok" widens.
     statuses = [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE]
-    if re.search(r"\b(safe only|only safe|strictly verified|smtp[- ]verified|v[ée]rifi[ée]s? smtp|uniquement safe)\b", low):
+    if re.search(
+        r"\b(safe only|only safe|strictly verified|smtp[- ]verified|v[ée]rifi[ée]s? smtp|uniquement safe)\b",
+        low,
+    ):
         statuses = [EmailStatus.SAFE]
     if re.search(r"\brisky\b.*\b(ok|fine|accept)|accept\w* risky|catch[- ]all ok", low):
         statuses = [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE, EmailStatus.RISKY]

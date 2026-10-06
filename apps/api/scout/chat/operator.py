@@ -25,7 +25,16 @@ from scout.chat.i18n import Lang, detect_lang, t, tool_step
 from scout.chat.tools import TOOLS, ToolContext, _jsonable, describe_error, json_schema_for
 from scout.db.engine import session_scope
 from scout.db.enums import ActionStatus, CampaignStatus
-from scout.db.models import AssistantAction, Campaign, CampaignStats, ChatMessage, ChatThread, List, Workspace
+from scout.db.models import (
+    AssistantAction,
+    Campaign,
+    CampaignStats,
+    ChatMessage,
+    ChatThread,
+    CustomColumn,
+    List,
+    Workspace,
+)
 from scout.errors import AppError, Conflict, NotFound
 
 log = structlog.get_logger("chat")
@@ -86,6 +95,30 @@ async def context_block(ws: WorkspaceContext, ui: UIContext) -> str:
                 .select_from(ListMembership)
                 .where(ListMembership.list_id == ui.list_id)
             )
+        # The table sends its column ids; custom columns are "cf:<uuid>" — show their names (the model and the
+        # deterministic router refer to columns by name: "Filter Offers Instagram TRUE").
+        filter_fields = [
+            c.get("field") for c in ((ui.filters or {}).get("conditions") or []) if isinstance(c, dict)
+        ]
+        cf_ids: list[uuid.UUID] = []
+        for key in [*ui.visible_columns, *filter_fields]:
+            if isinstance(key, str) and key.startswith("cf:"):
+                try:
+                    cf_ids.append(uuid.UUID(key[3:]))
+                except ValueError:
+                    continue
+        col_names: dict[str, str] = {}
+        if cf_ids:
+            col_names = {
+                f"cf:{cid}": name
+                for cid, name in (
+                    await s.execute(
+                        sa.select(CustomColumn.id, CustomColumn.name).where(
+                            CustomColumn.workspace_id == ws.workspace_id, CustomColumn.id.in_(cf_ids)
+                        )
+                    )
+                ).all()
+            }
         lists = (
             (
                 await s.execute(
@@ -140,7 +173,7 @@ async def context_block(ws: WorkspaceContext, ui: UIContext) -> str:
         lines.append(
             "active filters: "
             + "; ".join(
-                f"{c.get('field')} {c.get('operator')} {c.get('value', '')}".strip()
+                f"{col_names.get(str(c.get('field')), c.get('field'))} {c.get('operator')} {c.get('value', '')}".strip()
                 for c in ui.filters["conditions"]
                 if isinstance(c, dict)
             )
@@ -148,7 +181,7 @@ async def context_block(ws: WorkspaceContext, ui: UIContext) -> str:
     if ui.sort:
         lines.append("sort: " + ", ".join(f"{x.get('field')} {x.get('direction')}" for x in ui.sort))
     if ui.visible_columns:
-        lines.append("visible columns: " + ", ".join(ui.visible_columns[:25]))
+        lines.append("visible columns: " + ", ".join(col_names.get(c, c) for c in ui.visible_columns[:25]))
     lines.append(f"selected rows: {len(ui.selected_ids)}")
     if lists:
         lines.append("lists: " + ", ".join(f'"{n}"' for n in lists))

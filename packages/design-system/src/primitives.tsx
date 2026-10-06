@@ -386,15 +386,18 @@ export function MenuContent({
   align = "start",
   className,
   sideOffset = 4,
+  onCloseAutoFocus,
 }: {
   children: React.ReactNode;
   align?: "start" | "end" | "center";
   className?: string;
   sideOffset?: number;
+  /** `event.preventDefault()` keeps focus where an item moved it (e.g. a popover it opened). */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   return (
     <RMenu.Portal>
-      <RMenu.Content align={align} sideOffset={sideOffset} className={cn(menuContent, className)}>
+      <RMenu.Content align={align} sideOffset={sideOffset} className={cn(menuContent, className)} onCloseAutoFocus={onCloseAutoFocus}>
         {children}
       </RMenu.Content>
     </RMenu.Portal>

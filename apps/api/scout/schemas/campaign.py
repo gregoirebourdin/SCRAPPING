@@ -259,8 +259,18 @@ def interpret(
             )
         )
     ex = defn.exclusion
+    # Uploaded files excluded explicitly ("nobody from my uploaded file") apply in every mode but custom rules.
+    uploads = None
+    if ex.import_ids and ex.mode != ExclusionMode.CUSTOM:
+        n = len(ex.import_ids)
+        uploads = "uploaded file excluded" if n == 1 else f"{n} uploaded files excluded"
     if ex.mode == ExclusionMode.NONE:
-        items.append(InterpretationItem(label="Previously seen", value="Allowed (existing data reused)"))
+        items.append(
+            InterpretationItem(
+                label="Previously seen",
+                value=f"Allowed · {uploads}" if uploads else "Allowed (existing data reused)",
+            )
+        )
     else:
         label = {
             ExclusionMode.EXCLUDE_PREVIOUS_PEOPLE: "People excluded"
@@ -279,7 +289,9 @@ def interpret(
             ExclusionMode.EXCLUDE_WITHIN_COOLDOWN: f"Seen in last {ex.cooldown_days or 90} days excluded",
             ExclusionMode.CUSTOM: "Custom exclusion rules",
         }[ex.mode]
-        items.append(InterpretationItem(label="Previously seen", value=label))
+        items.append(
+            InterpretationItem(label="Previously seen", value=f"{label} · {uploads}" if uploads else label)
+        )
     for e in defn.enrichments:
         items.append(InterpretationItem(label="Column", value=e.name))
     return items

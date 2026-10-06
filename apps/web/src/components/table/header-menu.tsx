@@ -4,7 +4,7 @@ import { Button, Dialog, DialogContent, Input, Menu, MenuContent, MenuItem, Menu
 import type { SortSpec } from "@scout/schemas";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Copy, EyeOff, Filter, Pencil, Pin, PinOff, RefreshCw, Settings2, Sparkles, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { api } from "@/lib/api";
@@ -41,6 +41,8 @@ export function HeaderMenu({
   const qc = useQueryClient();
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // "Filter…" opens the table's filter editor: the closing menu must not take the focus back (it would dismiss it).
+  const keepFocus = useRef(false);
   const col = spec.custom;
 
   async function call(fn: () => Promise<unknown>, ok?: string) {
@@ -63,7 +65,13 @@ export function HeaderMenu({
             {children}
           </button>
         </MenuTrigger>
-        <MenuContent className="min-w-[200px]">
+        <MenuContent
+          className="min-w-[200px]"
+          onCloseAutoFocus={(e) => {
+            if (keepFocus.current) e.preventDefault();
+            keepFocus.current = false;
+          }}
+        >
           {spec.sortField && (
             <>
               <MenuItem icon={<ArrowUp />} onSelect={() => onSort(sort?.direction === "asc" ? null : "asc")}>
@@ -80,7 +88,13 @@ export function HeaderMenu({
             </>
           )}
           {onFilter && (
-            <MenuItem icon={<Filter />} onSelect={onFilter}>
+            <MenuItem
+              icon={<Filter />}
+              onSelect={() => {
+                keepFocus.current = true;
+                onFilter();
+              }}
+            >
               Filter…
             </MenuItem>
           )}

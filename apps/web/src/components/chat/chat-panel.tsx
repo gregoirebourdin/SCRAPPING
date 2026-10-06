@@ -448,6 +448,7 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
         <motion.aside
           key={overlay ? "chat-sheet" : "chat"}
           aria-label="AI operator"
+          aria-busy={streaming}
           initial={overlay ? { x: 24, opacity: 0 } : { width: 0, opacity: 0 }}
           animate={overlay ? { x: 0, opacity: 1 } : { width: chatWidth, opacity: 1 }}
           exit={overlay ? { x: 24, opacity: 0 } : { width: 0, opacity: 0 }}
@@ -641,7 +642,7 @@ function MessageView({
     (/[éèàç]|\b(je|les|des)\b/i.test(m.content) ? "fr" : "en");
   const hasSteps = visible.some((p) => p.type === "steps" && p.steps?.length);
   return (
-    <div className="space-y-2 text-body text-fg-2">
+    <div className="space-y-2 text-body text-fg-2" data-testid="assistant-message" aria-busy={Boolean(m.pending)}>
       {visible.map((p, i) => {
         if (p.type === "steps") return <StepList key="steps" steps={p.steps ?? []} pending={Boolean(m.pending)} lang={lang} onRetry={onRetry} />;
         if (p.type === "text") return <Markdown key={i} text={p.text ?? ""} />;
