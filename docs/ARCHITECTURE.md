@@ -516,10 +516,28 @@ measures the engine against ground truth the team verified.
   numbers only: it never claims superiority over another product (e.g. Apollo) without a
   head-to-head measurement on the same dataset. CLI: `scout benchmark suites | run | import`.
 
-### 11.6 Live runs
+### 11.6 Live runs (clarification → plan → run → pause / amend / resume)
 
-The chat clarifies a request with at most 2–3 targeted questions, shows a plan, launches the
-campaign and narrates each step; the table streams rows (skeletons for in-flight candidates),
-detects stalls, and a run can be paused without losing anything, resumed, or resumed with an
-amendment (new constraint, larger target) that goes through the ICP parser and the exclusion
-rules again.
+* **Clarification.** A new search request is parsed by the ICP parser and checked for open
+  slots (industry, geography, decision-maker role, volume, then size, email strictness,
+  exclusions). When a core slot is open, the operator asks at most three questions in one card
+  (`ask_clarifications`, chips + free text, user's language); answers come back as structured
+  data and are applied as overrides on the parsed definition. A precise request, or "go / lance /
+  vas-y", skips straight to the plan. The same protocol runs with Gemini or the deterministic
+  local router.
+* **Plan and launch.** `plan_campaign` shows the plan card (criteria, sources, warnings) with
+  Launch / Edit; `POST /v1/chat/actions/{id}/launch` creates the campaign idempotently.
+* **Narrated progress.** The chat stream emits `step` events (the active step shimmers); the
+  processor emits per-candidate `candidate.stage` / `candidate.done` events, from which the UI
+  derives the current-stage sentence, skeleton rows for in-flight companies and an animated funnel;
+  qualified leads append at the end of the list (never reordering the user's view).
+  `GET /campaigns/{id}/live` restores a run after a refresh and reports health; no event for 45 s is
+  shown as "stuck" with a Retry (`POST …/kick`).
+* **Pause / amend / resume.** Pause is cooperative at stage boundaries and keeps delivered leads,
+  checkpointed candidates and source cursors. `PATCH /campaigns/{id}` previews (diff) and applies a
+  "resume with changes": definition and filters updated, only new discovery queries appended,
+  audited, then resumed — or a stopped run reopened once its stop reason (target, budget, runtime,
+  exhausted) is lifted. Lifecycle calls are row-locked and idempotent; deliveries lock the
+  campaign's stats row so concurrent workers never overshoot the target.
+* **Location is a hard criterion when requested**: French cities / regions compare at department
+  level (suburbs count, another city does not); an unknown location is never a mismatch.

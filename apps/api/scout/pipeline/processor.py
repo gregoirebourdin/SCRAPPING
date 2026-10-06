@@ -35,6 +35,7 @@ from scout.db.models import (
     Campaign,
     CampaignReservation,
     CampaignSource,
+    CampaignStats,
     Company,
     CompanyDiscoveryEvent,
     Email,
@@ -470,7 +471,7 @@ async def _stage_company_fit(ctx: Ctx, conditions: list[ConditionOutcome]) -> Fi
         page_text=text,
     )
     sf = size_fit(ctx.defn, comp.employee_min, comp.employee_max)
-    lf = location_fit(ctx.defn, comp.country, comp.city, comp.region)
+    lf = location_fit(ctx.defn, comp.country, comp.city, comp.region, comp.postal_code)
     from scout.pipeline.scoring import company_fit as _cf
 
     probe = ScoringInput(
@@ -932,6 +933,8 @@ async def _finish_person(
     if result.qualified:
         if await _deliver_person(ctx, comp, person_id, reservation_id, result, email_status, email_addr):
             return True, None
+        if ctx.stage_data.get("not_delivered") == "target_reached":
+            return False, "Campaign target reached"
         return False, "Lost a race with another campaign"
     async with session_scope() as s:
         await _save_score(s, ctx, comp.id, person_id, result)
@@ -1217,6 +1220,15 @@ async def _save_score(s: Any, ctx: Ctx, company_id: uuid.UUID, person_id: uuid.U
     await s.execute(stmt)
 
 
+async def _target_reached(s: AsyncSession, campaign_id: uuid.UUID) -> bool:
+    """Lock the campaign's stats row (serializes deliveries of one campaign) and compare with its target."""
+    qualified = await s.scalar(
+        sa.select(CampaignStats.qualified).where(CampaignStats.campaign_id == campaign_id).with_for_update()
+    )
+    target = await s.scalar(sa.select(Campaign.target_qualified_count).where(Campaign.id == campaign_id))
+    return target is not None and target > 0 and qualified is not None and qualified >= target
+
+
 async def _deliver_person(
     ctx: Ctx,
     comp: Company,
@@ -1226,8 +1238,20 @@ async def _deliver_person(
     email_status: EmailStatus | None,
     email_addr: str | None = None,
 ) -> bool:
-    """Single transaction: re-check, reservation → qualified, exposures, list membership, stats, event."""
+    """Single transaction: re-check, reservation → qualified, exposures, list membership, stats, event.
+
+    The campaign's stats row is locked first so concurrent deliveries never overshoot the target.
+    """
     async with session_scope() as s:
+        if await _target_reached(s, ctx.campaign_id):
+            if reservation_id:
+                await s.execute(
+                    sa.update(CampaignReservation)
+                    .where(CampaignReservation.id == reservation_id)
+                    .values(status=ReservationStatus.released)
+                )
+            ctx.stage_data["not_delivered"] = "target_reached"
+            return False
         rules = await load_rules(s, ctx.campaign_id)
         excl = await excluded_entities(
             s, ctx.workspace_id, EntityType.person, [person_id], rules, current_campaign_id=ctx.campaign_id

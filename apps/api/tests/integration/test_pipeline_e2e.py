@@ -601,7 +601,7 @@ async def test_target_reached_completes_and_cancels_remaining_work(env, workspac
     c, st = await _campaign(cid)
     assert c.status == CampaignStatus.completed
     assert c.stop_reason == f"Target reached: {st.qualified:,} qualified leads"
-    assert st.qualified >= 1
+    assert st.qualified == 1  # concurrent deliveries never overshoot the target (stats row locked)
     async with session_scope() as s:
         left = (
             await s.scalars(

@@ -187,5 +187,12 @@ def test_size_and_location_fit():
     assert size_fit(defn, 200, 500) == 0.0
     assert size_fit(defn, None, None) is None  # unknown size is not a mismatch
     assert location_fit(defn, "FR", "lyon", None) == 1.0
-    assert location_fit(defn, "FR", "Paris", None) == 0.3
+    # French cities compare at department level: another city is outside, a suburb is inside
+    assert location_fit(defn, "FR", "Paris", None) == 0.0
+    assert location_fit(defn, "FR", "Marseille", None, "13001") == 0.0
+    assert location_fit(defn, "FR", "Villeurbanne", None, "69100") == 0.9
+    assert location_fit(defn, "FR", None, None) is None  # unknown location is not a mismatch
     assert location_fit(defn, "BE", "Bruxelles", None) == 0.0
+    region = _defn(company_filters={"countries": ["FR"], "regions": ["Bretagne"]})
+    assert location_fit(region, "FR", "Rennes", None, "35000") == 0.9
+    assert location_fit(region, "FR", "Lyon", None, "69002") == 0.0

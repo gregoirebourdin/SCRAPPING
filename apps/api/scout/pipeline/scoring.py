@@ -287,18 +287,52 @@ def size_fit(defn: CampaignDefinition, emp_min: int | None, emp_max: int | None)
     return 1.0
 
 
+def _fr_department(postal_code: str | None, city: str | None) -> str | None:
+    from scout.discovery import geo
+
+    pc = (postal_code or "").strip()
+    if len(pc) == 5 and pc.isdigit():
+        if pc.startswith("97"):
+            return pc[:3]
+        if pc.startswith("20"):
+            return "2A" if int(pc) < 20200 else "2B"
+        return pc[:2]
+    if city:
+        found = geo.find_city(city, "FR")
+        return found.department if found else None
+    return None
+
+
 def location_fit(
-    defn: CampaignDefinition, country: str | None, city: str | None, region: str | None
+    defn: CampaignDefinition,
+    country: str | None,
+    city: str | None,
+    region: str | None,
+    postal_code: str | None = None,
 ) -> float | None:
+    """1.0 inside the requested area, 0.0 clearly outside it (→ rejected), None when unknown.
+
+    French cities and regions are compared at department level, so suburbs count ("Lyon" accepts
+    Villeurbanne, 69) while another city of the same country does not ("Marseille" rejects Lyon).
+    """
+    from scout.discovery import geo
+
     cf = defn.company_filters
     if not (cf.countries or cf.cities or cf.regions):
         return None
-    if cf.cities:
+    if country and cf.countries and country.upper() not in cf.countries:
+        return 0.0
+    if cf.cities or cf.regions:
         if city and any(city.strip().lower() == c.strip().lower() for c in cf.cities):
             return 1.0
+        if (country or "FR").upper() == "FR":
+            allowed = set(geo.departments_for(cf.regions, cf.cities))
+            dept = _fr_department(postal_code, city)
+            if allowed and dept:
+                return 0.9 if dept in allowed else 0.0
         if city is None:
             return None
-        return 0.3 if (country and country in cf.countries) else 0.0
+        return 0.3 if (country and country in cf.countries) else (None if not cf.countries else 0.0)
     if cf.countries:
         if country is None:
             return None
