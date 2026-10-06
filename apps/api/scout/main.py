@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging(s.log_level, s.log_json)
     load_handlers()
     try:
-        from scout.discovery.catalog import seed_sources  # type: ignore[import-not-found]
+        from scout.discovery.catalog import seed_sources
 
         await seed_sources()
     except Exception as exc:  # never block startup
@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if worker is not None:
             await worker.stop()
         try:
-            from scout.crawl.http import close_client  # type: ignore[import-not-found]
+            from scout.crawl.http import close_client
 
             await close_client()
         except Exception:

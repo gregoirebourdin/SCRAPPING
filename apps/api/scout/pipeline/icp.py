@@ -174,7 +174,7 @@ def _to_int(s: str) -> int:
 
 def _industries_from_text(text: str) -> list[str]:
     try:
-        from scout.discovery.taxonomy import match_industries  # type: ignore[import-not-found]
+        from scout.discovery.taxonomy import match_industries
 
         found = match_industries(text)
         if found:

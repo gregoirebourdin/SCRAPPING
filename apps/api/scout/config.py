@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -27,7 +28,7 @@ class Settings(BaseSettings):
     internal_api_secret: SecretStr = SecretStr("dev-internal-secret-change-me-32-bytes-minimum!!")
     internal_jwt_audience: str = "scout-api"
     internal_jwt_issuer: str = "scout-web"
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
 
     # --- AI ------------------------------------------------------------------------------
     ai_provider: Literal["auto", "gemini", "local", "fake"] = "auto"
@@ -67,7 +68,7 @@ class Settings(BaseSettings):
     crawler_enable_browser: bool = False
     # Test/dev only: host → "ip:port" overrides and private hosts allow-list (never in production).
     crawler_host_overrides: dict[str, str] = Field(default_factory=dict)
-    crawler_allow_private_hosts: list[str] = Field(default_factory=list)
+    crawler_allow_private_hosts: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     # --- discovery sources -----------------------------------------------------------------
     gmaps_scraper_url: str | None = None  # e.g. http://maps-scraper.railway.internal:8080
@@ -107,7 +108,10 @@ class Settings(BaseSettings):
     @classmethod
     def _split_csv(cls, v: object) -> object:
         if isinstance(v, str):
-            return [s.strip() for s in v.split(",") if s.strip()]
+            raw = v.strip()
+            if raw.startswith("["):
+                return json.loads(raw)
+            return [s.strip() for s in raw.split(",") if s.strip()]
         return v
 
     @property

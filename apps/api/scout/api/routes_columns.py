@@ -37,7 +37,7 @@ async def list_columns(ctx: Ctx, list_id: uuid.UUID | None = None) -> list[Custo
 
 @router.post("/columns/plan")
 async def plan(body: ColumnCreate, ctx: Ctx) -> dict[str, Any]:
-    from scout.enrich.planner import describe_plan, plan_column  # type: ignore[import-not-found]
+    from scout.enrich.planner import describe_plan, plan_column
 
     p = await plan_column(body.name, body.instruction, data_type=ColumnDataType(body.data_type) if body.data_type else None)
     return {"plan": p.model_dump(mode="json"), "describe": describe_plan(p)}
@@ -45,13 +45,13 @@ async def plan(body: ColumnCreate, ctx: Ctx) -> dict[str, Any]:
 
 @router.post("/columns", status_code=201)
 async def create_column(body: ColumnCreate, ctx: Ctx) -> dict[str, Any]:
-    from scout.enrich.engine import (  # type: ignore[import-not-found]
+    from scout.enrich.engine import (
         column_entity_ids,
         create_column,
         enqueue_column,
         estimate_coverage,
     )
-    from scout.enrich.planner import describe_plan  # type: ignore[import-not-found]
+    from scout.enrich.planner import describe_plan
     from scout.enrich.types import EnrichmentPlan
 
     col = await create_column(
@@ -83,7 +83,7 @@ async def create_column(body: ColumnCreate, ctx: Ctx) -> dict[str, Any]:
 
 @router.patch("/columns/{column_id}", response_model=ColumnOut)
 async def update_column(column_id: uuid.UUID, body: ColumnUpdate, ctx: Ctx) -> CustomColumn:
-    from scout.enrich.engine import update_column_definition  # type: ignore[import-not-found]
+    from scout.enrich.engine import update_column_definition
 
     async with session_scope() as s:
         col = await _get_column(s, ctx, column_id)
@@ -142,7 +142,7 @@ async def duplicate_column(column_id: uuid.UUID, ctx: Ctx) -> CustomColumn:
 
 @router.post("/columns/{column_id}/enrich")
 async def enrich(column_id: uuid.UUID, body: EnrichRequest, ctx: Ctx) -> dict[str, Any]:
-    from scout.enrich.engine import column_entity_ids, enqueue_column  # type: ignore[import-not-found]
+    from scout.enrich.engine import column_entity_ids, enqueue_column
 
     async with session_scope() as s:
         col = await _get_column(s, ctx, column_id)
@@ -161,7 +161,7 @@ async def enrich(column_id: uuid.UUID, body: EnrichRequest, ctx: Ctx) -> dict[st
 
 @router.put("/columns/{column_id}/cells")
 async def edit_cell(column_id: uuid.UUID, body: CellEdit, ctx: Ctx) -> dict[str, Any]:
-    from scout.enrich.engine import set_user_value  # type: ignore[import-not-found]
+    from scout.enrich.engine import set_user_value
 
     async with session_scope() as s:
         await _get_column(s, ctx, column_id)

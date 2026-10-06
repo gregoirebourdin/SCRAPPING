@@ -88,7 +88,7 @@ async def list_webhooks(ctx: Ctx) -> list[dict[str, Any]]:
 @router.post("/webhooks", status_code=201)
 async def create_webhook(body: WebhookCreate, ctx: Ctx) -> dict[str, Any]:
     ctx.require(MemberRole.admin)
-    from scout.crawl.ssrf import validate_url  # type: ignore[import-not-found]
+    from scout.crawl.ssrf import validate_url
 
     validate_url(body.url)
     secret = secrets.token_urlsafe(24)

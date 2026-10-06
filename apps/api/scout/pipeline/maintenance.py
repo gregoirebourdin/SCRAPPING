@@ -23,7 +23,7 @@ log = structlog.get_logger("maintenance")
 @job_handler("company.refresh", timeout_s=300)
 async def refresh_company(ctx: JobContext) -> dict[str, Any]:
     """Row-level 'Refresh company': force a recrawl and re-extract company facts."""
-    from scout.crawl.cache import ensure_crawled  # type: ignore[import-not-found]
+    from scout.crawl.cache import ensure_crawled
 
     company_id = uuid.UUID(ctx.payload["company_id"])
     pages = await ensure_crawled(ctx.workspace_id, company_id, force=True)
@@ -32,7 +32,7 @@ async def refresh_company(ctx: JobContext) -> dict[str, Any]:
         if comp is not None:
             comp.last_enriched_at = None  # next pipeline pass re-extracts facts from the fresh crawl
     if pages:
-        from scout.extract.company_info import extract_company_facts  # type: ignore[import-not-found]
+        from scout.extract.company_info import extract_company_facts
         from scout.db.enums import SourceType
         from scout.services import registry
 
@@ -61,7 +61,7 @@ async def maintenance(ctx: JobContext) -> dict[str, Any]:
         expired = res.rowcount or 0
     stale = 0
     try:
-        from scout.enrich.engine import mark_stale_cells  # type: ignore[import-not-found]
+        from scout.enrich.engine import mark_stale_cells
 
         stale = await mark_stale_cells(ctx.workspace_id)
     except Exception as exc:  # optional
@@ -73,7 +73,7 @@ async def maintenance(ctx: JobContext) -> dict[str, Any]:
 @job_handler("webhook.deliver", timeout_s=60)
 async def deliver_webhook(ctx: JobContext) -> dict[str, Any]:
     """CRM-ready outbound events (spec §161), HMAC-signed."""
-    from scout.crawl.ssrf import validate_url  # type: ignore[import-not-found]
+    from scout.crawl.ssrf import validate_url
 
     async with session_scope() as s:
         hooks = (await s.scalars(sa.select(Webhook).where(Webhook.workspace_id == ctx.workspace_id, Webhook.is_active.is_(True)))).all()

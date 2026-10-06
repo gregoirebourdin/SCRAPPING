@@ -192,7 +192,7 @@ async def _stage_website(ctx: Ctx, job: JobContext) -> None:
     comp = await _company(ctx)
     needs_site = bool(ctx.defn.website_conditions) or ctx.defn.mode == CampaignMode.people or "website" in ctx.defn.required_fields
     if not comp.website_url and needs_site:
-        from scout.crawl.resolve import resolve_website  # type: ignore[import-not-found]
+        from scout.crawl.resolve import resolve_website
 
         resolved = await resolve_website(
             comp.name, city=comp.city, postal_code=comp.postal_code, country=comp.country,
@@ -222,7 +222,7 @@ async def _stage_website(ctx: Ctx, job: JobContext) -> None:
 
 
 async def _stage_crawl(ctx: Ctx) -> None:
-    from scout.crawl.cache import ensure_crawled  # type: ignore[import-not-found]
+    from scout.crawl.cache import ensure_crawled
 
     comp = await _company(ctx)
     if not comp.website_url:
@@ -246,7 +246,7 @@ async def _stage_crawl(ctx: Ctx) -> None:
             await bump_stats(s, ctx.campaign_id, companies_evaluated=1)
     # deterministic company facts from the crawl (once per crawl)
     if pages and (comp.last_enriched_at is None or (comp.last_crawled_at and comp.last_enriched_at < comp.last_crawled_at)):
-        from scout.extract.company_info import extract_company_facts  # type: ignore[import-not-found]
+        from scout.extract.company_info import extract_company_facts
 
         facts = extract_company_facts(pages)
         async with session_scope() as s:
@@ -274,7 +274,7 @@ async def _stage_conditions(ctx: Ctx) -> list[ConditionOutcome]:
     """Website conditions run right after the crawl — before any people/email spend (spec §51)."""
     if not ctx.defn.website_conditions:
         return []
-    from scout.enrich.conditions import evaluate_condition  # type: ignore[import-not-found]
+    from scout.enrich.conditions import evaluate_condition
 
     comp = await _company(ctx)
     out: list[ConditionOutcome] = []
@@ -343,9 +343,9 @@ async def _stage_company_fit(ctx: Ctx, conditions: list[ConditionOutcome]) -> Fi
 
 
 async def _stage_people(ctx: Ctx, hints: dict[str, Any]) -> list[PersonPick]:
-    from scout.extract.names import is_plausible_person_name, split_name  # type: ignore[import-not-found]
-    from scout.extract.people import extract_people  # type: ignore[import-not-found]
-    from scout.extract.titles import normalize_title, title_match_score  # type: ignore[import-not-found]
+    from scout.extract.names import is_plausible_person_name, split_name
+    from scout.extract.people import extract_people
+    from scout.extract.titles import normalize_title, title_match_score
     from scout.extract.types import PersonCandidate
 
     comp = await _company(ctx)
@@ -365,7 +365,7 @@ async def _stage_people(ctx: Ctx, hints: dict[str, Any]) -> list[PersonPick]:
         candidates.extend(extract_people(ctx.pages, company_name=comp.name, domain=comp.normalized_domain))
     picks = _rank(candidates, pf, normalize_title, title_match_score)
     if not picks and ctx.pages:
-        from scout.extract.ai_people import ai_extract_people  # type: ignore[import-not-found]
+        from scout.extract.ai_people import ai_extract_people
 
         try:
             ai_found = await ai_extract_people(ctx.pages, company_name=comp.name)
@@ -410,7 +410,7 @@ async def _grounded_people(ctx: Ctx, comp: Company) -> list[Any]:
     from pydantic import BaseModel
 
     from scout.ai.factory import get_ai
-    from scout.extract.names import is_plausible_person_name, split_name  # type: ignore[import-not-found]
+    from scout.extract.names import is_plausible_person_name, split_name
     from scout.extract.types import PersonCandidate
 
     ai = get_ai()
@@ -462,7 +462,7 @@ async def _grounded_people(ctx: Ctx, comp: Company) -> list[Any]:
 async def _stage_persons(
     ctx: Ctx, job: JobContext, picks: list[PersonPick], conditions: list[ConditionOutcome], fit: FitResult
 ) -> tuple[int, str | None]:
-    from scout.email.store import find_and_save_for_person  # type: ignore[import-not-found]
+    from scout.email.store import find_and_save_for_person
 
     defn = ctx.defn
     delivered = 0
@@ -669,7 +669,7 @@ async def _deliver_person(
             "company": comp.name, "icp_score": result.icp_score,
         }, campaign_id=ctx.campaign_id, session=s)
     try:
-        from scout.discovery.health import record_outcomes  # type: ignore[import-not-found]
+        from scout.discovery.health import record_outcomes
 
         await record_outcomes(ctx.source_key, qualified=1)
     except Exception:

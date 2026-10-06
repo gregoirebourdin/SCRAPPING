@@ -138,3 +138,15 @@ async def global_search(ctx: Ctx, q: str, limit: int = 8) -> dict[str, Any]:
         "lists": [{"id": i, "name": n} for i, n in lists],
         "campaigns": [{"id": i, "name": n, "status": st.value} for i, n, st in camps],
     }
+
+
+@router.post("/dev/seed", tags=["meta"])
+async def dev_seed(ctx: Ctx) -> dict[str, Any]:
+    """Load clearly-marked demo data (.example domains) into the current workspace. Disabled in production."""
+    from scout.errors import Forbidden
+    from scout.seed import seed_workspace
+
+    if get_settings().is_production:
+        raise Forbidden("Demo data is disabled in production")
+    async with session_scope() as s:
+        return await seed_workspace(s, ctx.workspace_id, ctx.user_id)

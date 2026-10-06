@@ -17,7 +17,7 @@ class IndustryMatch:
 
 def _profiles(industries: Iterable[str]) -> list:
     try:
-        from scout.discovery.taxonomy import match_industries  # type: ignore[import-not-found]
+        from scout.discovery.taxonomy import match_industries
     except Exception:
         return []
     out = []

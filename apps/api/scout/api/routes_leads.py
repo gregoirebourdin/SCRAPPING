@@ -111,7 +111,7 @@ async def refresh(body: RefreshRequest, ctx: Ctx) -> dict[str, Any]:
                                     payload={"email_ids": [str(x) for x in email_ids[i:i + 50]]})
             queued = len(email_ids)
         elif body.what == "column" and body.column_id:
-            from scout.enrich.engine import enqueue_column  # type: ignore[import-not-found]
+            from scout.enrich.engine import enqueue_column
 
             queued = await enqueue_column(ctx.workspace_id, body.column_id, entity_ids=ids, only_missing=False, force=True)
         elif body.what == "person":

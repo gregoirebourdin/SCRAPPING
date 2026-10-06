@@ -549,9 +549,9 @@ class CreateColumnArgs(Strict):
 
 @tool("create_column", "Created column", "Create ANY enrichment column from natural language; the planner picks the cheapest reliable resolver and enrichment starts.", CreateColumnArgs)
 async def create_column(a: CreateColumnArgs, ctx: ToolContext) -> ToolOutcome:
-    from scout.enrich.engine import column_entity_ids, enqueue_column, estimate_coverage  # type: ignore[import-not-found]
-    from scout.enrich.engine import create_column as _create  # type: ignore[import-not-found]
-    from scout.enrich.planner import describe_plan  # type: ignore[import-not-found]
+    from scout.enrich.engine import column_entity_ids, enqueue_column, estimate_coverage
+    from scout.enrich.engine import create_column as _create
+    from scout.enrich.planner import describe_plan
     from scout.enrich.types import EnrichmentPlan
 
     list_id = ctx.ui.list_id if a.scope == "list" else None
@@ -620,7 +620,7 @@ class EnrichColumnArgs(ColumnRefArgs):
 
 @tool("enrich_column", "Enriching column", "Run enrichment for a column (missing cells by default).", EnrichColumnArgs)
 async def enrich_column(a: EnrichColumnArgs, ctx: ToolContext) -> ToolOutcome:
-    from scout.enrich.engine import column_entity_ids, enqueue_column  # type: ignore[import-not-found]
+    from scout.enrich.engine import column_entity_ids, enqueue_column
 
     col = await _column_by_ref(ctx, a.column_id, a.column_name)
     person_ids = company_ids = None
@@ -641,7 +641,7 @@ class RefreshColumnArgs(ColumnRefArgs):
 
 @tool("refresh_column", "Refreshing column", "Re-run a column for stale (or all) cells.", RefreshColumnArgs)
 async def refresh_column(a: RefreshColumnArgs, ctx: ToolContext) -> ToolOutcome:
-    from scout.enrich.engine import refresh_column as _refresh  # type: ignore[import-not-found]
+    from scout.enrich.engine import refresh_column as _refresh
 
     col = await _column_by_ref(ctx, a.column_id, a.column_name)
     n = await _refresh(ctx.ws.workspace_id, col.id, older_than_days=a.older_than_days)
@@ -688,7 +688,7 @@ async def _update_cells(ids: list[uuid.UUID], fld: str, value: Any, ctx: ToolCon
         await _log(ctx, "cells.edit", f"Edited {fld} on {len(ids)} rows", entity_type=et.value, ids=ids)
         return ToolOutcome({"updated": len(ids)}, {"kind": "rows_affected", "title": "Updated", "detail": f"{fld} on {len(ids):,} rows"},
                            ui_effects=[{"type": "refresh"}])
-    from scout.enrich.engine import set_user_value  # type: ignore[import-not-found]
+    from scout.enrich.engine import set_user_value
 
     col = await _column_by_ref(ctx, None, fld)
     targets = ids

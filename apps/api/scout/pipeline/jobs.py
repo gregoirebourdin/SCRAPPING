@@ -86,8 +86,8 @@ async def bump_stats(s: Any, campaign_id: uuid.UUID, **deltas: int) -> None:
 
 @job_handler("campaign.plan", timeout_s=180)
 async def plan_campaign(ctx: JobContext) -> dict[str, Any]:
-    from scout.discovery.health import health_snapshot  # type: ignore[import-not-found]
-    from scout.discovery.router import select_sources  # type: ignore[import-not-found]
+    from scout.discovery.health import health_snapshot
+    from scout.discovery.router import select_sources
 
     async with session_scope() as s:
         c = await s.get(Campaign, ctx.campaign_id)
@@ -214,9 +214,9 @@ async def _pipeline_need(s: Any, c: Campaign) -> tuple[int, int, float]:
 
 @job_handler("campaign.discover", timeout_s=600)
 async def discover(ctx: JobContext) -> dict[str, Any] | None:
-    from scout.discovery.base import DiscoveryQuery  # type: ignore[import-not-found]
-    from scout.discovery.health import record_request  # type: ignore[import-not-found]
-    from scout.discovery.router import get_source  # type: ignore[import-not-found]
+    from scout.discovery.base import DiscoveryQuery
+    from scout.discovery.health import record_request
+    from scout.discovery.router import get_source
 
     key = ctx.payload["source_key"]
     source = get_source(key)
@@ -324,7 +324,7 @@ async def ingest_candidates(
     workspace_id: uuid.UUID, campaign_id: uuid.UUID, source_key: str, candidates: list[Any], defn: CampaignDefinition
 ) -> dict[str, int]:
     """Canonicalize → in-campaign dedupe → registry → suppression/exclusion → cheap prequal → queue."""
-    from scout.discovery.health import record_outcomes  # type: ignore[import-not-found]
+    from scout.discovery.health import record_outcomes
 
     counts = {"raw": len(candidates), "duplicates": 0, "excluded": 0, "suppressed": 0, "rejected": 0, "queued": 0}
     if not candidates:
@@ -451,7 +451,7 @@ def _f(v: Any) -> float | None:
 
 def _evidence(source_key: str, cand: Any) -> registry.Evidence:
     try:
-        from scout.discovery.catalog import source_quality  # type: ignore[import-not-found]
+        from scout.discovery.catalog import source_quality
 
         q = source_quality(source_key)
     except Exception:

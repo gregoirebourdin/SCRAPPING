@@ -190,7 +190,7 @@ async def _import_record(s: AsyncSession, imp: Import, rec: dict[str, str], row_
     domain = registrable_domain(website) if website else None
     if not domain and email:
         d = email.split("@", 1)[1]
-        from scout.email.lists import FREE_PROVIDERS  # type: ignore[import-not-found]
+        from scout.email.lists import FREE_PROVIDERS
 
         domain = None if d in FREE_PROVIDERS else registrable_domain(d)
     company_name = rec.get("company") or (domain.split(".")[0].replace("-", " ").title() if domain else None)
