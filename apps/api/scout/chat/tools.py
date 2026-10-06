@@ -1831,6 +1831,27 @@ async def amend_campaign(a: AmendCampaignArgs, ctx: ToolContext) -> ToolOutcome:
     )
 
 
+class DebriefArgs(Strict):
+    campaign_id: uuid.UUID | None = None
+
+
+@tool(
+    "debrief_campaign",
+    "Debriefed search",
+    "How a search went: funnel, why candidates were rejected, what each source produced, and evidence-based "
+    "alternative strategies (each with an instruction you can run via amend_campaign or plan_campaign). Call it "
+    "whenever a search ends below its target, stalls, finds nothing, or the user asks how it went / why so few.",
+    DebriefArgs,
+)
+async def debrief_campaign(a: DebriefArgs, ctx: ToolContext) -> ToolOutcome:
+    from scout.chat.debrief import build_debrief
+
+    cid = await _campaign_ref(ctx, a.campaign_id)
+    async with session_scope() as s:
+        d = await build_debrief(s, ctx.ws.workspace_id, cid)
+    return ToolOutcome(d, {"kind": "campaign_debrief", "title": d["name"], **d})
+
+
 class ExcludePreviousArgs(Strict):
     mode: ExclusionMode
     list_names: list[str] = Field(default_factory=list)

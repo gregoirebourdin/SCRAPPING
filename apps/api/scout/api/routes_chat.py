@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
 import orjson
 import sqlalchemy as sa
+import structlog
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 from sse_starlette.sse import EventSourceResponse
@@ -20,6 +22,8 @@ from scout.chat.tools import TOOLS, json_schema_for
 from scout.db.engine import session_scope
 from scout.db.models import ChatMessage, ChatThread
 from scout.errors import NotFound
+
+log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["chat"])
 
@@ -70,20 +74,58 @@ async def messages(thread_id: uuid.UUID, ctx: Ctx) -> list[dict[str, Any]]:
                 .order_by(ChatMessage.created_at)
             )
         ).all()
+        running = pending_message_ids()
         return [
-            {"id": m.id, "role": m.role, "content": m.content, "parts": m.parts, "created_at": m.created_at}
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "parts": m.parts,
+                "created_at": m.created_at,
+                "pending": str(m.id) in running,
+            }
             for m in rows
         ]
+
+
+# Assistant replies being written right now (message id → task). A reply never depends on the browser staying
+# connected: leaving the page, switching tab or losing the network only stops the live relay; the turn finishes,
+# is persisted, and the thread shows it as "pending" until then.
+_TURNS: dict[str, asyncio.Task[None]] = {}
+
+
+def pending_message_ids() -> set[str]:
+    return {mid for mid, t in _TURNS.items() if not t.done()}
 
 
 @router.post("/chat/messages")
 async def send(body: MessageIn, ctx: Ctx) -> EventSourceResponse:
     thread = await operator.get_or_create_thread(ctx, body.thread_id, body.context.list_id)
+    queue: asyncio.Queue[tuple[str, dict[str, Any]] | None] = asyncio.Queue()
+
+    async def produce() -> None:
+        mid: str | None = None
+        try:
+            async for event, data in operator.run_turn(
+                ctx, thread, body.content, body.context, clarification=body.clarification
+            ):
+                if event == "start" and data.get("message_id"):
+                    mid = str(data["message_id"])
+                    _TURNS[mid] = task
+                queue.put_nowait((event, data))
+        except Exception as exc:  # run_turn handles its own errors; this is a last resort
+            log.exception("chat.turn_crashed")
+            queue.put_nowait(("error", {"code": "assistant_unavailable", "message": str(exc)[:200]}))
+        finally:
+            queue.put_nowait(None)
+            if mid is not None:
+                _TURNS.pop(mid, None)
+
+    task = asyncio.create_task(produce())
 
     async def gen() -> AsyncIterator[dict[str, str]]:
-        async for event, data in operator.run_turn(
-            ctx, thread, body.content, body.context, clarification=body.clarification
-        ):
+        while (item := await queue.get()) is not None:
+            event, data = item
             yield {"event": event, "data": orjson.dumps(data, default=str).decode()}
 
     return EventSourceResponse(

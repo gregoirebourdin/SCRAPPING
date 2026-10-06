@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Annotated, Literal
 
@@ -35,6 +36,20 @@ class CompanyFilters(Strict):
     cities: list[str] = Field(default_factory=list)
     employee_range: EmployeeRange | None = None
     exclude_keywords: list[str] = Field(default_factory=list)
+    naf_codes: list[str] = Field(
+        default_factory=list,
+        description="French NAF rév. 2 activity codes (e.g. 26.12Z) for activities outside the built-in taxonomy",
+    )
+
+    @field_validator("naf_codes")
+    @classmethod
+    def _naf(cls, v: list[str]) -> list[str]:
+        out: list[str] = []
+        for c in v:
+            c = (c or "").strip().upper()
+            if re.fullmatch(r"\d{2}\.\d{2}[A-Z]", c) and c not in out:
+                out.append(c)
+        return out[:6]
 
     @field_validator("countries")
     @classmethod

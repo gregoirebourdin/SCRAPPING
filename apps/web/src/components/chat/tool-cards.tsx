@@ -503,3 +503,66 @@ function EnrichmentCard({ card }: { card: Card }) {
     </Shell>
   );
 }
+
+type Strategy = { title: string; why: string; action: string; instruction: string };
+
+/** Debrief of a search: funnel, what blocked it, and runnable strategies (each sends its instruction to the AI). */
+export function DebriefCard({ card, onSend }: { card: Card; onSend?: (text: string) => void }) {
+  const f = (card.funnel ?? {}) as Record<string, number>;
+  const reasons = ((card.top_reasons as { reason: string; count: number }[]) ?? []).slice(0, 4);
+  const moves = (card.strategies as Strategy[]) ?? [];
+  const fr = card.lang !== "en";
+  const steps: [string, number | undefined][] = [
+    ["found", f.discovered],
+    ["analysed", f.analysed],
+    ["matched", f.matched],
+    ["people", f.people_found],
+    ["qualified", f.qualified],
+  ];
+  return (
+    <Shell icon={<Radar />} title={(fr ? "Débrief · " : "Debrief · ") + String(card.title ?? "")}>
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-meta text-fg-3">
+          {steps.map(([label, v], i) => (
+            <span key={label} className="flex items-center gap-1.5">
+              {i > 0 && <span aria-hidden>›</span>}
+              <span>
+                <span className={cn("tabular font-medium", label === "qualified" ? "text-accent-strong" : "text-fg")}>{n(v ?? 0)}</span> {label}
+              </span>
+            </span>
+          ))}
+          <span className="text-fg-3">/ {n(f.target ?? 0)} wanted</span>
+        </div>
+        {reasons.length > 0 && (
+          <ul className="space-y-0.5">
+            {reasons.map((r) => (
+              <li key={r.reason} className="flex items-center justify-between gap-2 text-meta">
+                <span className="min-w-0 truncate text-fg-2">{r.reason}</span>
+                <span className="tabular text-fg-3">{n(r.count)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {moves.length > 0 && (
+          <div className="space-y-1.5">
+            {moves.map((m) => (
+              <div key={m.title} className="rounded-sm bg-surface-2 px-2.5 py-2">
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-meta font-medium text-fg">{m.title}</div>
+                    <div className="text-micro text-fg-3">{m.why}</div>
+                  </div>
+                  {onSend && m.action !== "info" && (
+                    <Button size="xs" variant="secondary" onClick={() => onSend(m.instruction)}>
+                      <Play /> Try
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Shell>
+  );
+}

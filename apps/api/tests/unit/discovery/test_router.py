@@ -157,3 +157,21 @@ def test_gemini_search_never_runs_without_the_free_web_search(maps, ai) -> None:
     )
     sel = keys(select_sources(alone, limit=1))
     assert sel == ["gemini_search"]
+
+
+def test_any_activity_with_naf_codes_reaches_the_registry() -> None:
+    from scout.schemas.campaign import CampaignDefinition
+
+    d = CampaignDefinition.model_validate(
+        {
+            "company_filters": {
+                "industries": ["electronics design office"],
+                "naf_codes": ["71.12b", "26.12Z", "not-a-code"],
+                "countries": ["FR"],
+                "cities": ["Grenoble"],
+            }
+        }
+    )
+    assert d.company_filters.naf_codes == ["71.12B", "26.12Z"]
+    reg = next(s for s, _ in select_sources(d) if s.key == "fr_registry")
+    assert reg.plan(d, expansion=0)[0].params["naf"] == ["71.12B", "26.12Z"]

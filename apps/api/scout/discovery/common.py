@@ -268,7 +268,31 @@ def industry_matches(defn: CampaignDefinition) -> list[IndustryMatch]:
 
 
 def profiles_for(defn: CampaignDefinition) -> list[IndustryProfile]:
-    return [m.profile for m in industry_matches(defn)]
+    """Taxonomy profiles of the ICP, plus — for any activity the taxonomy does not know — a profile built from
+    the definition itself (its words for web search, its NAF codes for the registry)."""
+    profiles = [m.profile for m in industry_matches(defn)]
+    cf = defn.company_filters
+    known_naf = {c for p in profiles for c in p.naf_codes}
+    extra_naf = [c for c in cf.naf_codes if c not in known_naf]
+    texts = [t for t in [*cf.industries, *cf.keywords] if t and t.strip()]
+    if extra_naf or (texts and not profiles):
+        profiles.append(_custom_profile(texts, extra_naf, local=bool(cf.cities)))
+    return profiles
+
+
+def _custom_profile(texts: list[str], naf: list[str], *, local: bool) -> IndustryProfile:
+    words = texts[:3] or ["company"]
+    return IndustryProfile(
+        key="custom:" + "|".join(words)[:60],
+        labels={lang: words for lang in ("en", "fr", "de", "es", "it")},
+        naf_codes=naf,
+        maps_queries={lang: words[:2] for lang in ("en", "fr", "de", "es", "it")},
+        osm_tags=[],
+        search_keywords={lang: words[:2] for lang in ("en", "fr", "de", "es", "it")},
+        yc_industries=[],
+        local_business=local,
+        digital=False,
+    )
 
 
 def target_countries(defn: CampaignDefinition) -> list[str]:

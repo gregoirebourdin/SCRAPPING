@@ -15,7 +15,7 @@ import { useScope, useUI } from "@/lib/store";
 import { ClarifyCard, type ClarifySubmit } from "./clarify-card";
 import { Markdown } from "./markdown";
 import { type ChatStep, StepList } from "./steps";
-import { PlanCard, ToolCard } from "./tool-cards";
+import { DebriefCard, PlanCard, ToolCard } from "./tool-cards";
 
 export interface ChatPart {
   type: "text" | "card" | "ui_effect" | "confirm" | "error" | "tool_call" | "steps";
@@ -141,11 +141,10 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
   // The conversation that launched a search follows it to the new list instead of being reset.
   const [followList, setFollowList] = useState<string | null>(null);
   if (threadListId !== listId) {
+    // Navigating keeps the conversation (and any reply still being written) — the chat follows the user around
+    // the app; a new conversation starts only when they ask for one.
     setThreadListId(listId);
-    if (!(listId && listId === followList)) {
-      setThreadId(null);
-      setMessages([]);
-    }
+    if (followList && listId === followList) setFollowList(null);
   }
   useEffect(() => {
     if (threadId || !threads.data?.length || messages.length) return;
@@ -156,10 +155,29 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
   }, [threads.data]);
 
   async function loadThread(id: string) {
-    const rows = await api<{ id: string; role: "user" | "assistant"; content: string; parts: ChatPart[] }[]>(`chat/threads/${id}/messages`);
+    const rows = await api<{ id: string; role: "user" | "assistant"; content: string; parts: ChatPart[]; pending?: boolean }[]>(`chat/threads/${id}/messages`);
     setThreadId(id);
-    setMessages(rows.map((r) => ({ id: r.id, role: r.role, content: r.content, parts: r.parts ?? [] })));
+    setMessages(rows.map((r) => ({ id: r.id, role: r.role, content: r.content, parts: r.parts ?? [], pending: Boolean(r.pending) })));
   }
+
+  // A reply that kept running on the server while this page was away (tab switch, reload, network loss):
+  // show it as in progress and refresh the thread until it lands.
+  const hasPendingFromServer = !streaming && messages.some((m) => m.pending && m.role === "assistant");
+  useEffect(() => {
+    if (!hasPendingFromServer || !threadId) return;
+    const t = setInterval(() => void loadThread(threadId), 2000);
+    return () => clearInterval(t);
+     
+  }, [hasPendingFromServer, threadId]);
+  // Coming back to the tab: pick up whatever happened meanwhile.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && threadId && !streaming) void loadThread(threadId);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+     
+  }, [threadId, streaming]);
 
   useEffect(() => {
     if (chatFocusTick > 0) {
@@ -530,6 +548,7 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
                     onAnswer={answer}
                     onLaunch={(card) => launch(card, m.id)}
                     onEdit={edit}
+                    onSend={(text) => void send(text)}
                   />
                 ))}
               </div>
@@ -618,6 +637,7 @@ function MessageView({
   onAnswer,
   onLaunch,
   onEdit,
+  onSend,
 }: {
   m: ChatMessage;
   latestRuns: Record<string, string>;
@@ -627,6 +647,7 @@ function MessageView({
   onAnswer: (card: ChatPart["card"], s: ClarifySubmit) => void;
   onLaunch: (card: NonNullable<ChatPart["card"]>) => Promise<void>;
   onEdit: (text: string) => void;
+  onSend: (text: string) => void;
 }) {
   if (m.role === "user") {
     return (
@@ -649,6 +670,7 @@ function MessageView({
         if (p.type === "tool_call") return null; // the step list shows running tools
         if (p.type === "card" && p.card?.kind === "clarify") return <ClarifyCard key={i} card={p.card} disabled={busy} onSubmit={(s) => onAnswer(p.card, s)} />;
         if (p.type === "card" && p.card?.kind === "campaign_plan") return <PlanCard key={i} card={p.card} onLaunch={busy ? undefined : onLaunch} onEdit={onEdit} />;
+        if (p.type === "card" && p.card?.kind === "campaign_debrief") return <DebriefCard key={i} card={p.card} onSend={busy ? undefined : onSend} />;
         if (p.type === "card" && p.card) {
           const cid = p.card.campaign_id as string | undefined;
           const compact = Boolean(cid && RUN_KINDS.includes(p.card.kind) && latestRuns[cid] && latestRuns[cid] !== `${m.id}:${i}`);

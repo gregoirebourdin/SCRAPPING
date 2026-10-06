@@ -86,6 +86,11 @@ class AIParsedCampaign(BaseModel):
         default_factory=list, description="English industry names, singular, e.g. 'marketing agency'"
     )
     keywords: list[str] = Field(default_factory=list)
+    naf_codes: list[str] = Field(
+        default_factory=list,
+        description="For French targets: up to 4 NAF rév.2 codes (format 12.34A) of the requested activity, "
+        "only codes you are sure of (e.g. electronics design office → 71.12B, 26.12Z)",
+    )
     countries: list[str] = Field(default_factory=list, description="ISO alpha-2")
     regions: list[str] = Field(default_factory=list)
     cities: list[str] = Field(default_factory=list)
@@ -127,6 +132,8 @@ intelligence app. Rules:
 - Local professions and trades (coachs sportifs, kinés, ostéopathes, plombiers, avocats, photographes…) are the
   businesses themselves: put the trade in industries (English, e.g. "personal trainer", "physiotherapist",
   "plumber") and use owner titles (Owner, Founder, Manager) plus the trade title if the user named one.
+- naf_codes: for a French target whose activity is specific or unusual (bureau d'études électronique, tatoueur,
+  sophrologue…), give up to 4 official NAF rév.2 codes you are sure of; leave empty when unsure.
 - Never invent constraints the user did not express.
 """
 
@@ -655,6 +662,7 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
         company_filters=CompanyFilters(
             industries=parsed.industries,
             keywords=parsed.keywords,
+            naf_codes=parsed.naf_codes,
             countries=parsed.countries,
             regions=parsed.regions,
             cities=parsed.cities,
