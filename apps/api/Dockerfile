@@ -2,18 +2,19 @@
 # Scout API + in-process Postgres job worker (FastAPI, Python 3.12, uv).
 FROM python:3.12-slim-bookworm AS build
 COPY --from=ghcr.io/astral-sh/uv:0.8.17 /uv /usr/local/bin/uv
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
+# No BuildKit cache mounts: Railway's builder requires a service-specific mount id, which would tie this file to one service.
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_NO_CACHE=1
 # Optional extras, space separated (e.g. "scraping" → Scrapling L2/L3 fetch tiers, ~+330 MB, no browsers).
 # Off by default to keep the image lean; Railway passes a service variable of the same name to this ARG.
 ARG SCOUT_EXTRAS=""
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project \
+RUN uv sync --frozen --no-dev --no-install-project \
     $(for e in $SCOUT_EXTRAS; do printf -- '--extra %s ' "$e"; done)
 COPY scout ./scout
 COPY migrations ./migrations
 COPY alembic.ini ./
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev \
+RUN uv sync --frozen --no-dev \
     $(for e in $SCOUT_EXTRAS; do printf -- '--extra %s ' "$e"; done)
 
 FROM python:3.12-slim-bookworm
