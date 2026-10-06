@@ -1,0 +1,19 @@
+{
+  "name": "scout",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @scout/web dev",
+    "build": "pnpm --filter @scout/web build",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "e2e": "pnpm --filter @scout/web e2e",
+    "schemas:generate": "pnpm --filter @scout/schemas generate",
+    "format": "prettier --write \"apps/web/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"apps/web/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.{ts,tsx}\""
+  }
+}

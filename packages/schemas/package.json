@@ -1,0 +1,12 @@
+{
+  "name": "@scout/schemas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "generate": "cd ../../apps/api && uv run python -m scout.cli openapi ../../packages/schemas/openapi.json && cd ../../packages/schemas && openapi-typescript openapi.json -o src/api.d.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": { "openapi-typescript": "7.13.0", "typescript": "5.9.3" }
+}

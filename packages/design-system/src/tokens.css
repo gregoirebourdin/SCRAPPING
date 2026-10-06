@@ -1,0 +1,96 @@
+/* Scout design tokens — semantic CSS variables (docs/DESIGN_SYSTEM.md).
+   Dark is the designed experience; light exists for accessibility. Components never hard-code values. */
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #0c0d0f;
+  --surface-1: #111215;
+  --surface-2: #16171b;
+  --surface-3: #1c1d22;
+  --surface-overlay: rgba(8, 8, 10, 0.62);
+
+  --border-subtle: rgba(255, 255, 255, 0.055);
+  --border-strong: rgba(255, 255, 255, 0.1);
+  --border-focus: rgba(139, 143, 247, 0.55);
+
+  --text-primary: #e9e9ec;
+  --text-secondary: #a0a1aa;
+  --text-muted: #686a74;
+  --text-inverse: #0c0d0f;
+
+  --accent: #8b8ff7;
+  --accent-strong: #a3a6fa;
+  --accent-soft: rgba(139, 143, 247, 0.14);
+  --accent-softer: rgba(139, 143, 247, 0.07);
+  --accent-contrast: #0e0f1a;
+
+  --success: #4fbf8b;
+  --success-soft: rgba(79, 191, 139, 0.12);
+  --warning: #d9a24a;
+  --warning-soft: rgba(217, 162, 74, 0.12);
+  --danger: #e2625f;
+  --danger-soft: rgba(226, 98, 95, 0.12);
+  --info: #62a8de;
+  --info-soft: rgba(98, 168, 222, 0.12);
+
+  --row-hover: rgba(255, 255, 255, 0.025);
+  --row-selected: rgba(139, 143, 247, 0.09);
+  --row-active-outline: rgba(139, 143, 247, 0.6);
+
+  --elev-popover: 0 8px 24px -6px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border-strong);
+  --elev-dialog: 0 24px 64px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--border-strong);
+  --focus-ring: 0 0 0 2px var(--background), 0 0 0 4px var(--border-focus);
+
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 10px;
+
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-1: 90ms;
+  --dur-2: 150ms;
+  --dur-3: 220ms;
+
+  --sidebar-collapsed: 56px;
+  --sidebar-expanded: 220px;
+  --topbar-height: 44px;
+  --row-height-compact: 32px;
+  --row-height-comfortable: 40px;
+  --header-row-height: 30px;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --background: #f7f7f8;
+  --surface-1: #ffffff;
+  --surface-2: #f3f3f5;
+  --surface-3: #ececef;
+  --surface-overlay: rgba(20, 20, 24, 0.32);
+  --border-subtle: rgba(15, 15, 25, 0.07);
+  --border-strong: rgba(15, 15, 25, 0.13);
+  --border-focus: rgba(92, 97, 230, 0.5);
+  --text-primary: #17181c;
+  --text-secondary: #55565f;
+  --text-muted: #8b8c95;
+  --text-inverse: #ffffff;
+  --accent: #5c61e6;
+  --accent-strong: #4a4fd4;
+  --accent-soft: rgba(92, 97, 230, 0.12);
+  --accent-softer: rgba(92, 97, 230, 0.06);
+  --accent-contrast: #ffffff;
+  --success: #1f9a62;
+  --success-soft: rgba(31, 154, 98, 0.1);
+  --warning: #b97a12;
+  --warning-soft: rgba(185, 122, 18, 0.1);
+  --danger: #cc3b38;
+  --danger-soft: rgba(204, 59, 56, 0.1);
+  --info: #2e7fc0;
+  --info-soft: rgba(46, 127, 192, 0.1);
+  --row-hover: rgba(15, 15, 25, 0.025);
+  --row-selected: rgba(92, 97, 230, 0.08);
+  --row-active-outline: rgba(92, 97, 230, 0.55);
+  --elev-popover: 0 8px 24px -8px rgba(20, 20, 30, 0.18), 0 0 0 1px var(--border-strong);
+  --elev-dialog: 0 24px 64px -16px rgba(20, 20, 30, 0.25), 0 0 0 1px var(--border-strong);
+}
