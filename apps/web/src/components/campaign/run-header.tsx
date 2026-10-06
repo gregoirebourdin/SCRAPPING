@@ -66,7 +66,11 @@ export function RunStatusPill({ status, stuck, lang = "en" }: { status: string; 
       key={key}
       className={cn("inline-flex h-[18px] shrink-0 items-center gap-1.5 rounded-xs px-1.5 text-meta font-medium leading-none animate-fade-in transition-colors", toneText[c.tone])}
     >
-      {ACTIVE.includes(status) && !stuck ? <LiveDot tone="info" /> : <span className={cn("size-1.5 rounded-full", c.tone === "success" ? "bg-success" : c.tone === "warning" ? "bg-warning" : c.tone === "danger" ? "bg-danger" : "bg-fg-3")} />}
+      {ACTIVE.includes(status) && !stuck ? (
+        <LiveDot tone="info" />
+      ) : (
+        <span className={cn("size-1.5 rounded-full", c.tone === "success" ? "bg-success" : c.tone === "warning" ? "bg-warning" : c.tone === "danger" ? "bg-danger" : "bg-fg-3")} />
+      )}
       {c[lang]}
     </span>
   );
@@ -122,7 +126,15 @@ export function useRunActions(run: RunView | null, lang: Lang = "en") {
       useLive.getState().patchCampaign(run.id, { status: prev });
       const err = e as ApiError;
       const mode: AmendMode | null =
-        err.code === "target_reached" ? "target" : err.code === "budget_reached" ? "budget" : err.code === "exhausted" ? "broaden" : err.code === "runtime_limit" ? "runtime" : null;
+        err.code === "target_reached"
+          ? "target"
+          : err.code === "budget_reached"
+            ? "budget"
+            : err.code === "exhausted"
+              ? "broaden"
+              : err.code === "runtime_limit"
+                ? "runtime"
+                : null;
       toast.error(err.message, {
         description: err.hint,
         action: mode && onBlocked ? { label: fr ? "Modifier…" : "Change…", onClick: () => onBlocked(mode) } : undefined,
@@ -197,20 +209,15 @@ export function RunActions({ run, lang = "en", size = "xs", showOpen = false }: 
           </MenuContent>
         </Menu>
       )}
-      {amend && (
-        <AmendDialog
-          campaignId={run.id}
-          open={Boolean(amend)}
-          onOpenChange={(v) => !v && setAmend(null)}
-          mode={amend}
-          lang={lang}
-          status={run.status}
-        />
-      )}
+      {amend && <AmendDialog campaignId={run.id} open={Boolean(amend)} onOpenChange={(v) => !v && setAmend(null)} mode={amend} lang={lang} status={run.status} />}
       <Dialog open={confirmCancel} onOpenChange={setConfirmCancel}>
         <DialogContent
           title={fr ? "Arrêter cette recherche définitivement ?" : "Cancel this search for good?"}
-          description={fr ? "Les leads déjà trouvés restent dans ta liste. Mets plutôt en pause si tu veux reprendre plus tard." : "Leads already found stay in your list. Pause instead if you may want to continue later."}
+          description={
+            fr
+              ? "Les leads déjà trouvés restent dans ta liste. Mets plutôt en pause si tu veux reprendre plus tard."
+              : "Leads already found stay in your list. Pause instead if you may want to continue later."
+          }
           width={440}
         >
           <div className="flex justify-end gap-2 px-4 py-3">

@@ -433,11 +433,31 @@ decoys, written for the test — not a real-site measurement): precision 0.81 �
 
 ### 11.2 Search layer (`scout/search/`, `services/searxng`)
 
-`WebSearchProvider` adapters (SearXNG JSON API, DuckDuckGo HTML) chained with health,
-caching and an explicit "insufficient results" rule. Discovery, website resolution, person
-discovery and the enrichment `web_research` resolver use the chain first; Gemini Google Search
-grounding runs only when the chain is insufficient or the question needs reasoning over
-sources.
+Web search goes through replaceable `WebSearchProvider` adapters: self-hosted **SearXNG**
+(service D: pinned upstream image, our `settings.yml`, JSON API on the private network) and the
+free **DuckDuckGo HTML** endpoint. A `SearchChain` tries them in order, skips unconfigured or
+cooling-down providers (immediate cooldown on CAPTCHA / anomaly, after 3 errors otherwise),
+caches first pages for 6 h, and records every request in the usage ledger ($0) and in the
+`search.engine` learning stats. Each answer carries an explicit verdict — *insufficient* means
+fewer than k company domains once directories, social networks, media and listicles are dropped
+(discovery), or no result naming the target company (lookups). **Gemini Google Search grounding
+runs only when the free search is insufficient.**
+
+* Discovery: the `web_search` source uses SearXNG, then DuckDuckGo; `gemini_search` first runs
+  the same segment through free search and skips Gemini when it already yields
+  ≥ `SEARCH_MIN_COMPANIES` company domains (the router therefore never selects `gemini_search`
+  without `web_search`, unless the user excluded web search).
+* Website resolution: DNS-guessed domains first, then free-search candidates; identity is always
+  proven on the site (registry id / phone / name + city), never accepted on search evidence.
+* People: public-profile titles and press snippets (`search_snippet` provenance, modest
+  confidence, LinkedIn never fetched) before grounded research.
+* Enrichment `web_research`: search snippets + a robots-checked fetch of the top results with
+  the cheap extractor model, accepting only quotes found verbatim in those sources; otherwise
+  grounded research.
+
+`GEMINI_SEARCH_FALLBACK_ONLY=false` restores the previous behaviour, and without `SEARXNG_URL`
+lookups behave as before. SearXNG is AGPL-3.0: it runs unmodified as a separate process and the API
+is a plain HTTP client (any patch to SearXNG itself would have to be published).
 
 ### 11.3 Email Intelligence Engine (`scout/email/`)
 
@@ -448,13 +468,29 @@ per domain with an SMTP health monitor, explainable confidence and statuses. See
 
 ### 11.4 Empirical Source Scoring (`scout/learning/`)
 
-`resolver_stats` keeps, per (dimension, key) — e.g. `people.source/official_team_page`,
-`search.engine/searxng`, `enrich.resolver/semantic_classifier`, `crawl.tier/scrapling_fetcher`,
-email resolvers / patterns / techniques — attempts, successes (coverage), confirmed correct /
-wrong, latency and cost. Precision and coverage are Beta-smoothed around priors kept in one
-place (`learning/priors.py`); routing, fallback order, enrichment planning and confidence blend
-the learned values once enough evidence exists. Outcomes come from SMTP verdicts, user
-corrections in the table and benchmark ground truth.
+Source quality is learned, not hard-coded. Every resolver / source records into
+`resolver_stats (dimension, key)`: attempts, successes (coverage), confirmed correct / wrong /
+inconclusive outcomes, latency and cost (`scout.learning.stats`: never raises; the snapshot is
+cached 5 min with a last-good fallback, so a stats outage never blocks resolution or delivery).
+Dimensions: `discovery.source`, `people.source`, `enrich.resolver`, `search.engine`, `crawl.tier`
+and the email engine's `resolver / source / pattern / technique / provider`.
+
+* **Ground truth** comes from SMTP verdicts, user corrections (an overridden cell, person field
+  or email marks the source that produced the old value wrong and `user` correct; a corrected
+  email also becomes a `user` sample that teaches the domain convention), review approvals,
+  qualified vs off-ICP discovery candidates, and the benchmark harness (`record_outcome`).
+* **Estimates**: starting values live only in `scout.learning.priors`; a key stays on its prior
+  until it has 10 judged outcomes (precision) or 30 attempts (coverage / latency / cost), then
+  Beta smoothing with 20 pseudo-observations.
+* **Decisions** (`scout.learning.routing`): the discovery router multiplies each source's score
+  by `clip((p̂·ĉ)/(p₀·c₀), 0.5, 1.5)`; people and enrichment confidences shift in log-odds by
+  `logit(p̂) − logit(p₀)`; the enrichment planner orders interchangeable resolvers by expected
+  yield per dollar and gives the AI planner the observed reliability; once evidence exists, 10 %
+  of routing decisions explore through a seeded Thompson draw so new sources keep being tried.
+* `GET /v1/learning/sources` (admin) and the "Source reliability" block on Sources & health show
+  counts, smoothed and raw precision with Wilson 90 % intervals and the evidence level.
+  Everything sits behind `empirical_routing_enabled`; with no data, behaviour is exactly the
+  previous deterministic one. Counters are global (aggregated counts, no lead data).
 
 ### 11.5 Benchmark Harness (`scout/benchmark/`, `/benchmark`)
 

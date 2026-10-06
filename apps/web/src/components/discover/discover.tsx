@@ -1,16 +1,18 @@
 "use client";
 
-import { Badge, Button, cn, Kbd, Spinner } from "@scout/design-system";
-import type { CampaignDefinition, ParseOut } from "@scout/schemas";
+import { Badge, Button, cn, Kbd, ShimmerText, Spinner } from "@scout/design-system";
+import type { CampaignDefinition } from "@scout/schemas";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { ArrowUp, Database, MessageSquare, Pencil, Play, Radar } from "lucide-react";
+import { ArrowUp, Check, Database, MessageSquare, Pencil, Play, Radar } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import type { ClarifyAnswer, ClarifyQuestion } from "@/components/chat/clarify-card";
 import { StatusText } from "@/components/chat/tool-cards";
+import { useLive } from "@/components/shell/live-events";
 import { api } from "@/lib/api";
 import { n, relTime } from "@/lib/format";
 import { qk, useCampaigns, useMe, type CampaignStatus } from "@/lib/queries";
@@ -24,7 +26,17 @@ const EXAMPLES = [
   "Only new agencies I have never scraped, offering TikTok Ads",
 ];
 
-/** Empty workspace (spec §126) + first-run flow (§127): describe → compact interpretation → start. */
+interface PlanOut {
+  definition: CampaignDefinition;
+  interpretation: { label: string; value: string }[];
+  parser: string;
+  lang: "fr" | "en";
+  questions: ClarifyQuestion[];
+  answered: string[];
+}
+
+/** Empty workspace (spec §126) + first-run flow (§127): describe → compact interpretation (+ ≤ 3 questions that
+ * sharpen it, answered with one tap) → start. */
 export function Discover() {
   const router = useRouter();
   const qc = useQueryClient();
@@ -33,7 +45,10 @@ export function Discover() {
   const setChatDraft = useUI((s) => s.setChatDraft);
   const [prompt, setPrompt] = useState("");
   const [parsing, setParsing] = useState(false);
-  const [parsed, setParsed] = useState<ParseOut | null>(null);
+  const [parsed, setParsed] = useState<PlanOut | null>(null);
+  const [answers, setAnswers] = useState<ClarifyAnswer[]>([]);
+  const [refining, setRefining] = useState(false);
+  const liveCampaigns = useLive((s) => s.campaigns);
   const [starting, setStarting] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -45,8 +60,9 @@ export function Discover() {
     if (text.length < 3 || parsing) return;
     setParsing(true);
     setParsed(null);
+    setAnswers([]);
     try {
-      setParsed(await api<ParseOut>("campaigns/parse", { body: { prompt: text } }));
+      setParsed(await api<PlanOut>("campaigns/plan", { body: { prompt: text } }));
     } catch (e) {
       const err = e as Error & { hint?: string };
       toast.error(err.message, err.hint ? { description: err.hint } : undefined);
@@ -55,10 +71,24 @@ export function Discover() {
     }
   }
 
+  async function answer(q: ClarifyQuestion, value: string, label: string) {
+    const next = [...answers.filter((a) => a.id !== q.id), { id: q.id, value, label, question: q.text }];
+    setAnswers(next);
+    setRefining(true);
+    try {
+      setParsed(await api<PlanOut>("campaigns/plan", { body: { prompt: prompt.trim(), answers: next } }));
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setRefining(false);
+    }
+  }
+
   async function start(definition: CampaignDefinition) {
     setStarting(true);
     try {
-      const c = await api<CampaignStatus>("campaigns", { body: { prompt: prompt.trim(), definition, start: true } });
+      const summary = answers.map((a) => a.label ?? a.value).join(" · ");
+      const c = await api<CampaignStatus>("campaigns", { body: { prompt: prompt.trim() + (summary ? ` · ${summary}` : ""), definition, start: true } });
       void qc.invalidateQueries({ queryKey: qk.campaigns });
       void qc.invalidateQueries({ queryKey: qk.lists });
       toast.success("Discovery started", { description: "Qualified leads will appear as they are verified." });
@@ -141,15 +171,50 @@ export function Discover() {
               <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
                 <Radar className="size-4 text-accent" />
                 <span className="text-body font-medium text-fg">{parsed.definition.name || "New search"}</span>
-                {parsed.parser !== "ai" && (
+                {parsed.parser !== "gemini" && (
                   <Badge tone="muted" title="Parsed without AI (deterministic rules)">
                     rules
                   </Badge>
                 )}
               </div>
-              <dl className="grid grid-cols-[120px_1fr] gap-x-4 gap-y-1.5 px-4 py-3 text-body">
+              {parsed.questions.length > 0 && (
+                <div className="space-y-2 border-b border-line px-4 py-3">
+                  <p className="text-micro font-medium uppercase tracking-wide text-fg-3">
+                    {parsed.lang === "fr" ? "Préciser la recherche (optionnel)" : "Sharpen the search (optional)"}
+                    {refining && <Spinner size={10} className="ml-2 inline" />}
+                  </p>
+                  {parsed.questions.map((q) => {
+                    const chosen = answers.find((a) => a.id === q.id)?.value;
+                    return (
+                      <div key={q.id} className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label={q.text}>
+                        <span className="mr-1 w-full text-meta text-fg-2 sm:w-auto">{q.text}</span>
+                        {q.options.map((o) => (
+                          <button
+                            key={o.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={chosen === o.value}
+                            disabled={refining}
+                            onClick={() => void answer(q, o.value, o.label)}
+                            className={cn(
+                              "press inline-flex h-6 items-center gap-1 rounded-sm px-2 text-meta transition-colors focus-visible:shadow-focus",
+                              chosen === o.value
+                                ? "bg-accent-soft font-medium text-accent-strong shadow-[inset_0_0_0_1px_var(--border-focus)]"
+                                : "text-fg-2 shadow-[inset_0_0_0_1px_var(--border-strong)] hover:bg-surface-2 hover:text-fg",
+                            )}
+                          >
+                            {chosen === o.value && <Check className="size-3" />}
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <dl className={cn("grid grid-cols-[120px_1fr] gap-x-4 gap-y-1.5 px-4 py-3 text-body transition-opacity", refining && "opacity-60")}>
                 {parsed.interpretation.map((i) => (
-                  <div key={`${i.label}:${i.value}`} className="contents">
+                  <div key={`${i.label}:${i.value}`} className="contents animate-fade-in">
                     <dt className="text-fg-3">{i.label}</dt>
                     <dd className="text-fg">{i.value}</dd>
                   </div>
@@ -159,7 +224,7 @@ export function Discover() {
                 <Button variant="ghost" onClick={() => setChatDraft(`${prompt.trim()}\n\nChange: `)}>
                   <Pencil /> Refine in chat
                 </Button>
-                <Button variant="primary" disabled={starting} onClick={() => void start(parsed.definition)}>
+                <Button variant="primary" className="press" disabled={starting || refining} onClick={() => void start(parsed.definition)}>
                   {starting ? <Spinner size={12} className="text-accent-contrast" /> : <Play />} Start discovery
                 </Button>
               </div>
@@ -188,16 +253,25 @@ export function Discover() {
             <div className="mt-10">
               <h2 className="mb-1.5 text-micro font-medium uppercase tracking-wide text-fg-3">Recent searches</h2>
               <div className="divide-y divide-line rounded-md shadow-[inset_0_0_0_1px_var(--border-subtle)]">
-                {recent.map((c) => (
-                  <Link key={c.id} href={c.target_list_id ? `/lists/${c.target_list_id}` : `/campaigns/${c.id}`} className="flex items-center gap-3 px-3 py-2 hover:bg-surface-2">
-                    <span className="min-w-0 flex-1 truncate text-body text-fg">{c.name}</span>
-                    <span className="tabular text-meta text-fg-2">
-                      {n(c.qualified)} / {n(c.target)}
-                    </span>
-                    <StatusText status={c.status} />
-                    <span className="w-16 text-right text-meta text-fg-3">{relTime(c.created_at)}</span>
-                  </Link>
-                ))}
+                {recent.map((c) => {
+                  const lv = liveCampaigns[c.id];
+                  const status = lv?.status ?? c.status;
+                  const running = status === "running" || status === "planning";
+                  return (
+                    <Link
+                      key={c.id}
+                      href={c.target_list_id ? `/lists/${c.target_list_id}` : `/campaigns/${c.id}`}
+                      className="flex items-center gap-3 px-3 py-2 transition-colors hover:bg-surface-2"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-body text-fg">{running ? <ShimmerText>{c.name}</ShimmerText> : c.name}</span>
+                      <span className="tabular text-meta text-fg-2">
+                        {n(Math.max(lv?.qualified ?? 0, c.qualified))} / {n(lv?.target ?? c.target)}
+                      </span>
+                      <StatusText status={status} />
+                      <span className="w-16 text-right text-meta text-fg-3">{relTime(c.created_at)}</span>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -144,7 +144,8 @@ export const useLive = create<LiveState>()((set) => ({
         if (Object.keys(keep).length) flash[row] = keep;
       }
       const sameFresh = Object.keys(fresh).length === Object.keys(s.fresh).length;
-      const sameFlash = Object.keys(flash).length === Object.keys(s.flash).length && Object.entries(flash).every(([k, v]) => Object.keys(v).length === Object.keys(s.flash[k] ?? {}).length);
+      const sameFlash =
+        Object.keys(flash).length === Object.keys(s.flash).length && Object.entries(flash).every(([k, v]) => Object.keys(v).length === Object.keys(s.flash[k] ?? {}).length);
       return sameFresh && sameFlash ? s : { fresh: sameFresh ? s.fresh : fresh, flash: sameFlash ? s.flash : flash };
     }),
 }));
@@ -260,7 +261,11 @@ export function useLiveEvents() {
         if (!id) return;
         const status = e.payload.status as string;
         const prev = useLive.getState().campaigns[id]?.status;
-        live.patchCampaign(id, { status, reason: (e.payload.reason as string | undefined) ?? (status === "running" ? undefined : useLive.getState().campaigns[id]?.reason), lastEventType: "campaign.status" });
+        live.patchCampaign(id, {
+          status,
+          reason: (e.payload.reason as string | undefined) ?? (status === "running" ? undefined : useLive.getState().campaigns[id]?.reason),
+          lastEventType: "campaign.status",
+        });
         if (TERMINAL.includes(status)) live.clearCandidates(id);
         void qc.invalidateQueries({ queryKey: qk.campaign(id) });
         void qc.invalidateQueries({ queryKey: ["campaign-live", id] });

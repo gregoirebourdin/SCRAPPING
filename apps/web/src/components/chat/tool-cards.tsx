@@ -1,16 +1,18 @@
 "use client";
 
-import { Badge, Button, cn, ProgressBar } from "@scout/design-system";
+import { Badge, Button, cn, ProgressBar, ShimmerText, Spinner } from "@scout/design-system";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, Columns3, Download, ListChecks, Pause, Play, Radar, Undo2, X } from "lucide-react";
+import { AlertCircle, Check, Columns3, Download, ListChecks, Pencil, Play, Radar, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { ConnIndicator, Funnel, RunActions, RunStatusPill, StallNotice } from "@/components/campaign/run-header";
+import { stageLine, STOPPED, useRunView } from "@/components/campaign/run-state";
 import { useLive } from "@/components/shell/live-events";
 import { api, download } from "@/lib/api";
 import { n } from "@/lib/format";
-import { qk, useCampaign } from "@/lib/queries";
+import { qk } from "@/lib/queries";
 import { useUI } from "@/lib/store";
 
 type Card = Record<string, unknown> & { kind: string };
@@ -117,6 +119,8 @@ export function ToolCard({ card, status }: { card: Card; status?: string }) {
     case "campaign_started":
     case "campaign_progress":
       return <CampaignCard card={card} />;
+    case "campaign_amended":
+      return <AmendedCard card={card} />;
     case "column_created":
       return <ColumnCard card={card} />;
     case "enrichment_progress":
@@ -189,79 +193,206 @@ function OpenLead({ id, entityType = "person" }: { id: string; entityType?: stri
   );
 }
 
-const ACTIVE = ["running", "planning"];
+const LABELS_FR: Record<string, string> = {
+  Target: "Objectif",
+  Companies: "Entreprises",
+  Location: "Lieu",
+  Size: "Taille",
+  People: "Contacts",
+  Email: "Email",
+  "Previously seen": "Déjà vus",
+  Website: "Site web",
+  Technology: "Techno",
+  Column: "Colonne",
+};
 
-function CampaignCard({ card }: { card: Card }) {
-  const id = String(card.campaign_id ?? "");
-  const q = useCampaign(id || null);
-  const live = useLive((s) => s.campaigns[id]);
-  const qc = useQueryClient();
-  const data = q.data;
-  const status = live?.status ?? data?.status ?? "planning";
-  const qualified = live?.qualified ?? data?.stats?.qualified ?? 0;
-  const target = Number(card.target ?? data?.target ?? 0);
-  const interp = (card.interpretation as { label: string; value: string }[] | undefined) ?? data?.interpretation ?? [];
-  async function act(a: "pause" | "resume" | "cancel") {
-    try {
-      await api(`campaigns/${id}/${a}`, { method: "POST" });
-      qc.invalidateQueries({ queryKey: qk.campaign(id) });
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
+function Criteria({ items, lang }: { items: { label: string; value: string }[]; lang: "fr" | "en" }) {
+  return (
+    <dl className="grid grid-cols-[92px_1fr] gap-x-2 gap-y-0.5 text-meta">
+      {items.map((i) => (
+        <div key={i.label + i.value} className="contents">
+          <dt className="text-fg-3">{lang === "fr" ? (LABELS_FR[i.label] ?? i.label) : i.label}</dt>
+          <dd className="min-w-0 truncate text-fg-2" title={i.value}>
+            {i.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** "Here is what I'll search" — nothing runs until Launch. Launch is idempotent server-side. */
+export function PlanCard({ card, onLaunch, onEdit }: { card: Card; onLaunch?: (card: Card) => Promise<void>; onEdit?: (text: string) => void }) {
+  const lang = card.lang === "fr" ? "fr" : "en";
+  const fr = lang === "fr";
+  const [busy, setBusy] = useState(false);
+  const interp = (card.interpretation as { label: string; value: string }[]) ?? [];
+  const sources = (card.sources as string[]) ?? [];
+  const warnings = (card.warnings as string[]) ?? [];
+  const launched = Boolean(card.launched_campaign_id);
+  const superseded = Boolean(card.superseded);
+  if (launched || superseded) {
+    return (
+      <div className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-meta text-fg-3 shadow-[inset_0_0_0_1px_var(--border-subtle)] animate-fade-in">
+        {launched ? <Check className="size-3.5 text-success" /> : <Pencil className="size-3.5" />}
+        <span className="truncate">
+          {launched ? (fr ? "Plan lancé" : "Plan launched") : fr ? "Plan remplacé" : "Plan replaced"} · {String(card.name ?? "")}
+        </span>
+      </div>
+    );
   }
   return (
-    <Shell
-      icon={<Radar />}
-      title={String(card.title ?? data?.name ?? "Campaign")}
-      actions={
-        <span className="flex items-center gap-0.5">
-          {ACTIVE.includes(status) && (
-            <Button size="xs" variant="ghost" onClick={() => act("pause")}>
-              <Pause /> Pause
-            </Button>
-          )}
-          {status === "paused" && (
-            <Button size="xs" variant="ghost" onClick={() => act("resume")}>
-              <Play /> Resume
-            </Button>
-          )}
-          {(ACTIVE.includes(status) || status === "paused") && (
-            <Button size="xs" variant="ghost" onClick={() => act("cancel")}>
-              <X /> Cancel
-            </Button>
-          )}
-          <Link href={`/campaigns/${id}`} className="rounded-sm px-1.5 py-0.5 text-meta text-accent-strong hover:bg-surface-2">
-            View
-          </Link>
+    <div className="lift rounded-md bg-surface-1 shadow-[inset_0_0_0_1px_var(--border-strong)] animate-fade-in">
+      <div className="flex items-center gap-2 px-3 pt-2.5">
+        <span className="grid size-5 place-items-center rounded-xs bg-accent-soft text-accent [&_svg]:size-3.5">
+          <Radar />
         </span>
-      }
-    >
-      {interp.length > 0 && card.kind === "campaign_started" && (
-        <dl className="mb-2 grid grid-cols-[88px_1fr] gap-x-2 gap-y-0.5 text-meta">
-          {interp.map((i) => (
-            <div key={i.label + i.value} className="contents">
-              <dt className="text-fg-3">{i.label}</dt>
-              <dd className="truncate text-fg-2" title={i.value}>
-                {i.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      <div className="flex items-baseline justify-between text-meta">
-        <span className="text-fg-2">
-          <span className="tabular font-medium text-fg">{n(qualified)}</span> / {n(target)} qualified
-        </span>
-        <StatusText status={status} />
+        <div className="min-w-0">
+          <div className="text-micro font-medium uppercase tracking-wide text-fg-3">{String(card.title ?? "")}</div>
+          <div className="truncate text-body font-medium text-fg">{String(card.name ?? "")}</div>
+        </div>
       </div>
-      <ProgressBar value={qualified} max={Math.max(1, target)} className="mt-1.5" tone={status === "completed" ? "success" : "accent"} />
-      {(data?.stop_reason || live?.reason) && !ACTIVE.includes(status) && <p className="mt-1.5 text-meta text-fg-3">{live?.reason ?? data?.stop_reason}</p>}
-      {ACTIVE.includes(status) && (
-        <p className="mt-1.5 text-meta text-fg-3">
-          {n(live?.raw ?? data?.stats?.raw_discovered ?? 0)} discovered · {n(live?.evaluated ?? data?.stats?.companies_evaluated ?? 0)} evaluated
-          {live?.eta_minutes ? ` · ~${live.eta_minutes} min left` : ""}
+      <div className="space-y-2 px-3 py-2.5">
+        <Criteria items={interp} lang={lang} />
+        {sources.length > 0 && (
+          <p className="text-meta text-fg-3">
+            {fr ? "Sources : " : "Sources: "}
+            <span className="text-fg-2">{sources.join(" · ")}</span>
+          </p>
+        )}
+        {warnings.map((w) => (
+          <p key={w} className="flex gap-1.5 text-meta text-warning">
+            <AlertCircle className="mt-0.5 size-3 shrink-0" />
+            {w}
+          </p>
+        ))}
+      </div>
+      <div className="flex items-center gap-1.5 border-t border-line px-3 py-2">
+        <Button size="xs" variant="ghost" className="press" disabled={busy} onClick={() => onEdit?.(String(card.original_request ?? card.request ?? ""))}>
+          <Pencil /> {fr ? "Modifier" : "Edit"}
+        </Button>
+        <span className="flex-1" />
+        <Button
+          size="xs"
+          variant="primary"
+          className="press"
+          disabled={busy || !onLaunch}
+          onClick={async () => {
+            if (busy || !onLaunch) return;
+            setBusy(true);
+            try {
+              await onLaunch(card);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? <Spinner size={11} className="text-accent-contrast" /> : <Play />}
+          {fr ? "Lancer la recherche" : "Launch search"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** The live run, right in the conversation: current stage (shimmer), counts, progress, pause / resume /
+ * resume with changes, stall + stop explanations. */
+function CampaignCard({ card }: { card: Card }) {
+  const id = String(card.campaign_id ?? "");
+  const lang = card.lang === "fr" ? "fr" : "en";
+  const fr = lang === "fr";
+  const run = useRunView(id || null);
+  const [showCriteria, setShowCriteria] = useState(false);
+  if (!run || !run.loaded) {
+    return (
+      <Shell icon={<Radar />} title={String(card.title ?? "Campaign")}>
+        <span className="block h-2.5 w-2/3 rounded-xs skeleton-shimmer" />
+      </Shell>
+    );
+  }
+  const stage = stageLine(run, lang);
+  const interp = (card.interpretation as { label: string; value: string }[] | undefined) ?? run.interpretation;
+  const terminal = STOPPED.includes(run.status);
+  return (
+    <div className="rounded-md bg-surface-1 shadow-[inset_0_0_0_1px_var(--border-subtle)] animate-fade-in">
+      <div className="flex items-center gap-2 px-2.5 pt-2">
+        <span className="grid size-5 shrink-0 place-items-center rounded-xs bg-surface-3 text-fg-2 [&_svg]:size-3.5">
+          <Radar />
+        </span>
+        <div className="min-w-0 flex-1 truncate text-body font-medium text-fg">{run.name}</div>
+        <RunStatusPill status={run.status} stuck={run.stall === "stuck"} lang={lang} />
+      </div>
+      <div className="space-y-1.5 px-2.5 pb-2.5 pt-1.5">
+        {card.event ? <p className="text-meta text-fg-3">{eventLabel(String(card.event), lang)}</p> : null}
+        <p className="truncate text-body" aria-live="polite">
+          {stage.active ? (
+            <ShimmerText>{stage.text}</ShimmerText>
+          ) : (
+            <span className={cn(stage.tone === "success" ? "text-success" : stage.tone === "danger" ? "text-danger" : stage.tone === "warning" ? "text-warning" : "text-fg-2")}>
+              {stage.text}
+            </span>
+          )}
         </p>
-      )}
+        <Funnel run={run} lang={lang} />
+        <ProgressBar value={run.qualified} max={Math.max(1, run.target)} tone={run.status === "completed" ? "success" : "accent"} />
+        <StallNotice run={run} lang={lang} />
+        {terminal && run.reason && run.status !== "completed" && <p className="text-meta text-fg-3">{run.reason}</p>}
+        {interp.length > 0 && (
+          <div>
+            <button type="button" onClick={() => setShowCriteria((v) => !v)} className="text-meta text-fg-3 hover:text-fg-2" aria-expanded={showCriteria}>
+              {showCriteria ? (fr ? "Masquer les critères" : "Hide criteria") : fr ? "Voir les critères" : "Show criteria"}
+            </button>
+            {showCriteria && (
+              <div className="mt-1 animate-fade-in">
+                <Criteria items={interp} lang={lang} />
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-1 pt-0.5">
+          <ConnIndicator run={run} lang={lang} compact />
+          <span className="flex-1" />
+          <RunActions run={run} lang={lang} showOpen />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function eventLabel(e: string, lang: "fr" | "en"): string {
+  const fr: Record<string, string> = { Paused: "Mise en pause", Resumed: "Reprise", Cancelled: "Arrêtée" };
+  return lang === "fr" ? (fr[e] ?? e) : e;
+}
+
+function AmendedCard({ card }: { card: Card }) {
+  const lang = card.lang === "fr" ? "fr" : "en";
+  const fr = lang === "fr";
+  const changes = (card.changes as { field: string; label: string; before: string; after: string }[]) ?? [];
+  const blocked = card.resume_blocked as { message: string; hint?: string } | null;
+  return (
+    <Shell icon={<Check />} tone={blocked ? "neutral" : "success"} title={(fr ? "Recherche modifiée · " : "Search updated · ") + String(card.title ?? "")}>
+      <ul className="space-y-0.5">
+        {changes.map((c) => (
+          <li key={c.field} className="grid grid-cols-[84px_1fr] gap-2 text-meta">
+            <span className="text-fg-3">{lang === "fr" ? (LABELS_FR[c.label] ?? c.label) : c.label}</span>
+            <span className="min-w-0 truncate">
+              <span className="text-fg-3 line-through decoration-fg-3/50">{c.before}</span> <span className="text-fg-3">→</span>{" "}
+              <span className="font-medium text-accent-strong">{c.after}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className={cn("mt-1.5 text-meta", blocked ? "text-warning" : "text-fg-3")}>
+        {blocked
+          ? `${blocked.message}${blocked.hint ? ` — ${blocked.hint}` : ""}`
+          : card.resumed
+            ? fr
+              ? "La recherche a repris."
+              : "The search resumed."
+            : fr
+              ? "Modifications enregistrées."
+              : "Changes saved."}
+      </p>
     </Shell>
   );
 }

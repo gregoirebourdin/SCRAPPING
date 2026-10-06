@@ -141,3 +141,19 @@ def test_fixture_is_used_alone(settings_env, maps, ai) -> None:
         industries=["agences marketing"], countries=["FR"], _extra={"sources": {"excluded": ["fixture"]}}
     )
     assert keys(select_sources(excluded))[0] == "fr_registry"
+
+
+def test_gemini_search_never_runs_without_the_free_web_search(maps, ai) -> None:
+    # gemini_search skips segments that free search already covers, so it must never be selected alone
+    d = defn(industries=["SaaS"], countries=["US"], _extra={"sources": {"preferred": ["gemini_search"]}})
+    for limit in (1, 2, 3):
+        sel = keys(select_sources(d, limit=limit))
+        assert "gemini_search" in sel and "web_search" in sel, (limit, sel)
+    # …unless the user excluded web search: then Gemini runs on its own as before
+    alone = defn(
+        industries=["SaaS"],
+        countries=["US"],
+        _extra={"sources": {"preferred": ["gemini_search"], "excluded": ["web_search"]}},
+    )
+    sel = keys(select_sources(alone, limit=1))
+    assert sel == ["gemini_search"]

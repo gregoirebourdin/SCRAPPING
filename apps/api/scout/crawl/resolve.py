@@ -303,20 +303,20 @@ async def resolve_website(
 
     exists = await asyncio.gather(*(dns_exists(d) for d in candidates), return_exceptions=True)
     live = [d for d, ok in zip(candidates, exists, strict=True) if ok is True]
-    for domain in live:
-        if fetched >= MAX_FETCHED_DOMAINS or time.monotonic() > deadline:
-            break
+
+    async def attempt(domain: str, origin: str) -> None:
+        nonlocal best, fetched
         fetched += 1
         checked.append(domain)
         resp = await _fetch_home(domain)
         if resp is None:
-            continue
+            return
         final_domain = registrable_domain(resp.final_url) or domain
         if final_domain in NON_COMPANY_DOMAINS:
-            continue
+            return
         parsed = parse_html(resp.text, resp.final_url, is_home=False)
         if detect_parked(resp.text, parsed, resp.final_url):
-            continue
+            return
         conf, evidence, method = _verify(
             parsed, name=name, city=city, postal_code=postal_code, registry_id=registry_id, phone=phone
         )
@@ -340,7 +340,9 @@ async def resolve_website(
                     )
                     if lconf > conf:
                         conf, evidence, method, source = lconf, lev, lmethod, lresp.final_url
-        log.info("website_resolution_candidate", domain=final_domain, confidence=conf, method=method)
+        log.info(
+            "website_resolution_candidate", domain=final_domain, confidence=conf, method=method, origin=origin
+        )
         if conf >= MIN_CONFIDENCE and (best is None or conf > best.confidence):
             home = urlsplit(resp.final_url)
             best = ResolvedWebsite(
@@ -348,10 +350,34 @@ async def resolve_website(
                 domain=final_domain,
                 confidence=conf,
                 evidence=f"{evidence} ({source})",
-                method=f"domain_guess+{method}",
+                method=f"{origin}+{method}",
             )
-        if best is not None and best.confidence >= STOP_CONFIDENCE:
+
+    def done() -> bool:
+        return (
+            (best is not None and best.confidence >= STOP_CONFIDENCE)
+            or fetched >= MAX_FETCHED_DOMAINS
+            or time.monotonic() > deadline
+        )
+
+    for domain in live:
+        if done():
             break
+        await attempt(domain, "domain_guess")
+    if not done():
+        # free web search (SearXNG) proposes more candidates; identity is proven on the site exactly as above
+        try:
+            from scout.search.website import search_domain_candidates
+
+            found = await search_domain_candidates(name, city=city, country=country)
+        except Exception as exc:  # search is optional: never break resolution
+            log.info("website_resolution_search_failed", error=str(exc))
+            found = []
+        for domain in found:
+            if done():
+                break
+            if domain not in checked:
+                await attempt(domain, "web_search")
     if best is not None:
         best.checked = checked
     return best

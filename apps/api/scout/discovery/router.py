@@ -149,6 +149,12 @@ def select_sources(
     scored.sort(key=lambda x: -x[0])
     n_pref = sum(1 for _, s in scored if s.key in preferred)
     chosen = scored[: max(limit, n_pref)]
+    # gemini_search skips segments the free web search already covers (scout.search): it may only run alongside it
+    keys = {s.key for _, s in chosen}
+    if "gemini_search" in keys and "web_search" not in keys:
+        web = next(((sc, s) for sc, s in scored if s.key == "web_search"), None)
+        if web is not None:
+            chosen.append(web)
 
     out: list[tuple[DiscoverySource, int]] = []
     prev = 10_000

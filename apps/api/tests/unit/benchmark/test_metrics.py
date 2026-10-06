@@ -283,7 +283,7 @@ def test_catch_all_truth_from_status_and_unknown_engine_verdict_counts_as_wrong(
 
 
 def test_aggregate_empty_run_reports_no_rates() -> None:
-    m = aggregate([], mode="registry")
+    m = aggregate([], mode="live")
     assert m["items"]["value"] == 0
     assert "person_precision" not in m and "email_precision" not in m
     assert m["avg_processing_ms"]["value"] is None
@@ -366,6 +366,7 @@ def test_aggregate_registry_mode_has_coverage_but_no_throughput() -> None:
     )
     assert m["company_coverage"]["value"] == 1.0
     assert "emails_resolved_per_minute" not in m and "cost_per_email" not in m
+    assert "cost_per_qualified_lead" not in m  # leads were produced earlier at an unmeasured cost
     assert m["cost_usd"]["value"] == 0
 
 

@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
 from scout.api.deps import Ctx
+from scout.chat.clarify import ClarifyAnswer
 from scout.db.engine import session_scope
 from scout.db.enums import EntityType
 from scout.db.models import CampaignTemplate, List
@@ -125,6 +126,38 @@ async def clarify(body: ClarifyIn, ctx: Ctx) -> dict[str, Any]:
 
     questions, lang, missing = build_questions(body.prompt)
     return {"questions": [q.model_dump() for q in questions], "lang": lang, "missing": missing}
+
+
+class PlanIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    prompt: str = Field(min_length=3, max_length=4000)
+    answers: list[ClarifyAnswer] = Field(default_factory=list, max_length=8)
+    list_id: uuid.UUID | None = None
+
+
+@router.post("/campaigns/plan")
+async def plan(body: PlanIn, ctx: Ctx) -> dict[str, Any]:
+    """Parse a request into a definition, apply clarification answers as structured overrides, and return the
+    questions that are still worth asking (the Discover page's version of the chat clarification)."""
+    from scout.chat.clarify import apply_answers, build_questions
+
+    pc = await build_parse_context(ctx, body.list_id, [])
+    defn, parser = await parse_prompt(body.prompt, pc)
+    defn, leftovers = apply_answers(defn, body.answers)
+    if leftovers:
+        defn, parser = await parse_prompt(body.prompt + "\n" + "\n".join(leftovers), pc)
+        defn, _ = apply_answers(defn, body.answers)
+    questions, lang, _missing = build_questions(body.prompt)
+    answered = {a.id for a in body.answers}
+    names = {v: k for k, v in pc.lists.items()}
+    return {
+        "definition": defn.model_dump(mode="json"),
+        "interpretation": [i.model_dump() for i in interpret(defn, names)],
+        "parser": parser,
+        "lang": lang,
+        "questions": [q.model_dump() for q in questions],
+        "answered": sorted(answered),
+    }
 
 
 class AmendIn(CampaignAmendment):

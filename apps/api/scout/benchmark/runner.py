@@ -377,6 +377,10 @@ async def execute(run_id: uuid.UUID, *, slice_s: float | None = SLICE_S) -> str:
         notes.append(f"Cost cap reached: {left} item(s) not processed (not counted in the metrics).")
     elif stop_reason == "cancelled":
         notes.append(f"Cancelled: {left} item(s) not processed.")
+    if run.mode == BenchmarkMode.registry:
+        notes.append(
+            "Registry mode: times are lookup times and no cost is measured (the leads were produced earlier)."
+        )
     if run.mode == BenchmarkMode.live and cfg.email == "fast_deep":
         notes.append("Deep (SMTP) verification runs in separate jobs: its cost is not attributed to items.")
     await _finalize(run_id, notes=notes)

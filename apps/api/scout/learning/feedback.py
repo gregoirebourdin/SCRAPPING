@@ -86,6 +86,38 @@ async def cell_overridden(s: AsyncSession, strategy: str | None, previous: Any, 
 
 
 # ---------------------------------------------------------------------------------------------
+# Emails (email engine dimensions: resolver / pattern)
+# ---------------------------------------------------------------------------------------------
+_EMAIL_METHOD_RESOLVER = {
+    "published": "published_website",
+    "known_pattern": "domain_pattern",
+    "inferred_pattern": "inferred_shape",
+    "permutation": "permutation",
+    "import": "import",
+}
+
+
+def email_override_events(previous: Any, new_address: str) -> list[S.StatEvent]:
+    """Outcomes when a user sets a person's email (``previous``: the primary Email row before the edit)."""
+    if previous is None or getattr(previous, "is_user_confirmed", False):
+        return []
+    method = str(getattr(getattr(previous, "discovery_method", None), "value", "") or "")
+    resolver = _EMAIL_METHOD_RESOLVER.get(method)
+    correct = (getattr(previous, "address", "") or "").strip().lower() == (new_address or "").strip().lower()
+    events = outcome("resolver", resolver, correct) + outcome(
+        "pattern", getattr(previous, "pattern", None), correct
+    )
+    return events + outcome("resolver", "user", True) if not correct else events
+
+
+async def email_overridden(s: AsyncSession, previous: Any, new_address: str) -> None:
+    try:
+        await S.record_in(s, email_override_events(previous, new_address))
+    except Exception as exc:  # pragma: no cover - record_in never raises
+        log.info("learning.email_feedback_failed", error=str(exc))
+
+
+# ---------------------------------------------------------------------------------------------
 # Person fields
 # ---------------------------------------------------------------------------------------------
 def _obs_key(o: Any) -> str:

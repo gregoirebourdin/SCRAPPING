@@ -882,7 +882,7 @@ METRIC_DEFS: dict[str, tuple[str, str, str, str]] = {
         "Cost per qualified lead",
         "operations",
         "usd",
-        "Total cost / qualified leads.",
+        "Total cost / qualified leads (live and suite runs; not measured in registry mode).",
     ),
 }
 
@@ -1076,9 +1076,12 @@ def aggregate(
     m["p95_processing_ms"] = _value_metric("p95_processing_ms", percentile(latencies, 95), len(latencies))
     m["cost_usd"] = _value_metric("cost_usd", round(total_cost_usd, 6), items)
     m["qualified_leads"] = _value_metric("qualified_leads", c["qualified"], items)
-    m["cost_per_qualified_lead"] = _value_metric(
-        "cost_per_qualified_lead", total_cost_usd / c["qualified"] if c["qualified"] else None, c["qualified"]
-    )
+    if mode != "registry":  # registry leads were produced earlier at a cost this run did not measure
+        m["cost_per_qualified_lead"] = _value_metric(
+            "cost_per_qualified_lead",
+            total_cost_usd / c["qualified"] if c["qualified"] else None,
+            c["qualified"],
+        )
     if c["company_given"]:
         m["company_identity_given"] = _value_metric("company_identity_given", c["company_given"], items)
     rank = {k: i for i, k in enumerate(METRIC_DEFS)}

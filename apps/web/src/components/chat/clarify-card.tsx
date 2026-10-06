@@ -29,8 +29,26 @@ export interface ClarifySubmit {
 }
 
 const COPY = {
-  en: { questions: "A few details", other: "Other…", otherPh: "Type your answer", defaults: "Use defaults", skip: "Skip", go: "Continue", default: "default", answered: "Answered" },
-  fr: { questions: "Quelques précisions", other: "Autre…", otherPh: "Ta réponse", defaults: "Valeurs par défaut", skip: "Passer", go: "Continuer", default: "défaut", answered: "Répondu" },
+  en: {
+    questions: "A few details",
+    other: "Other…",
+    otherPh: "Type your answer",
+    defaults: "Use defaults",
+    skip: "Skip",
+    go: "Continue",
+    default: "default",
+    answered: "Answered",
+  },
+  fr: {
+    questions: "Quelques précisions",
+    other: "Autre…",
+    otherPh: "Ta réponse",
+    defaults: "Valeurs par défaut",
+    skip: "Passer",
+    go: "Continuer",
+    default: "défaut",
+    answered: "Répondu",
+  },
 };
 
 /** ≤ 3 questions, one round. Option chips are radio groups (arrows move, Enter/Space picks); "Other…" opens a
@@ -53,7 +71,11 @@ export function ClarifyCard({
   const uid = useId();
 
   if (card.answered || sent) {
-    const text = card.answer_text ?? Object.values(answers).map((a) => a.label ?? a.value).join(" · ");
+    const text =
+      card.answer_text ??
+      Object.values(answers)
+        .map((a) => a.label ?? a.value)
+        .join(" · ");
     return (
       <div className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-meta text-fg-3 shadow-[inset_0_0_0_1px_var(--border-subtle)] animate-fade-in">
         {sent && !card.answered ? <Spinner size={11} /> : <Check className="size-3.5 text-success" />}
@@ -89,7 +111,10 @@ export function ClarifyCard({
   }
 
   return (
-    <div className="rounded-md bg-surface-1 shadow-[inset_0_0_0_1px_var(--border-strong)] animate-fade-in" onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && submit("answers")}>
+    <div
+      className="rounded-md bg-surface-1 shadow-[inset_0_0_0_1px_var(--border-strong)] animate-fade-in"
+      onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && submit("answers")}
+    >
       <div className="flex items-center gap-2 px-3 pt-2.5 text-micro font-medium uppercase tracking-wide text-fg-3">
         <MessageCircleQuestion className="size-3.5 text-accent" />
         {t.questions} · {questions.length}
@@ -192,7 +217,9 @@ function Question({
               }}
               className={cn(
                 "press inline-flex h-7 items-center gap-1 rounded-sm px-2.5 text-meta font-medium outline-none transition-[background-color,color,box-shadow] duration-[var(--dur-1)] focus-visible:shadow-focus",
-                on ? "bg-accent-soft text-accent-strong shadow-[inset_0_0_0_1px_var(--border-focus)]" : "text-fg-2 shadow-[inset_0_0_0_1px_var(--border-strong)] hover:bg-surface-2 hover:text-fg",
+                on
+                  ? "bg-accent-soft text-accent-strong shadow-[inset_0_0_0_1px_var(--border-focus)]"
+                  : "text-fg-2 shadow-[inset_0_0_0_1px_var(--border-strong)] hover:bg-surface-2 hover:text-fg",
               )}
             >
               {on && <Check className="size-3" />}

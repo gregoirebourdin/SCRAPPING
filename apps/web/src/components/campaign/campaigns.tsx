@@ -2,7 +2,7 @@
 
 import { Badge, Button, cn, Dialog, DialogContent, Input, ProgressBar, Spinner, Tip } from "@scout/design-system";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Bookmark, CircleAlert, Pause, Play, Radar, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, Bookmark, CircleAlert, Radar, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { StatusText } from "@/components/chat/tool-cards";
 import { Block, DataTable, Metric, Page, Panel } from "@/components/common/page";
 import { useLive } from "@/components/shell/live-events";
+
+import { RunHeader } from "./run-header";
 import { TableView } from "@/components/table/table-view";
 import type { TableScope } from "@/components/table/use-rows";
 import { api } from "@/lib/api";
@@ -109,16 +111,6 @@ export function CampaignDetail({ id }: { id: string }) {
   const rate = live?.rate_per_minute ?? c.rate_per_minute;
   const eta = live?.eta_minutes ?? c.eta_minutes;
 
-  async function act(a: "pause" | "resume" | "cancel") {
-    try {
-      await api(`campaigns/${id}/${a}`, { method: "POST" });
-      void qc.invalidateQueries({ queryKey: qk.campaign(id) });
-      void qc.invalidateQueries({ queryKey: qk.campaigns });
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
   async function runAgain() {
     try {
       const t = await api<{ id: string }>("campaign-templates", { body: { name: `${c.name} (rerun ${new Date().toLocaleDateString()})`, campaign_id: id } });
@@ -152,22 +144,7 @@ export function CampaignDetail({ id }: { id: string }) {
         <h1 className="title-gradient truncate text-title tracking-[-0.01em]">{c.name}</h1>
         <StatusText status={status} />
         <div className="ml-auto flex items-center gap-1">
-          {ACTIVE.includes(status) && (
-            <Button size="sm" variant="ghost" onClick={() => void act("pause")}>
-              <Pause /> Pause
-            </Button>
-          )}
-          {status === "paused" && (
-            <Button size="sm" variant="ghost" onClick={() => void act("resume")}>
-              <Play /> Resume
-            </Button>
-          )}
-          {(ACTIVE.includes(status) || status === "paused") && (
-            <Button size="sm" variant="ghost" onClick={() => void act("cancel")}>
-              <X /> Cancel
-            </Button>
-          )}
-          {!ACTIVE.includes(status) && status !== "paused" && (
+          {status === "cancelled" && (
             <Tip content="Run the same search again — only new leads">
               <Button size="sm" variant="ghost" onClick={() => void runAgain()}>
                 <RotateCcw /> Run again
@@ -194,6 +171,7 @@ export function CampaignDetail({ id }: { id: string }) {
           )}
         </div>
       </header>
+      <RunHeader campaignId={id} />
       <div className="max-h-[52%] shrink-0 overflow-y-auto border-b border-line">
         <div className="grid gap-4 px-4 py-4 lg:grid-cols-[1fr_340px]">
           <div className="min-w-0 space-y-4">

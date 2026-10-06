@@ -1,8 +1,8 @@
 "use client";
 
-import { cn, IconButton, Kbd, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Tip } from "@scout/design-system";
+import { Button, cn, IconButton, Kbd, Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Spinner, Tip } from "@scout/design-system";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, ChevronDown, History, PanelRightClose, Plus, Square } from "lucide-react";
+import { AlertTriangle, ArrowRight, ArrowUp, Check, ChevronDown, History, PanelRightClose, Plus, RotateCcw, Square } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,11 +12,13 @@ import { api, download, readSSE } from "@/lib/api";
 import { qk } from "@/lib/queries";
 import { useScope, useUI } from "@/lib/store";
 
+import { ClarifyCard, type ClarifySubmit } from "./clarify-card";
 import { Markdown } from "./markdown";
-import { ToolCard } from "./tool-cards";
+import { type ChatStep, StepList } from "./steps";
+import { PlanCard, ToolCard } from "./tool-cards";
 
 export interface ChatPart {
-  type: "text" | "card" | "ui_effect" | "confirm" | "error" | "tool_call";
+  type: "text" | "card" | "ui_effect" | "confirm" | "error" | "tool_call" | "steps";
   text?: string;
   card?: Record<string, unknown> & { kind: string };
   status?: string;
@@ -25,8 +27,24 @@ export interface ChatPart {
   title?: string;
   summary?: string;
   message?: string;
+  hint?: string;
+  retryable?: boolean;
   tool?: string;
   call_id?: string;
+  steps?: ChatStep[];
+  danger?: boolean;
+  changes?: { field: string; label: string; before: string; after: string }[];
+  warnings?: string[];
+  confirm_label?: string;
+  kind?: string;
+}
+
+interface Clarification {
+  action_id: string;
+  answers: { id: string; value: string; label?: string; question?: string }[];
+  use_defaults?: boolean;
+  skipped?: boolean;
+  launch?: boolean;
 }
 
 interface ChatMessage {
@@ -35,6 +53,31 @@ interface ChatMessage {
   content: string;
   parts: ChatPart[];
   pending?: boolean;
+  /** what was sent (for Retry) */
+  clarification?: Clarification;
+}
+
+function upsertStep(parts: ChatPart[], step: Partial<ChatStep> & { id: string }): ChatPart[] {
+  const idx = parts.findIndex((p) => p.type === "steps");
+  const steps = idx >= 0 ? [...(parts[idx]!.steps ?? [])] : [];
+  const i = steps.findIndex((x) => x.id === step.id);
+  const merged = { ...(i >= 0 ? steps[i] : { label: "", status: "active" }), ...step, label: step.label || (i >= 0 ? steps[i]!.label : "") } as ChatStep;
+  if (i >= 0) steps[i] = merged;
+  else steps.push(merged);
+  const part: ChatPart = { type: "steps", steps };
+  return idx >= 0 ? parts.map((p, j) => (j === idx ? part : p)) : [part, ...parts];
+}
+
+function patchCard(parts: ChatPart[], actionId: string, patch: Record<string, unknown>): ChatPart[] {
+  let hit = false;
+  const next = parts.map((p) => {
+    if (p.type === "card" && p.card?.action_id === actionId) {
+      hit = true;
+      return { ...p, card: { ...p.card, ...patch } };
+    }
+    return p;
+  });
+  return hit ? next : parts;
 }
 
 const EXAMPLES = [
@@ -78,6 +121,7 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
   const [input, setInput] = useState(() => useUI.getState().chatDraft ?? "");
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const sendingRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
@@ -200,11 +244,12 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
     [qc, router],
   );
 
-  async function send(text: string) {
+  async function send(text: string, clarification?: Clarification) {
     const content = text.trim();
-    if (!content || streaming) return;
+    if (!content || streaming || sendingRef.current) return;
+    sendingRef.current = true; // double Enter / double click: one message
     setInput("");
-    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content, parts: [] };
+    const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: "user", content, parts: [], clarification };
     const asst: ChatMessage = { id: `a-${Date.now()}`, role: "assistant", content: "", parts: [], pending: true };
     setMessages((m) => [...m, userMsg, asst]);
     setStreaming(true);
@@ -215,17 +260,17 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
       const res = await fetch("/api/v1/chat/messages", {
         method: "POST",
         headers: { "content-type": "application/json", accept: "text/event-stream" },
-        body: JSON.stringify({ content, thread_id: threadId, context: getContext() }),
+        body: JSON.stringify({ content, thread_id: threadId, context: getContext(), ...(clarification ? { clarification } : {}) }),
         signal: ctrl.signal,
       });
       if (!res.ok) {
-        let msg = `The assistant is unavailable (${res.status})`;
+        let msg = res.status === 502 ? "The Research API is unreachable. Your workspace is unchanged — try again." : `The assistant is unavailable (${res.status})`;
         try {
           msg = (await res.json()).error?.message ?? msg;
         } catch {
           /* ignore */
         }
-        update((m) => ({ ...m, pending: false, parts: [...m.parts, { type: "error", message: msg }] }));
+        update((m) => ({ ...m, pending: false, parts: [...m.parts, { type: "error", message: msg, retryable: true }] }));
         return;
       }
       for await (const ev of readSSE(res, ctrl.signal)) {
@@ -235,6 +280,8 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
             setThreadId(data.thread_id);
             qc.invalidateQueries({ queryKey: qk.threads(listId) });
           }
+        } else if (ev.event === "step") {
+          update((m) => ({ ...m, parts: upsertStep(m.parts, data) }));
         } else if (ev.event === "text") {
           update((m) => {
             const parts = [...m.parts];
@@ -250,25 +297,88 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
             ...m,
             parts: m.parts.filter((p) => !(p.type === "tool_call" && p.call_id === data.call_id)).concat(data.card ? [{ type: "card", card: data.card, status: data.status }] : []),
           }));
+        } else if (ev.event === "card_update") {
+          setMessages((all) => all.map((m) => ({ ...m, parts: patchCard(m.parts, data.action_id, data.patch ?? {}) })));
         } else if (ev.event === "ui_effect") {
           void applyEffect(data);
         } else if (ev.event === "confirm") {
-          update((m) => ({ ...m, parts: [...m.parts, { type: "confirm", action_id: data.action_id, title: data.title, summary: data.summary }] }));
+          update((m) => ({ ...m, parts: [...m.parts, { type: "confirm", ...data }] }));
         } else if (ev.event === "error") {
-          update((m) => ({ ...m, parts: [...m.parts, { type: "error", message: data.message }] }));
+          update((m) => ({ ...m, parts: [...m.parts, { type: "error", message: data.message, hint: data.hint, retryable: Boolean(data.retryable) }] }));
         } else if (ev.event === "done") {
           update((m) => ({ ...m, pending: false, id: data.message_id ?? m.id }));
         }
       }
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
-        update((m) => ({ ...m, parts: [...m.parts, { type: "error", message: "Connection lost. Your workspace is unchanged — try again." }] }));
+        update((m) => ({ ...m, parts: [...m.parts, { type: "error", message: "Connection lost. Your workspace is unchanged — try again.", retryable: true }] }));
       }
     } finally {
       setStreaming(false);
-      update((m) => ({ ...m, pending: false, parts: m.parts.filter((p) => p.type !== "tool_call") }));
+      sendingRef.current = false;
+      update((m) => ({
+        ...m,
+        pending: false,
+        parts: m.parts
+          .filter((p) => p.type !== "tool_call")
+          .map((p) => (p.type === "steps" ? { ...p, steps: (p.steps ?? []).map((st) => (st.status === "active" ? { ...st, status: "stopped" as const } : st)) } : p)),
+      }));
       abortRef.current = null;
     }
+  }
+
+  function retry(msgId: string) {
+    const idx = messages.findIndex((m) => m.id === msgId);
+    const prevUser = [...messages.slice(0, idx)].reverse().find((m) => m.role === "user");
+    if (prevUser) void send(prevUser.content, prevUser.clarification);
+  }
+
+  function answer(card: ChatPart["card"], s: ClarifySubmit) {
+    if (!card?.action_id) return;
+    void send(s.summary, { action_id: String(card.action_id), answers: s.answers, use_defaults: s.use_defaults, skipped: s.skipped });
+  }
+
+  async function launch(card: NonNullable<ChatPart["card"]>, msgId: string) {
+    try {
+      const res = await api<{ card: ChatPart["card"]; ui_effects?: Record<string, unknown>[]; campaign_id: string; already?: boolean }>(`chat/actions/${card.action_id}/launch`, {
+        body: { context: getContext() },
+      });
+      setMessages((all) =>
+        all.map((m) =>
+          m.id !== msgId
+            ? m
+            : {
+                ...m,
+                parts: patchCard(m.parts, String(card.action_id), { launched_campaign_id: res.campaign_id }).concat(
+                  res.card && !m.parts.some((p) => p.card?.campaign_id === res.campaign_id) ? [{ type: "card", card: res.card, status: "executed" }] : [],
+                ),
+              },
+        ),
+      );
+      void qc.invalidateQueries({ queryKey: qk.campaigns });
+      void qc.invalidateQueries({ queryKey: qk.lists });
+      for (const eff of res.ui_effects ?? []) void applyEffect(eff);
+      if (!res.already)
+        toast.success(card.lang === "fr" ? "Recherche lancée" : "Search started", {
+          description: card.lang === "fr" ? "Les leads arrivent dans le tableau au fur et à mesure." : "Leads land in the table as they qualify.",
+        });
+    } catch (e) {
+      const err = e as Error & { hint?: string };
+      toast.error(err.message, err.hint ? { description: err.hint } : undefined);
+      throw e;
+    }
+  }
+
+  function edit(text: string) {
+    setInput(text);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+      el.style.height = "auto";
+      el.style.height = `${Math.min(160, el.scrollHeight)}px`;
+    });
   }
 
   async function confirm(actionId: string, approve: boolean, msgId: string) {
@@ -284,10 +394,11 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
                 ...m,
                 parts: m.parts
                   .map((p) => (p.type === "confirm" && p.action_id === actionId ? { ...p, status: approve ? "approved" : "rejected" } : p))
-                  .concat(res.card ? [{ type: "card", card: res.card, status: res.status }] : []),
+                  .concat(res.card ? [{ type: "card", card: { ...res.card, lang: res.card.lang ?? m.parts.find((p) => p.card?.lang)?.card?.lang }, status: res.status }] : []),
               },
         ),
       );
+      void qc.invalidateQueries({ queryKey: qk.campaigns });
       for (const eff of res.ui_effects ?? []) void applyEffect(eff);
     } catch (e) {
       toast.error((e as Error).message);
@@ -386,7 +497,16 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
             ) : (
               <div className="space-y-4">
                 {messages.map((m) => (
-                  <MessageView key={m.id} m={m} onConfirm={(a, ok) => void confirm(a, ok, m.id)} />
+                  <MessageView
+                    key={m.id}
+                    m={m}
+                    busy={streaming}
+                    onConfirm={(a, ok) => confirm(a, ok, m.id)}
+                    onRetry={() => retry(m.id)}
+                    onAnswer={answer}
+                    onLaunch={(card) => launch(card, m.id)}
+                    onEdit={edit}
+                  />
                 ))}
               </div>
             )}
@@ -463,63 +583,129 @@ function EmptyChat({ onPick }: { onPick: (t: string) => void }) {
   );
 }
 
-function MessageView({ m, onConfirm }: { m: ChatMessage; onConfirm: (actionId: string, approve: boolean) => void }) {
+function MessageView({
+  m,
+  busy,
+  onConfirm,
+  onRetry,
+  onAnswer,
+  onLaunch,
+  onEdit,
+}: {
+  m: ChatMessage;
+  busy: boolean;
+  onConfirm: (actionId: string, approve: boolean) => Promise<void>;
+  onRetry: () => void;
+  onAnswer: (card: ChatPart["card"], s: ClarifySubmit) => void;
+  onLaunch: (card: NonNullable<ChatPart["card"]>) => Promise<void>;
+  onEdit: (text: string) => void;
+}) {
   if (m.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex justify-end animate-fade-in">
         <div className="max-w-[88%] whitespace-pre-wrap rounded-md bg-surface-2 px-3 py-2 text-body text-fg">{m.content}</div>
       </div>
     );
   }
   const visible = m.parts.filter((p) => p.type !== "ui_effect");
+  const lang = (m.parts.find((p) => p.card?.lang)?.card?.lang as "fr" | "en" | undefined) ?? (/[éèàç]|\b(je|les|des)\b/i.test(m.content) ? "fr" : "en");
+  const hasSteps = visible.some((p) => p.type === "steps" && p.steps?.length);
   return (
     <div className="space-y-2 text-body text-fg-2">
       {visible.map((p, i) => {
+        if (p.type === "steps") return <StepList key="steps" steps={p.steps ?? []} pending={Boolean(m.pending)} lang={lang} onRetry={onRetry} />;
         if (p.type === "text") return <Markdown key={i} text={p.text ?? ""} />;
-        if (p.type === "tool_call")
-          return (
-            <div key={i} className="flex items-center gap-2 rounded-md px-2.5 py-2 text-meta text-fg-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
-              <span className="size-1.5 animate-pulse-soft rounded-full bg-accent" />
-              {p.title ?? p.tool}…
-            </div>
-          );
+        if (p.type === "tool_call") return null; // the step list shows running tools
+        if (p.type === "card" && p.card?.kind === "clarify") return <ClarifyCard key={i} card={p.card} disabled={busy} onSubmit={(s) => onAnswer(p.card, s)} />;
+        if (p.type === "card" && p.card?.kind === "campaign_plan") return <PlanCard key={i} card={p.card} onLaunch={busy ? undefined : onLaunch} onEdit={onEdit} />;
         if (p.type === "card" && p.card) return <ToolCard key={i} card={p.card} status={p.status} />;
-        if (p.type === "confirm")
+        if (p.type === "confirm") return <ConfirmPart key={i} p={p} lang={lang} onConfirm={onConfirm} />;
+        if (p.type === "error")
           return (
-            <div key={i} className="rounded-md bg-warning-soft/60 p-2.5 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--warning)_30%,transparent)]">
-              <div className="text-meta font-medium text-warning">{p.title} · confirmation required</div>
-              <p className="mt-1 text-body text-fg">{p.summary}</p>
-              {p.status ? (
-                <p className="mt-1.5 text-meta text-fg-3">{p.status === "approved" ? "Confirmed" : "Cancelled"}</p>
-              ) : (
-                <div className="mt-2 flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onConfirm(p.action_id!, true)}
-                    className="h-6 rounded-sm bg-danger-soft px-2 text-meta font-medium text-danger hover:bg-danger/20"
-                  >
-                    Confirm
-                  </button>
-                  <button type="button" onClick={() => onConfirm(p.action_id!, false)} className="h-6 rounded-sm px-2 text-meta text-fg-2 hover:bg-surface-2">
-                    Cancel
-                  </button>
-                </div>
+            <div key={i} className="flex items-start gap-2 rounded-sm bg-danger-soft px-2.5 py-1.5 text-meta animate-fade-in" role="alert">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-danger" />
+              <span className="min-w-0 flex-1">
+                <span className="text-danger">{p.message}</span>
+                {p.hint && <span className="block text-fg-3">{p.hint}</span>}
+              </span>
+              {p.retryable && !m.pending && (
+                <button type="button" onClick={onRetry} className="press inline-flex shrink-0 items-center gap-1 rounded-xs px-1.5 py-0.5 text-accent-strong hover:bg-surface-2">
+                  <RotateCcw className="size-3" /> {lang === "fr" ? "Réessayer" : "Retry"}
+                </button>
               )}
             </div>
           );
-        if (p.type === "error")
-          return (
-            <p key={i} className="rounded-sm bg-danger-soft px-2.5 py-1.5 text-meta text-danger">
-              {p.message}
-            </p>
-          );
         return null;
       })}
-      {m.pending && visible.length === 0 && (
+      {m.pending && visible.length === 0 && !hasSteps && (
         <div className="flex items-center gap-1 py-1" aria-label="Thinking">
           {[0, 1, 2].map((i) => (
             <span key={i} className={cn("size-1 rounded-full bg-fg-3 animate-pulse-soft")} style={{ animationDelay: `${i * 160}ms` }} />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfirmPart({ p, lang, onConfirm }: { p: ChatPart; lang: "fr" | "en"; onConfirm: (actionId: string, approve: boolean) => Promise<void> }) {
+  const [busy, setBusy] = useState<"yes" | "no" | null>(null);
+  const fr = lang === "fr";
+  const danger = p.danger !== false;
+  async function go(approve: boolean) {
+    if (busy || !p.action_id) return;
+    setBusy(approve ? "yes" : "no");
+    try {
+      await onConfirm(p.action_id, approve);
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <div
+      className={cn(
+        "rounded-md p-2.5 animate-fade-in",
+        danger ? "bg-warning-soft/60 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--warning)_30%,transparent)]" : "bg-surface-1 shadow-[inset_0_0_0_1px_var(--border-strong)]",
+      )}
+    >
+      <div className={cn("text-meta font-medium", danger ? "text-warning" : "text-fg-2")}>
+        {p.title} · {danger ? (fr ? "confirmation requise" : "confirmation required") : fr ? "à valider" : "review the change"}
+      </div>
+      {p.changes?.length ? (
+        <ul className="mt-1.5 space-y-0.5">
+          {p.changes.map((c) => (
+            <li key={c.field} className="grid grid-cols-[84px_1fr] gap-2 text-meta">
+              <span className="text-fg-3">{c.label}</span>
+              <span className="flex min-w-0 flex-wrap items-baseline gap-1">
+                <span className="text-fg-3 line-through decoration-fg-3/50">{c.before}</span>
+                <ArrowRight className="size-3 self-center text-fg-3" />
+                <span className="font-medium text-accent-strong">{c.after}</span>
+              </span>
+            </li>
+          ))}
+          {(p.warnings ?? []).map((w) => (
+            <li key={w} className="pt-0.5 text-meta text-fg-3">
+              {w}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-body text-fg">{p.summary}</p>
+      )}
+      {p.status ? (
+        <p className="mt-1.5 flex items-center gap-1 text-meta text-fg-3">
+          {p.status === "approved" ? <Check className="size-3 text-success" /> : null}
+          {p.status === "approved" ? (fr ? "Validé" : "Confirmed") : fr ? "Annulé" : "Cancelled"}
+        </p>
+      ) : (
+        <div className="mt-2 flex gap-1.5">
+          <Button size="xs" variant={danger ? "danger" : "primary"} className="press" disabled={Boolean(busy)} onClick={() => void go(true)}>
+            {busy === "yes" ? <Spinner size={11} /> : <Check />}
+            {p.confirm_label ? (fr && p.confirm_label === "Apply & resume" ? "Appliquer et reprendre" : p.confirm_label) : fr ? "Confirmer" : "Confirm"}
+          </Button>
+          <Button size="xs" variant="ghost" className="press" disabled={Boolean(busy)} onClick={() => void go(false)}>
+            {fr ? "Annuler" : "Cancel"}
+          </Button>
         </div>
       )}
     </div>

@@ -16,7 +16,14 @@ import type { AmendMode, Lang } from "./run-state";
 
 const COPY = {
   en: {
-    title: { resume: "Resume with changes", broaden: "Broaden the search", budget: "Raise the budget", target: "Find more leads", runtime: "Extend the search", adjust: "Change the search" },
+    title: {
+      resume: "Resume with changes",
+      broaden: "Broaden the search",
+      budget: "Raise the budget",
+      target: "Find more leads",
+      runtime: "Extend the search",
+      adjust: "Change the search",
+    },
     desc: "Leads already found stay in your list and are never repeated. Discovery continues where it stopped.",
     placeholder: "e.g. add Marseille too · founders only · +100 leads · 2–50 employees · budget $10",
     preview: "What will change",
@@ -29,7 +36,14 @@ const COPY = {
     blocked: "Updated, but it can't resume yet",
   },
   fr: {
-    title: { resume: "Reprendre avec des modifs", broaden: "Élargir la recherche", budget: "Augmenter le budget", target: "Trouver plus de leads", runtime: "Prolonger la recherche", adjust: "Modifier la recherche" },
+    title: {
+      resume: "Reprendre avec des modifs",
+      broaden: "Élargir la recherche",
+      budget: "Augmenter le budget",
+      target: "Trouver plus de leads",
+      runtime: "Prolonger la recherche",
+      adjust: "Modifier la recherche",
+    },
     desc: "Les leads déjà trouvés restent dans ta liste et ne reviendront jamais. La découverte reprend là où elle s'est arrêtée.",
     placeholder: "ex. ajoute aussi Marseille · seulement les fondateurs · +100 leads · 2–50 salariés · budget 10 $",
     preview: "Ce qui va changer",

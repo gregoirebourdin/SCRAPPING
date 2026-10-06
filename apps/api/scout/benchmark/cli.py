@@ -57,7 +57,7 @@ def _fmt(m: dict[str, Any]) -> str:
 
 def _table(metrics: dict[str, dict[str, Any]], title: str) -> str:
     lines = [title, "-" * len(title)]
-    for m in metrics.values():
+    for m in sorted(metrics.values(), key=lambda x: x.get("order", 999)):
         ci = m.get("ci90")
         extra = f"  n={m['n']}" if m.get("n") is not None else ""
         if ci:

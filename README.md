@@ -10,7 +10,7 @@ into a fast table operated by an AI chat.
 * **API + workers** — FastAPI, SQLAlchemy 2 (async), Postgres job queue (`SKIP LOCKED`, leases, retries) → **Railway**
 * **Database** — Postgres → **Neon** (pooled URL for queries, direct URL for migrations and LISTEN/NOTIFY)
 * **AI** — Gemini behind a model-role layer (`fast` / `extractor` / `reasoning` / `search`), deterministic first
-* **Optional services** — `services/email-verifier` (Go, AfterShip verifier + tech fingerprints), `services/maps-scraper` (gosom Google Maps scraper)
+* **Optional services** — `services/searxng` (self-hosted web search, used before any Gemini grounding), `services/email-verifier` (Go, AfterShip verifier + tech fingerprints), `services/maps-scraper` (gosom Google Maps scraper)
 
 The codebase keeps its original package name (`scout`, `@scout/*`); the product is **Research**.
 
@@ -83,10 +83,20 @@ Create a service from this GitHub repository with **Root Directory `apps/api`** 
 | `VERIFIER_SERVICE_URL` | optional, `http://email-verifier.railway.internal:8080` |
 | `GMAPS_SCRAPER_URL` | optional, `http://maps-scraper.railway.internal:8080` |
 | `SMTP_ENABLED`, `SMTP_HELO_DOMAIN`, `SMTP_FROM_ADDRESS` | only where outbound port 25 is open and the HELO domain is yours with matching rDNS |
+| `SEARXNG_URL` | optional, `http://searxng.railway.internal:8080` — turns on the free search pass before any Gemini grounding |
+| `SEARCH_PROVIDERS` / `SEARCH_LOOKUP_PROVIDERS` | optional, defaults `searxng,duckduckgo` / `searxng` |
+| `GEMINI_SEARCH_FALLBACK_ONLY` | optional, default `true` (`false` = Gemini grounding without the free search pass) |
+| `SCOUT_EXTRAS` | optional build variable: `scraping` installs the Scrapling fetch tiers (~330 MB) |
 
-Railway's Hobby plan blocks outbound SMTP (port 25): the email engine detects it and runs its fast
-path (domain intelligence, learned conventions, MX) without SMTP probes. Optional services live in
-`services/*/` with their own `railway.json`; use Railway private networking between services.
+Railway's Hobby plan blocks outbound SMTP (port 25): the email engine's health monitor detects it and
+runs the fast path (domain intelligence, learned conventions, MX) without SMTP probes and without false
+`INVALID` verdicts. Optional services live in `services/*/` with their own `railway.json`; use Railway
+private networking between services.
+
+**SearXNG (recommended):** add a second service from the same repository with Root Directory
+`services/searxng`, name it `searxng`, do not generate a public domain, set `SEARXNG_SECRET` (random,
+e.g. `openssl rand -hex 32`; SearXNG refuses to start without it), then set
+`SEARXNG_URL=http://searxng.railway.internal:8080` on the API service. 0.5 vCPU / 512 MB is enough.
 
 ### 3. Vercel (web)
 

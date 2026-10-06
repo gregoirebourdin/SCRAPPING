@@ -83,9 +83,7 @@ export async function refetchTail(qc: QueryClient, scope: TableScope, filters: F
   const lastIdx = data.pages.length - 1;
   const last = data.pages[lastIdx]!;
   if (last.next_cursor) {
-    qc.setQueryData<InfiniteData<RowsPage, string | null>>(key, (d) =>
-      d ? { ...d, pages: d.pages.map((p, i) => (i === 0 ? { ...p, total: (p.total ?? 0) + added } : p)) } : d,
-    );
+    qc.setQueryData<InfiniteData<RowsPage, string | null>>(key, (d) => (d ? { ...d, pages: d.pages.map((p, i) => (i === 0 ? { ...p, total: (p.total ?? 0) + added } : p)) } : d));
     return [];
   }
   const cursor = data.pageParams[lastIdx] ?? null;

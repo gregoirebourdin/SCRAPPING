@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import sqlalchemy as sa
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scout.db.enums import EntityType, ExposureType, SourceType, VerificationRequestStatus
@@ -37,6 +38,8 @@ from scout.db.models import (
 from scout.errors import NotFound, ValidationFailed
 from scout.services import registry
 from scout.services.freshness import freshness_label
+
+log = structlog.get_logger(__name__)
 
 SOURCE_LABELS = {
     "website": "Official company website",
@@ -720,11 +723,17 @@ async def _set_person_email(
     if "@" not in address:
         raise ValidationFailed("Invalid email address")
     old = None
+    old_e = None
     if p.primary_email_id:
         old_e = await s.get(Email, p.primary_email_id)
         old = old_e.address if old_e else None
-        if old_e:
-            old_e.is_primary = False
+    from scout.learning.feedback import email_overridden
+
+    await email_overridden(
+        s, old_e, address
+    )  # the user's correction judges the resolver that found the old one
+    if old_e is not None:
+        old_e.is_primary = False
     e = await s.scalar(sa.select(Email).where(Email.workspace_id == workspace_id, Email.address == address))
     if e is None:
         local, domain = address.split("@", 1)
@@ -746,7 +755,31 @@ async def _set_person_email(
     e.is_primary = True
     e.is_user_confirmed = True
     p.primary_email_id = e.id
+    await _teach_domain(e.domain, p, address, workspace_id)
     return old
+
+
+async def _teach_domain(domain: str | None, p: Person, address: str, workspace_id: uuid.UUID) -> None:
+    """A user-confirmed address is the strongest evidence of the domain's convention (email engine samples)."""
+    if not domain:
+        return
+    try:
+        from scout.db.enums import EmailEvidenceSource
+        from scout.email.contracts import ObservedEmail
+        from scout.email.intel.samples import record_observed_emails
+
+        local = address.split("@", 1)[0]
+        sample = ObservedEmail(
+            address=address,
+            local_part=local,
+            source=EmailEvidenceSource.user,
+            first_name=p.first_name,
+            last_name=p.last_name,
+            confidence=0.99,
+        )
+        await record_observed_emails(domain, [sample], workspace_id=workspace_id)
+    except Exception as exc:  # learning must never block a user edit
+        log.info("email.user_sample_failed", domain=domain, error=str(exc))
 
 
 async def approve_review(

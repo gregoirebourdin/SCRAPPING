@@ -208,3 +208,28 @@ def test_router_learned_factor(monkeypatch) -> None:
         assert [s.key for s, _ in select_sources(d)] == [s.key for s, _ in base]
     finally:
         set_ai(None)
+
+
+def test_email_override_judges_the_resolver_that_found_the_previous_address() -> None:
+    from types import SimpleNamespace
+
+    from scout.db.enums import EmailDiscoveryMethod
+    from scout.learning.feedback import email_override_events
+
+    prev = SimpleNamespace(
+        address="jean.dupont@acme.fr",
+        discovery_method=EmailDiscoveryMethod.known_pattern,
+        pattern="{first}.{last}",
+        is_user_confirmed=False,
+    )
+    wrong = {(e.dimension, e.key, e.correct) for e in email_override_events(prev, "jdupont@acme.fr")}
+    assert wrong == {
+        ("resolver", "domain_pattern", False),
+        ("pattern", "{first}.{last}", False),
+        ("resolver", "user", True),
+    }
+    same = {(e.dimension, e.key, e.correct) for e in email_override_events(prev, "Jean.Dupont@acme.fr")}
+    assert same == {("resolver", "domain_pattern", True), ("pattern", "{first}.{last}", True)}
+    prev.is_user_confirmed = True
+    assert email_override_events(prev, "x@acme.fr") == []
+    assert email_override_events(None, "x@acme.fr") == []

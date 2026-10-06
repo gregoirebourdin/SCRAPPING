@@ -74,3 +74,22 @@ async def test_resolve_without_live_domains(fixture_server, monkeypatch):
     await _setup(fixture_server, monkeypatch, set())
     assert await resolve_website("Agence Lumière", city="Paris", country="FR") is None
     assert fixture_server.requests == []
+
+
+async def test_resolve_uses_free_search_candidates_and_still_proves_identity(fixture_server, monkeypatch):
+    # no DNS-guessed candidate is live: the domain only comes from web search, identity is still verified on the site
+    await _setup(fixture_server, monkeypatch, set())
+    asked: list[str] = []
+
+    async def fake_search(name: str, *, city: str | None = None, country: str | None = None, **_: object):
+        asked.append(name)
+        return ["annuaire-pro.example", "agence-lumiere.fr"]
+
+    import scout.search.website as sw
+
+    monkeypatch.setattr(sw, "search_domain_candidates", fake_search)
+    found = await resolve_website("Agence Lumière SAS", city="Paris", country="FR", registry_id="812345676")
+    assert asked == ["Agence Lumière SAS"]
+    assert found is not None and found.domain == "agence-lumiere.fr"
+    assert found.method.startswith("web_search+")
+    assert found.checked == ["annuaire-pro.example", "agence-lumiere.fr"]

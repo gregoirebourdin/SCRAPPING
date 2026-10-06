@@ -228,16 +228,23 @@ export function stageLine(r: RunView, lang: Lang): StageLine {
   const best = groups.reduce((a, b) => (b[0] > a[0] ? b : a), [0, ""] as [number, string]);
   if (best[0] > 0) return { text: best[1], active: true, tone: "accent" };
   if (r.raw === 0) {
-    const what = r.interpretation.find((i) => i.label === "Companies")?.value?.split(",")[0]?.toLowerCase();
+    const what = r.interpretation
+      .find((i) => i.label === "Companies")
+      ?.value?.split(",")[0]
+      ?.toLowerCase();
     const where = r.interpretation.find((i) => i.label === "Location")?.value?.split(",")[0];
-    const srcs = r.sources.slice(0, 3).map((s) => sourceWord(s, lang)).join(", ");
+    const srcs = r.sources
+      .slice(0, 3)
+      .map((s) => sourceWord(s, lang))
+      .join(", ");
     const subject = what ? (fr ? `de ${what}` : what) : fr ? "d'entreprises" : "companies";
     const text = fr
       ? `Recherche ${subject}${where ? ` à ${where}` : ""}${srcs ? ` (${srcs})` : ""}…`
       : `Searching ${subject}${where ? ` in ${where}` : ""}${srcs ? ` (${srcs})` : ""}…`;
     return { text, active: true, tone: "accent" };
   }
-  if (queued > 0) return { text: fr ? `${plural(queued, "entreprise", "entreprises")} en file d'attente…` : `${plural(queued, "company", "companies")} queued…`, active: true, tone: "accent" };
+  if (queued > 0)
+    return { text: fr ? `${plural(queued, "entreprise", "entreprises")} en file d'attente…` : `${plural(queued, "company", "companies")} queued…`, active: true, tone: "accent" };
   return { text: fr ? "Recherche de nouvelles entreprises…" : "Looking for more companies…", active: true, tone: "accent" };
 }
 
