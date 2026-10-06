@@ -20,6 +20,9 @@ export interface TableLayout {
 
 export const EMPTY_FILTERS: FilterGroup = { op: "and", conditions: [] };
 
+/** Stable empty selection — selectors must never return a fresh array (useSyncExternalStore loops). */
+export const NO_IDS: string[] = Object.freeze([]) as unknown as string[]; // never mutate
+
 export function defaultLayout(): TableLayout {
   return {
     filters: { ...EMPTY_FILTERS, conditions: [] },
@@ -33,6 +36,8 @@ export function defaultLayout(): TableLayout {
     viewId: null,
   };
 }
+
+const isNarrow = () => typeof window !== "undefined" && window.innerWidth < 1024;
 
 /* Safe storage: private windows / blocked storage must never break rendering. */
 const safeStorage = createJSONStorage(() => ({
@@ -62,6 +67,9 @@ const safeStorage = createJSONStorage(() => ({
 interface UIState {
   sidebarExpanded: boolean;
   chatOpen: boolean;
+  /** Chat as a sheet on screens narrower than the 3-column layout (not persisted). */
+  mobileChatOpen: boolean;
+  setMobileChatOpen: (v: boolean) => void;
   chatWidth: number;
   layouts: Record<string, TableLayout>;
   selection: Record<string, string[]>;
@@ -92,6 +100,8 @@ export const useUI = create<UIState>()(
     (set, get) => ({
       sidebarExpanded: false,
       chatOpen: true,
+      mobileChatOpen: false,
+      setMobileChatOpen: (v) => set({ mobileChatOpen: v }),
       chatWidth: 380,
       layouts: {},
       selection: {},
@@ -101,7 +111,13 @@ export const useUI = create<UIState>()(
       importOpen: false,
       chatFocusTick: 0,
       chatDraft: null,
-      setChatDraft: (v) => set((st) => ({ chatDraft: v, chatOpen: v ? true : st.chatOpen, chatFocusTick: v ? st.chatFocusTick + 1 : st.chatFocusTick })),
+      setChatDraft: (v) =>
+        set((st) => ({
+          chatDraft: v,
+          chatOpen: v ? true : st.chatOpen,
+          mobileChatOpen: v && isNarrow() ? true : st.mobileChatOpen,
+          chatFocusTick: v ? st.chatFocusTick + 1 : st.chatFocusTick,
+        })),
       setSidebarExpanded: (v) => set({ sidebarExpanded: v }),
       setChatOpen: (v) => set({ chatOpen: v }),
       setChatWidth: (w) => set({ chatWidth: Math.max(320, Math.min(520, Math.round(w))) }),
@@ -114,7 +130,7 @@ export const useUI = create<UIState>()(
       closeDrawer: () => set({ drawer: null }),
       setPaletteOpen: (v) => set({ paletteOpen: v }),
       setImportOpen: (v) => set({ importOpen: v }),
-      focusChat: () => set((st) => ({ chatOpen: true, chatFocusTick: st.chatFocusTick + 1 })),
+      focusChat: () => set((st) => ({ chatOpen: true, mobileChatOpen: isNarrow() ? true : st.mobileChatOpen, chatFocusTick: st.chatFocusTick + 1 })),
     }),
     {
       name: "scout-ui",

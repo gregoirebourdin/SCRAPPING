@@ -7,7 +7,7 @@ import { ArrowRightLeft, Ban, Building2, Copy, Download, ExternalLink, ListPlus,
 import { useState } from "react";
 
 import { useColumns, useLists } from "@/lib/queries";
-import { useUI } from "@/lib/store";
+import { NO_IDS, useUI } from "@/lib/store";
 
 import { addToList, columnApplies, copyText, enrichColumn, exportRows, markContacted, moveToList, refreshRows, removeFromList, rowRef, suppressRows } from "./actions";
 import type { TableScope } from "./use-rows";
@@ -27,7 +27,7 @@ function RowMenuContent({ row, scope }: { row: LeadRow; scope: TableScope }) {
   const qc = useQueryClient();
   const lists = useLists();
   const columns = useColumns(scope.listId);
-  const selection = useUI((s) => s.selection[scope.key] ?? []);
+  const selection = useUI((s) => s.selection[scope.key] ?? NO_IDS);
   const openDrawer = useUI((s) => s.openDrawer);
   const setSelection = useUI((s) => s.setSelection);
   const ids = selection.includes(row.id) ? selection : [row.id];

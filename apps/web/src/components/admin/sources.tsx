@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Database } from "lucide-react";
 import { useState } from "react";
 
-import { Block, DataTable, Metric, Page } from "@/components/common/page";
+import { Block, DataTable, Metric, Page, Panel } from "@/components/common/page";
 import { api } from "@/lib/api";
 import { n, pct, relTime, usd } from "@/lib/format";
 import { qk, useMe } from "@/lib/queries";
@@ -62,6 +62,9 @@ export function SourcesPage() {
   const diag = useQuery({ queryKey: ["diagnostics", hours], queryFn: () => api<Diagnostics>(`diagnostics?hours=${hours}`), refetchInterval: 30_000 });
   const d = diag.data;
   const f = me.data?.features ?? {};
+  const all = (sources.data ?? []).filter((s) => s.key !== "fixture" || f.demo_data);
+  const discovery = all.filter((s) => s.kind !== "evidence");
+  const evidence = all.filter((s) => s.kind === "evidence");
 
   return (
     <Page
@@ -140,7 +143,7 @@ export function SourcesPage() {
 
       <Block title="Discovery sources">
         <DataTable<SourceRow>
-          rows={sources.data}
+          rows={discovery}
           loading={sources.isLoading}
           rowKey={(s) => s.key}
           empty="No source has run yet"
@@ -196,6 +199,20 @@ export function SourcesPage() {
           ]}
         />
       </Block>
+
+      {evidence.length > 0 && (
+        <Block title="Evidence sources" aside={<span className="text-meta text-fg-3">Where field values come from — shown in every source inspector</span>}>
+          <Panel className="divide-y divide-line">
+            {evidence.map((s) => (
+              <div key={s.key} className="flex items-center gap-3 px-3 py-2 text-body">
+                <span className="w-48 shrink-0 text-fg">{s.name}</span>
+                <span className="min-w-0 flex-1 truncate text-meta text-fg-3">{s.description}</span>
+                {s.quality != null && <span className="tabular text-meta text-fg-2">trust {Math.round(s.quality * 100)}%</span>}
+              </div>
+            ))}
+          </Panel>
+        </Block>
+      )}
     </Page>
   );
 }

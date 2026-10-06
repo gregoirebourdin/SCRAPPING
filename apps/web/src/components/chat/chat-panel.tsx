@@ -12,6 +12,7 @@ import { api, download, readSSE } from "@/lib/api";
 import { qk } from "@/lib/queries";
 import { useScope, useUI } from "@/lib/store";
 
+import { Markdown } from "./markdown";
 import { ToolCard } from "./tool-cards";
 
 export interface ChatPart {
@@ -66,7 +67,7 @@ export function useChatContext() {
   }, []);
 }
 
-export function ChatPanel({ open }: { open: boolean }) {
+export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: boolean }) {
   const { chatWidth, setChatWidth, setChatOpen, chatFocusTick } = useUI();
   const listId = useScope((s) => s.listId);
   const listName = useScope((s) => s.listName);
@@ -312,22 +313,28 @@ export function ChatPanel({ open }: { open: boolean }) {
     <AnimatePresence initial={false}>
       {open && (
         <motion.aside
-          key="chat"
+          key={overlay ? "chat-sheet" : "chat"}
           aria-label="AI operator"
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width: chatWidth, opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
+          initial={overlay ? { x: 24, opacity: 0 } : { width: 0, opacity: 0 }}
+          animate={overlay ? { x: 0, opacity: 1 } : { width: chatWidth, opacity: 1 }}
+          exit={overlay ? { x: 24, opacity: 0 } : { width: 0, opacity: 0 }}
           transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-          className="relative hidden shrink-0 flex-col overflow-hidden border-l border-line bg-bg lg:flex"
+          className={
+            overlay
+              ? "fixed inset-0 z-40 flex flex-col overflow-hidden bg-bg md:inset-y-0 md:left-auto md:w-[420px] md:border-l md:border-line md:shadow-dialog"
+              : "relative flex shrink-0 flex-col overflow-hidden border-l border-line bg-bg"
+          }
         >
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize chat"
-            onPointerDown={startResize}
-            onDoubleClick={() => setChatWidth(380)}
-            className="absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-0.5 cursor-col-resize transition-colors hover:bg-accent/30"
-          />
+          {!overlay && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize chat"
+              onPointerDown={startResize}
+              onDoubleClick={() => setChatWidth(380)}
+              className="absolute inset-y-0 left-0 z-10 w-1.5 -translate-x-0.5 cursor-col-resize transition-colors hover:bg-accent/30"
+            />
+          )}
           <header className="flex h-11 shrink-0 items-center gap-1 border-b border-line px-3">
             <Menu>
               <MenuTrigger className="flex min-w-0 items-center gap-1 rounded-sm px-1.5 py-1 text-heading text-fg hover:bg-surface-2">
@@ -368,7 +375,7 @@ export function ChatPanel({ open }: { open: boolean }) {
               </IconButton>
             </Tip>
             <Tip content="Hide" shortcut={["⌘", "\\"]}>
-              <IconButton label="Hide chat" size="xs" onClick={() => setChatOpen(false)}>
+              <IconButton label="Hide chat" size="xs" onClick={() => (overlay ? useUI.getState().setMobileChatOpen(false) : setChatOpen(false))}>
                 <PanelRightClose />
               </IconButton>
             </Tip>
@@ -468,12 +475,7 @@ function MessageView({ m, onConfirm }: { m: ChatMessage; onConfirm: (actionId: s
   return (
     <div className="space-y-2 text-body text-fg-2">
       {visible.map((p, i) => {
-        if (p.type === "text")
-          return (
-            <p key={i} className="whitespace-pre-wrap leading-[20px] text-fg">
-              {p.text}
-            </p>
-          );
+        if (p.type === "text") return <Markdown key={i} text={p.text ?? ""} />;
         if (p.type === "tool_call")
           return (
             <div key={i} className="flex items-center gap-2 rounded-md px-2.5 py-2 text-meta text-fg-3 shadow-[inset_0_0_0_1px_var(--border-subtle)]">

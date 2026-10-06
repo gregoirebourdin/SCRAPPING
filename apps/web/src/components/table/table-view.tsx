@@ -35,6 +35,7 @@ import { api } from "@/lib/api";
 import { n, pct } from "@/lib/format";
 import { qk, useCampaign, useList, useViews } from "@/lib/queries";
 import { defaultLayout, EMPTY_FILTERS, type TableLayout, useScope, useUI } from "@/lib/store";
+import { TABLET_UP, useMediaQuery } from "@/lib/use-media";
 
 import { columnApplies, exportRows, invalidateRows } from "./actions";
 import { BulkBar } from "./bulk-bar";
@@ -42,6 +43,7 @@ import { type ColumnSpec, companyColumns, customColumnSpec, personColumns } from
 import { AddColumnDialog, ColumnConfigDialog } from "./column-dialogs";
 import { FilterBuilder, opLabel } from "./filter-builder";
 import { LeadTable } from "./lead-table";
+import { MobileRows } from "./mobile-rows";
 import { type TableScope, useFields, useRows } from "./use-rows";
 
 function useDebounced<T>(value: T, ms: number): T {
@@ -77,6 +79,7 @@ export function TableView({
   const [addColOpen, setAddColOpen] = useState(false);
   const [configCol, setConfigCol] = useState<string | null>(null);
 
+  const tabletUp = useMediaQuery(TABLET_UP);
   const search = useDebounced(layout.search, 250);
   const debouncedFilters = useDebounced(layout.filters, 300);
   const fields = useFields(scope.entityType, scope.listId);
@@ -137,8 +140,8 @@ export function TableView({
           {subtitle}
         </div>
         {headerExtra}
-        <div className="ml-auto flex items-center gap-1">
-          <div className="relative hidden sm:block">
+        <div className="ml-auto hidden items-center gap-1 md:flex">
+          <div className="relative">
             <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-fg-3" />
             <Input
               value={layout.search}
@@ -199,6 +202,13 @@ export function TableView({
           <MoreMenu scope={scope} layout={layout} onPatch={patch} />
         </div>
       </header>
+
+      {!tabletUp && (
+        <div className="relative shrink-0 border-b border-line px-3 py-2">
+          <Search className="pointer-events-none absolute left-5 top-1/2 size-3.5 -translate-y-1/2 text-fg-3" />
+          <Input value={layout.search} onChange={(e) => patch({ search: e.target.value })} placeholder="Search" aria-label="Search rows" className="h-8 pl-7" />
+        </div>
+      )}
 
       <ViewTabs scope={scope} layout={layout} onPatch={patch} />
 
@@ -262,44 +272,58 @@ export function TableView({
             +{n(newLeads)} new lead{newLeads === 1 ? "" : "s"}
           </button>
         )}
-        <LeadTable
-          scope={scope}
-          specs={specs}
-          rows={rows}
-          total={total}
-          loading={q.isLoading}
-          fetchingMore={q.isFetchingNextPage}
-          hasMore={Boolean(q.hasNextPage)}
-          onLoadMore={() => void q.fetchNextPage()}
-          fields={fields.data ?? []}
-          sort={layout.sort}
-          onSort={(sort) => patch({ sort })}
-          onAddFilter={addFilter}
-          onAddColumn={() => setAddColOpen(true)}
-          onConfigureColumn={setConfigCol}
-          emptyState={
-            q.isError ? (
-              <div className="max-w-sm text-center">
-                <p className="text-body text-fg">Could not load rows</p>
-                <p className="mt-1 text-meta text-fg-3">{(q.error as Error).message}</p>
-                <Button size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                  <RotateCcw /> Retry
-                </Button>
-              </div>
-            ) : conditions.length || layout.search ? (
-              <div className="text-center">
-                <p className="text-body text-fg">No rows match</p>
-                <p className="mt-1 text-meta text-fg-3">Try removing a filter or clearing the search.</p>
-                <Button size="sm" variant="ghost" className="mt-3" onClick={() => patch({ filters: { ...EMPTY_FILTERS, conditions: [] }, search: "" })}>
-                  Clear filters
-                </Button>
-              </div>
-            ) : (
-              emptyState
-            )
-          }
-        />
-        <BulkBar scope={scope} loadedCount={rows.length} total={total} filters={debouncedFilters} search={search} sort={layout.sort} visibleColumns={visibleColumns} />
+        {tabletUp ? (
+          <>
+            <LeadTable
+              scope={scope}
+              specs={specs}
+              rows={rows}
+              total={total}
+              loading={q.isLoading}
+              fetchingMore={q.isFetchingNextPage}
+              hasMore={Boolean(q.hasNextPage)}
+              onLoadMore={() => void q.fetchNextPage()}
+              fields={fields.data ?? []}
+              sort={layout.sort}
+              onSort={(sort) => patch({ sort })}
+              onAddFilter={addFilter}
+              onAddColumn={() => setAddColOpen(true)}
+              onConfigureColumn={setConfigCol}
+              emptyState={
+                q.isError ? (
+                  <div className="max-w-sm text-center">
+                    <p className="text-body text-fg">Could not load rows</p>
+                    <p className="mt-1 text-meta text-fg-3">{(q.error as Error).message}</p>
+                    <Button size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                      <RotateCcw /> Retry
+                    </Button>
+                  </div>
+                ) : conditions.length || layout.search ? (
+                  <div className="text-center">
+                    <p className="text-body text-fg">No rows match</p>
+                    <p className="mt-1 text-meta text-fg-3">Try removing a filter or clearing the search.</p>
+                    <Button size="sm" variant="ghost" className="mt-3" onClick={() => patch({ filters: { ...EMPTY_FILTERS, conditions: [] }, search: "" })}>
+                      Clear filters
+                    </Button>
+                  </div>
+                ) : (
+                  emptyState
+                )
+              }
+            />
+            <BulkBar scope={scope} loadedCount={rows.length} total={total} filters={debouncedFilters} search={search} sort={layout.sort} visibleColumns={visibleColumns} />
+          </>
+        ) : (
+          <MobileRows
+            rows={rows}
+            entityType={scope.entityType}
+            loading={q.isLoading}
+            hasMore={Boolean(q.hasNextPage)}
+            fetchingMore={q.isFetchingNextPage}
+            onLoadMore={() => void q.fetchNextPage()}
+            emptyState={emptyState}
+          />
+        )}
       </div>
 
       <AddColumnDialog open={addColOpen} onOpenChange={setAddColOpen} listId={scope.listId} entityType={scope.entityType} />
@@ -533,6 +557,8 @@ function ViewTabs({ scope, layout, onPatch }: { scope: TableScope; layout: Table
   const [saveOpen, setSaveOpen] = useState(false);
   const [name, setName] = useState("");
   const viewsKey = qk.views(scope.listId ? `list:${scope.listId}` : scope.entityType);
+  const defaultView = (views.data ?? []).find((v) => v.is_default) ?? null;
+  const otherViews = (views.data ?? []).filter((v) => v.id !== defaultView?.id);
   const current = (views.data ?? []).find((v) => v.id === layout.viewId) ?? null;
   const dirty = current
     ? JSON.stringify(viewBody({ ...defaultLayout(), ...layoutFromView(current) } as TableLayout)) !== JSON.stringify(viewBody(layout))
@@ -573,10 +599,13 @@ function ViewTabs({ scope, layout, onPatch }: { scope: TableScope; layout: Table
 
   return (
     <div className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-line px-2">
-      <ViewTab active={!layout.viewId} onClick={() => onPatch({ ...defaultLayout(), search: layout.search, density: layout.density })}>
-        All
+      <ViewTab
+        active={!layout.viewId || layout.viewId === defaultView?.id}
+        onClick={() => onPatch(defaultView ? layoutFromView(defaultView) : { ...defaultLayout(), search: layout.search, density: layout.density })}
+      >
+        {defaultView?.name ?? "All"}
       </ViewTab>
-      {(views.data ?? []).map((v) => (
+      {otherViews.map((v) => (
         <div key={v.id} className="group/tab relative flex items-center">
           <ViewTab active={layout.viewId === v.id} onClick={() => onPatch(layoutFromView(v))}>
             {v.name}

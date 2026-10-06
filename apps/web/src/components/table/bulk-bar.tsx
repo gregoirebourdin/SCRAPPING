@@ -10,7 +10,7 @@ import { useState } from "react";
 
 import { n } from "@/lib/format";
 import { useColumns, useLists } from "@/lib/queries";
-import { useUI } from "@/lib/store";
+import { NO_IDS, useUI } from "@/lib/store";
 
 import { addToList, approveRows, columnApplies, createListFrom, enrichColumn, exportRows, moveToList, refreshRows, removeFromList, rowRef, suppressRows } from "./actions";
 import type { TableScope } from "./use-rows";
@@ -34,7 +34,7 @@ export function BulkBar({
 }) {
   const qc = useQueryClient();
   const router = useRouter();
-  const ids = useUI((s) => s.selection[scope.key] ?? []);
+  const ids = useUI((s) => s.selection[scope.key] ?? NO_IDS);
   const allMatching = useUI((s) => Boolean(s.allMatching[scope.key]));
   const setSelection = useUI((s) => s.setSelection);
   const setAllMatching = useUI((s) => s.setAllMatching);
