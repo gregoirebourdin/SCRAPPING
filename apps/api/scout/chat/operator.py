@@ -534,12 +534,26 @@ async def _emit_tool(
     yield ("tool_result", {"tool": call.name, "call_id": call.id, "status": status, "card": card})
     for eff in effects:
         turn.parts.append({"type": "ui_effect", "effect": eff})
+        if eff.get("type") == "open_list" and eff.get("list_id"):
+            await _attach_thread(tctx.thread_id, eff["list_id"])
         yield "ui_effect", eff
         _apply_effect_to_context(ui, eff)
     if confirm:
         turn.parts.append({"type": "confirm", **confirm})
         yield "confirm", confirm
     turn.last = (res, card, status, confirm)
+
+
+async def _attach_thread(thread_id: uuid.UUID | None, list_id: str | uuid.UUID) -> None:
+    """A conversation that starts a search follows it: reopening that list later restores the conversation."""
+    if thread_id is None:
+        return
+    async with session_scope() as s:
+        await s.execute(
+            sa.update(ChatThread)
+            .where(ChatThread.id == thread_id, ChatThread.list_id.is_(None))
+            .values(list_id=uuid.UUID(str(list_id)))
+        )
 
 
 async def _run_model(
@@ -903,6 +917,7 @@ async def launch_plan(
             "action_id": f"run:{action_id}",
         }
         message_id = a.message_id
+        thread_id = a.thread_id
     if not already:
         await _patch_card(
             message_id,
@@ -911,6 +926,8 @@ async def launch_plan(
             append=[{"type": "card", "card": card, "status": "executed"}] if append_to_plan_message else None,
         )
     effects = [{"type": "open_list", "list_id": card["list_id"]}] if card["list_id"] else []
+    if card["list_id"]:
+        await _attach_thread(thread_id, str(card["list_id"]))
     return {
         "status": "executed",
         "card": card,

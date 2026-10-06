@@ -494,12 +494,27 @@ and the email engine's `resolver / source / pattern / technique / provider`.
 
 ### 11.5 Benchmark Harness (`scout/benchmark/`, `/benchmark`)
 
-Ground-truth datasets are imported (CSV / JSON), runs compare our output with the expected
-values (registry mode: what the workspace already has; live mode: run the engine; suite mode:
-synthetic suites such as the email engine benchmark) and report company / person / role / email
-precision and recall, SAFE precision, enrichment accuracy, false positives / negatives,
-duplicate rate, processing time and cost per qualified lead — each rate with its sample size and
-interval. Benchmark outcomes also feed the empirical scoring.
+An internal, admin-only harness (tables `benchmark_datasets / _items / _runs / _results`)
+measures the engine against ground truth the team verified.
+
+* **Datasets** are imported as CSV (one row per expected person: `company_domain`,
+  `company_name`, `person_first/last/title`, `email`, `email_status`, `enrich:<column>`) or JSON;
+  each item separates what the engine is *given* (`input`) from what it should find (`expected`).
+* **Runs** execute as the `benchmark.run` job in time slices: **registry** mode compares with what
+  the workspace already holds (read-only, zero cost); **live** mode runs the real pipeline
+  functions (website resolution, cache-first crawl, people extraction, email engine, enrichment
+  plans) under a hard cost cap with bounded concurrency and per-item cost attribution; **suite**
+  mode runs synthetic suites registered with `register_suite()` — e.g. `email_engine`
+  (legacy / fast_only / fast_deep / fast_deep_blocked side by side, see EMAIL_ENGINE.md).
+* **Metrics** (`scout/benchmark/metrics.py`, pure, documented matching rules: registrable domains,
+  accent/order-insensitive names, title → role via the production normalizer, case-insensitive
+  emails, type-aware enrichment equality): company / person / role / email precision and recall,
+  SAFE precision, enrichment accuracy, invalid false-positive rate, catch-all and pattern accuracy,
+  false positives / negatives, duplicate rate, P50 / P95 processing time and cost per qualified
+  lead — every rate with its sample size and a Wilson 90 % interval.
+* Definitive outcomes feed the empirical source scoring (§11.4). The harness reports measured
+  numbers only: it never claims superiority over another product (e.g. Apollo) without a
+  head-to-head measurement on the same dataset. CLI: `scout benchmark suites | run | import`.
 
 ### 11.6 Live runs
 

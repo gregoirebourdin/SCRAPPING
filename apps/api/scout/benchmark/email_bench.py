@@ -654,8 +654,8 @@ def metrics(run: _Run, *, cost: CostModel) -> dict[str, Any]:
             ca_right += determined == d.catch_all
         if run.strategy == "legacy":
             named = [(o.first, o.last, split_address(o.address)[0]) for o in d.observed if o.first and o.last]
-            counts = Counter(infer_patterns(named)) + mem.successes
-            dominant = counts.most_common(1)[0][0] if counts else None
+            legacy_counts = Counter(infer_patterns(named)) + mem.successes
+            dominant = legacy_counts.most_common(1)[0][0] if legacy_counts else None
         else:
             stats = learn(
                 d.domain,
@@ -680,7 +680,22 @@ def metrics(run: _Run, *, cost: CostModel) -> dict[str, Any]:
         + run.res.dns_queries * cost.dns_query_usd
     )
     deep = [o for o in outs if o.path == "deep"]
+    cached = sum(o.profile_cached for o in outs)
+    counts = {
+        "email_discovery_recall": (len(correct), len(with_mailbox)),
+        "email_precision": (len(correct), len(claimed)),
+        "safe_precision": (sum(o.address == o.truth for o in safe), len(safe)),
+        "recall_any_status": (len(any_correct), len(with_mailbox)),
+        "invalid_false_positive_rate": (len(invalid_fp), len(invalid)),
+        "catch_all_accuracy": (ca_right, ca_known),
+        "catch_all_coverage": (ca_known, len(mail_domains)),
+        "domain_pattern_accuracy": (pat_right, pat_known),
+        "domain_pattern_coverage": (pat_known, sum(1 for d in mail_domains if d.true_pattern)),
+        "smtp_fallback_rate": (len(deep), len(outs)),
+        "cache_hit_rate": (cached, len(outs)),
+    }
     return {
+        "counts": counts,
         "persons": len(outs),
         "persons_with_mailbox": len(with_mailbox),
         "email_discovery_recall": _rate(len(correct), len(with_mailbox)),
@@ -706,7 +721,7 @@ def metrics(run: _Run, *, cost: CostModel) -> dict[str, Any]:
         "pilot_narrowings": run.res.pilots,
         "smtp_connections": run.world.connections,
         "rcpts_per_resolved_email": round(run.res.smtp_rcpts / resolved, 2) if resolved else None,
-        "cache_hit_rate": _rate(sum(o.profile_cached for o in outs), len(outs)),
+        "cache_hit_rate": _rate(cached, len(outs)),
         "cost_usd": round(cost_usd, 6),
         "cost_per_email_usd": round(cost_usd / resolved, 7) if resolved else None,
         "makespan_ms": makespan,
@@ -844,3 +859,108 @@ def format_table(report: dict[str, Any]) -> str:
         f"{ds['domains']} domains, {ds['targets']} people, seed {ds['seed']}, {ds['waves']} waves. {report['disclaimer']}"
     )
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Benchmark Harness suite (``/benchmark``, ``scout benchmark run --suite email_engine``)
+# ---------------------------------------------------------------------------------------------------------------
+
+DEFINITIONS: dict[str, str] = {
+    "email_discovery_recall": "People with a mailbox whose right address was returned as SAFE or LIKELY_SAFE / "
+    "people with a mailbox.",
+    "email_precision": "Right addresses / addresses returned as SAFE or LIKELY_SAFE (an address for someone without "
+    "a mailbox is wrong).",
+    "safe_precision": "Right addresses / addresses returned as SAFE.",
+    "recall_any_status": "People with a mailbox whose right address was returned with any status but INVALID.",
+    "invalid_false_positive_rate": "INVALID verdicts about a deliverable address / INVALID verdicts.",
+    "catch_all_accuracy": "Domains whose catch-all verdict matches the truth / domains with a verdict.",
+    "catch_all_coverage": "Mail domains with a catch-all verdict / mail domains.",
+    "domain_pattern_accuracy": "Domains whose learned dominant pattern is the true convention / domains with one.",
+    "avg_resolution_ms": "Mean simulated time to the final verdict, retry backoff included.",
+    "p50_resolution_ms": "Median simulated time to the final verdict.",
+    "p95_resolution_ms": "95th percentile of the simulated time to the final verdict (greylisting retries wait 5 min+).",
+    "p95_first_verdict_ms": "95th percentile of the time to the first (fast-path) verdict.",
+    "smtp_fallback_rate": "People sent to the SMTP deep path / people resolved.",
+    "smtp_sessions": "SMTP probe batches (one per domain, plus pilot / retry / expansion rounds).",
+    "smtp_connections": "SMTP connections opened (≤ 3 targets each).",
+    "smtp_rcpts": "RCPT commands sent (targets + random catch-all probes).",
+    "cache_hit_rate": "Resolutions served from an already built domain profile / resolutions.",
+    "cost_per_email_usd": "Assumed unit costs (compute + IP reputation; no paid API) / emails resolved.",
+    "emails_resolved_per_minute": "SAFE + LIKELY_SAFE verdicts per minute of simulated work on bounded pools.",
+    "engine_cpu_ms_per_person": "Measured CPU time of candidate generation + confidence per person.",
+}
+
+
+def _suite_metrics(m: dict[str, Any]) -> dict[str, Any]:
+    from scout.benchmark.metrics import measure, rate
+
+    out: dict[str, Any] = {}
+    for key, value in m.items():
+        if key in ("counts", "statuses"):
+            continue
+        if key in m["counts"]:
+            k, n = m["counts"][key]
+            out[key] = rate(k, n)
+        elif isinstance(value, int | float) or value is None:
+            out[key] = measure(value, m["persons"])
+    return out
+
+
+async def run_suite(config: dict[str, Any]) -> Any:
+    from scout.benchmark.registry import SuiteResult
+
+    wanted = [s for s in (config.get("strategies") or list(STRATEGIES)) if s in STRATEGIES]
+    report = await run_email_benchmark(
+        domains=int(config.get("domains") or 300),
+        seed=int(config.get("seed") or 7),
+        waves=int(config.get("waves") or 2),
+        strategies=wanted or list(STRATEGIES),
+    )
+    strategies = {name: _suite_metrics(r["metrics"]) for name, r in report["strategies"].items()}
+    items: list[dict[str, Any]] = []
+    for name, r in report["strategies"].items():
+        for kind, k in r["by_kind"].items():
+            items.append(
+                {
+                    "label": f"{kind} ({k['persons']} people)",
+                    "strategy": name,
+                    "expected": {"scenario": kind},
+                    "actual": {"recall": k["recall"], "precision": k["precision"], "statuses": k["statuses"]},
+                    "verdict": "measured",
+                    "fp": 0,
+                    "fn": 0,
+                    "latency_ms": 0,
+                    "cost_usd": 0.0,
+                }
+            )
+    headline = strategies.get("fast_deep") or next(iter(strategies.values()), {})
+    ds = report["dataset"]
+    return SuiteResult(
+        metrics=headline,
+        strategies=strategies,
+        items=items,
+        notes=[
+            report["disclaimer"],
+            f"{ds['domains']} synthetic domains, {ds['targets']} people, seed {ds['seed']}, {ds['waves']} waves; "
+            "headline = fast_deep (production policy).",
+        ],
+        labels=dict(TABLE_ROWS),
+        definitions=DEFINITIONS,
+    )
+
+
+def _register() -> None:
+    from scout.benchmark.registry import register_suite
+
+    register_suite(
+        "email_engine",
+        "Email engine · strategies",
+        "Labelled synthetic domains (published, conventions, unknown, catch-all, greylisting, gateways, no MX) "
+        "against the simulated mail world: legacy vs fast-only vs fast+deep vs port-25-blocked.",
+        run_suite,
+        strategies=tuple(STRATEGIES),
+        default_config={"domains": 300, "seed": 7, "waves": 2},
+    )
+
+
+_register()

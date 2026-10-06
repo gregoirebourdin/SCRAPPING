@@ -49,6 +49,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Databases stamped while this revision was an empty placeholder still have email_resolver_stats: nothing to undo.
+    if not sa.inspect(op.get_bind()).has_table("resolver_stats"):
+        return
     op.drop_column("resolver_stats", "last_outcome_at")
     op.drop_column("resolver_stats", "successes")
     op.execute("ALTER TABLE resolver_stats RENAME CONSTRAINT pk_resolver_stats TO pk_email_resolver_stats")

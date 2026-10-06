@@ -76,3 +76,17 @@ def test_blocked_port_25_stops_probing_quickly_without_negative_verdicts(report:
 async def test_unknown_strategy_is_refused() -> None:
     with pytest.raises(ValueError):
         await run_strategy(generate(2), "nope")
+
+
+async def test_registered_as_a_benchmark_harness_suite() -> None:
+    from scout.benchmark.registry import get_suite, load_suites
+
+    load_suites()
+    spec = get_suite("email_engine")
+    assert spec is not None and set(spec.strategies) == set(STRATEGIES)
+    result = await spec.run({"domains": 20, "strategies": ["fast_only", "fast_deep"]})
+    assert set(result.strategies) == {"fast_only", "fast_deep"}
+    recall = result.metrics["email_discovery_recall"]
+    assert {"value", "k", "n", "ci90"} <= set(recall) and recall["n"] > 0
+    assert result.definitions and "email_precision" in result.definitions
+    assert any("not a precision claim" in n for n in result.notes)

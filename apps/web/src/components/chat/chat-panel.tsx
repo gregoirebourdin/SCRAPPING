@@ -137,10 +137,14 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
 
   // Resume the latest thread for this list (spec §112: reopen a list and continue).
   const [threadListId, setThreadListId] = useState(listId);
+  // The conversation that launched a search follows it to the new list instead of being reset.
+  const [followList, setFollowList] = useState<string | null>(null);
   if (threadListId !== listId) {
     setThreadListId(listId);
-    setThreadId(null);
-    setMessages([]);
+    if (!(listId && listId === followList)) {
+      setThreadId(null);
+      setMessages([]);
+    }
   }
   useEffect(() => {
     if (threadId || !threads.data?.length || messages.length) return;
@@ -208,7 +212,10 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
           break;
         }
         case "open_list":
-          if (eff.list_id && eff.list_id !== sc.listId) router.push(`/lists/${eff.list_id}`);
+          if (eff.list_id && eff.list_id !== sc.listId) {
+            setFollowList(eff.list_id as string);
+            router.push(`/lists/${eff.list_id}`);
+          }
           qc.invalidateQueries({ queryKey: qk.lists });
           break;
         case "open_view":
