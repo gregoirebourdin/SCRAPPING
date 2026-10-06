@@ -878,6 +878,26 @@ async def _extend_sources(s: AsyncSession, c: Campaign, defn: CampaignDefinition
     return added
 
 
+async def _set_definition(
+    s: AsyncSession,
+    c: Campaign,
+    defn: CampaignDefinition,
+    interpretation: list[dict[str, Any]],
+    *,
+    criteria_changed: bool,
+) -> None:
+    c.definition = defn.model_dump(mode="json")
+    c.definition_hash = definition_hash(defn)
+    c.interpretation = interpretation
+    c.target_qualified_count = defn.target_qualified_count
+    c.max_cost_usd = Decimal(str(defn.limits.max_cost_usd)) if defn.limits.max_cost_usd is not None else None
+    c.max_runtime_hours = defn.limits.max_runtime_hours
+    if criteria_changed:
+        await s.execute(sa.delete(CampaignFilter).where(CampaignFilter.campaign_id == c.id))
+        for row in _filters_rows(c.id, defn):
+            s.add(row)
+
+
 async def amend_campaign(
     s: AsyncSession,
     workspace_id: uuid.UUID,
@@ -954,25 +974,13 @@ async def amend_campaign(
         await queue.set_campaign_jobs_paused(s, c.id)
         auto_paused = True
     # ---- apply ----
-    c.definition = new_defn.model_dump(mode="json")
-    c.definition_hash = definition_hash(new_defn)
-    c.interpretation = preview["interpretation"]
-    c.target_qualified_count = new_defn.target_qualified_count
-    c.max_cost_usd = (
-        Decimal(str(new_defn.limits.max_cost_usd)) if new_defn.limits.max_cost_usd is not None else None
-    )
-    c.max_runtime_hours = new_defn.limits.max_runtime_hours
     criteria_changed = any(ch.field not in SAFE_WHILE_RUNNING for ch in changes)
-    new_queries = 0
-    if criteria_changed:
-        await s.execute(sa.delete(CampaignFilter).where(CampaignFilter.campaign_id == c.id))
-        for row in _filters_rows(c.id, new_defn):
-            s.add(row)
-        new_queries = await _extend_sources(s, c, new_defn)
+    await _set_definition(s, c, new_defn, preview["interpretation"], criteria_changed=criteria_changed)
+    new_queries = await _extend_sources(s, c, new_defn) if criteria_changed else 0
     await s.flush()
     from scout.db.enums import ActorType
 
-    await audit.log(
+    entry = await audit.log(
         s,
         workspace_id=workspace_id,
         actor_id=user_id,
@@ -988,6 +996,13 @@ async def amend_campaign(
             "changes": [ch.model_dump() for ch in changes],
             "before": before,
             "after": c.definition,
+        },
+        undo={
+            "op": "restore_campaign_definition",
+            "campaign_id": str(c.id),
+            "definition": before,
+            "expected_hash": c.definition_hash,
+            "changes": [{**ch.model_dump(), "before": ch.after, "after": ch.before} for ch in changes],
         },
     )
     await emit(
@@ -1027,7 +1042,72 @@ async def amend_campaign(
         "new_queries": new_queries,
         "status": c.status.value,
         "base_hash": c.definition_hash,
+        "audit_id": entry.id,
     }
+
+
+_LIVE_FIELDS: dict[str, Any] = {
+    "target_qualified_count": True,
+    "limits": {"max_cost_usd", "max_runtime_hours"},
+}
+
+
+async def restore_definition(
+    s: AsyncSession,
+    workspace_id: uuid.UUID,
+    campaign_id: uuid.UUID,
+    definition: dict[str, Any],
+    *,
+    expected_hash: str | None = None,
+    changes: list[dict[str, Any]] | None = None,
+) -> Campaign:
+    """Undo of an amendment: the previous criteria, target and limits come back, with the same pause → apply →
+    resume as the amendment when criteria change mid-run. Delivered leads stay (they qualified under the
+    criteria in force at the time); discovery queries added for the reverted criteria stay in the plan, and
+    whatever they still find is checked against the restored filters."""
+    c = await lock_campaign(s, workspace_id, campaign_id)
+    if c.status == CampaignStatus.cancelled:
+        raise Conflict("This search was cancelled — it can no longer be changed", code="cancelled")
+    if expected_hash and c.definition_hash != expected_hash:
+        raise Conflict(
+            "This search changed again since that edit",
+            code="stale_undo",
+            hint="Undo the most recent change first.",
+        )
+    defn = CampaignDefinition.model_validate(definition)
+    if definition_hash(defn) == c.definition_hash:
+        return c
+    current = CampaignDefinition.model_validate(c.definition)
+    criteria_changed = current.model_dump(mode="json", exclude=_LIVE_FIELDS) != defn.model_dump(
+        mode="json", exclude=_LIVE_FIELDS
+    )
+    paused_here = False
+    if criteria_changed and c.status in (CampaignStatus.running, CampaignStatus.planning):
+        c.status = CampaignStatus.paused
+        c.paused_at = datetime.now(UTC)
+        await queue.set_campaign_jobs_paused(s, c.id)
+        paused_here = True
+    interpretation = [
+        i.model_dump() for i in interpret(defn, await _list_names(s, workspace_id, defn.exclusion.list_ids))
+    ]
+    await _set_definition(s, c, defn, interpretation, criteria_changed=criteria_changed)
+    await s.flush()
+    if paused_here:
+        await _resume_paused(s, c)
+    await emit(
+        workspace_id,
+        "campaign.amended",
+        {
+            "campaign_id": str(c.id),
+            "changes": changes or [],
+            "target": c.target_qualified_count,
+            "new_queries": 0,
+            "undone": True,
+        },
+        campaign_id=c.id,
+        session=s,
+    )
+    return c
 
 
 # ---------------------------------------------------------------------------------------------

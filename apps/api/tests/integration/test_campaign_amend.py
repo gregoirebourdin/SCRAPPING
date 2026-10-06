@@ -500,3 +500,67 @@ async def test_first_page_load_burst_resolves_to_a_single_workspace(db):
             .where(WorkspaceMember.user_id == "user_burst")
         )
     assert n == 1
+
+
+async def test_amend_is_undoable_and_restores_criteria_target_and_filters(workspace):
+    from scout.errors import ValidationFailed
+    from scout.services.undo import undo
+
+    ws, user = workspace
+    defn, _ = await parse_prompt("Find 10 marketing agencies in Lyon, founders")
+    async with session_scope() as s:
+        c = await csvc.create_campaign(s, ws, defn, user_id=user, prompt="x")
+        cid = c.id
+        c.status = CampaignStatus.running
+    original, _ = await _state(cid)
+    original_def, original_hash = original.definition, original.definition_hash
+
+    async def filters() -> list[tuple[str, str]]:
+        async with session_scope() as s:
+            rows = (await s.scalars(sa.select(CampaignFilter).where(CampaignFilter.campaign_id == cid))).all()
+            return sorted((r.field, str(r.value)) for r in rows)
+
+    original_filters = await filters()
+    async with session_scope() as s:
+        out = await csvc.amend_campaign(
+            s, ws, cid, CampaignAmendment(instruction="ajoute Marseille, +5 leads"), user_id=user
+        )
+    assert out["applied"] and out["audit_id"]
+    changed, _ = await _state(cid)
+    assert changed.definition_hash != original_hash and changed.target_qualified_count == 15
+    assert await filters() != original_filters
+
+    async with session_scope() as s:
+        res = await undo(s, ws, out["audit_id"], user_id=user)
+    assert res["base_hash"] == original_hash
+    restored, _ = await _state(cid)
+    assert restored.definition == original_def and restored.definition_hash == original_hash
+    assert restored.target_qualified_count == 10
+    assert restored.status == CampaignStatus.running, (
+        "undo mid-run pauses → applies → resumes, like the amend"
+    )
+    assert await filters() == original_filters
+    undone = [e for e in await _events(cid, "campaign.amended") if e.get("undone")]
+    assert undone and {ch["field"] for ch in undone[-1]["changes"]} >= {"location", "target"}
+    async with session_scope() as s:
+        with pytest.raises(Conflict):
+            await undo(s, ws, out["audit_id"], user_id=user)  # already undone
+
+    # an older change can't be undone over a newer one
+    async with session_scope() as s:
+        first = await csvc.amend_campaign(s, ws, cid, CampaignAmendment(add_target=1), user_id=user)
+    async with session_scope() as s:
+        await csvc.amend_campaign(s, ws, cid, CampaignAmendment(add_target=2), user_id=user)
+    async with session_scope() as s:
+        with pytest.raises(Conflict) as exc:
+            await undo(s, ws, first["audit_id"], user_id=user)
+    assert exc.value.code == "stale_undo"
+
+    # nor on a cancelled search
+    async with session_scope() as s:
+        last = await csvc.amend_campaign(s, ws, cid, CampaignAmendment(add_target=3), user_id=user)
+    async with session_scope() as s:
+        await csvc.cancel_campaign(s, ws, cid)
+    async with session_scope() as s:
+        with pytest.raises((Conflict, ValidationFailed)):
+            await undo(s, ws, last["audit_id"], user_id=user)

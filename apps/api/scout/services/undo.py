@@ -1,4 +1,5 @@
-"""Undo where realistically safe (spec §114): list moves/removals, renames, archive, manual edits, column creation.
+"""Undo where realistically safe (spec §114): list moves/removals, renames, archive, manual edits, column creation,
+campaign amendments (criteria / target / limits come back; delivered leads stay).
 
 Irreversible external operations (exports downloaded, SMTP probes, crawls) are never offered as undoable.
 """
@@ -100,4 +101,16 @@ async def apply_undo(
             s, workspace_id, et, uuid.UUID(p["entity_id"]), p["field"], p["previous"], user_id=user_id
         )
         return {"restored": p["field"]}
+    if op == "restore_campaign_definition":
+        from scout.pipeline.campaigns import restore_definition
+
+        c = await restore_definition(
+            s,
+            workspace_id,
+            uuid.UUID(p["campaign_id"]),
+            p["definition"],
+            expected_hash=p.get("expected_hash"),
+            changes=p.get("changes"),
+        )
+        return {"campaign_id": str(c.id), "status": c.status.value, "base_hash": c.definition_hash}
     raise ValidationFailed(f"Unknown undo operation '{op}'")

@@ -6,7 +6,7 @@ import { AlertTriangle, ArrowRight, Check, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { type AmendBody, type AmendResult, amendCampaign, qk } from "@/lib/queries";
 
 import type { AmendMode, Lang } from "./run-state";
@@ -34,6 +34,8 @@ const COPY = {
     applyResume: "Apply & resume",
     done: "Search updated",
     blocked: "Updated, but it can't resume yet",
+    undo: "Undo",
+    undone: "Previous criteria restored",
   },
   fr: {
     title: {
@@ -54,6 +56,8 @@ const COPY = {
     applyResume: "Appliquer et reprendre",
     done: "Recherche mise à jour",
     blocked: "Modifiée, mais elle ne peut pas encore reprendre",
+    undo: "Annuler",
+    undone: "Critères précédents restaurés",
   },
 };
 
@@ -161,10 +165,28 @@ export function AmendDialog({
       void qc.invalidateQueries({ queryKey: qk.campaign(campaignId) });
       void qc.invalidateQueries({ queryKey: ["campaign-live", campaignId] });
       void qc.invalidateQueries({ queryKey: qk.campaigns });
+      const auditId = r.audit_id;
+      const refresh = () => {
+        void qc.invalidateQueries({ queryKey: qk.campaign(campaignId) });
+        void qc.invalidateQueries({ queryKey: ["campaign-live", campaignId] });
+        void qc.invalidateQueries({ queryKey: qk.campaigns });
+      };
+      const action = auditId
+        ? {
+            label: t.undo,
+            onClick: () =>
+              void api(`activity/${auditId}/undo`, { method: "POST" })
+                .then(() => {
+                  toast(t.undone);
+                  refresh();
+                })
+                .catch((e: ApiError) => toast.error(e.message, e.hint ? { description: e.hint } : undefined)),
+          }
+        : undefined;
       if (r.resume_blocked) {
-        toast.warning(t.blocked, { description: [r.resume_blocked.message, r.resume_blocked.hint].filter(Boolean).join(" — ") });
+        toast.warning(t.blocked, { description: [r.resume_blocked.message, r.resume_blocked.hint].filter(Boolean).join(" — "), action });
       } else {
-        toast.success(t.done, { description: r.changes.map((c) => `${c.label}: ${c.before} → ${c.after}`).join(" · ") });
+        toast.success(t.done, { description: r.changes.map((c) => `${c.label}: ${c.before} → ${c.after}`).join(" · "), action });
       }
       onApplied?.(r);
       onOpenChange(false);

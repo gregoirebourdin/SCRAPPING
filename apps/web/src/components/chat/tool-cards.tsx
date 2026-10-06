@@ -49,7 +49,7 @@ function Shell({
   );
 }
 
-function UndoButton({ auditId }: { auditId?: unknown }) {
+function UndoButton({ auditId, campaignId }: { auditId?: unknown; campaignId?: string }) {
   const qc = useQueryClient();
   const [done, setDone] = useState(false);
   if (!auditId) return null;
@@ -66,6 +66,11 @@ function UndoButton({ auditId }: { auditId?: unknown }) {
           qc.invalidateQueries({ queryKey: ["rows"] });
           qc.invalidateQueries({ queryKey: qk.lists });
           qc.invalidateQueries({ queryKey: ["columns"] });
+          if (campaignId) {
+            qc.invalidateQueries({ queryKey: qk.campaign(campaignId) });
+            qc.invalidateQueries({ queryKey: ["campaign-live", campaignId] });
+            qc.invalidateQueries({ queryKey: qk.campaigns });
+          }
         } catch (e) {
           toast.error((e as Error).message);
         }
@@ -391,7 +396,12 @@ function AmendedCard({ card }: { card: Card }) {
   const changes = (card.changes as { field: string; label: string; before: string; after: string }[]) ?? [];
   const blocked = card.resume_blocked as { message: string; hint?: string } | null;
   return (
-    <Shell icon={<Check />} tone={blocked ? "neutral" : "success"} title={(fr ? "Recherche modifiée · " : "Search updated · ") + String(card.title ?? "")}>
+    <Shell
+      icon={<Check />}
+      tone={blocked ? "neutral" : "success"}
+      title={(fr ? "Recherche modifiée · " : "Search updated · ") + String(card.title ?? "")}
+      actions={<UndoButton auditId={card.audit_id} campaignId={card.campaign_id as string | undefined} />}
+    >
       <ul className="space-y-0.5">
         {changes.map((c) => (
           <li key={c.field} className="grid grid-cols-[84px_1fr] gap-2 text-meta">

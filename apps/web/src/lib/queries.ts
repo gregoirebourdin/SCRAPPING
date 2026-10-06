@@ -175,6 +175,8 @@ export interface AmendResult {
   resume_blocked?: { code: string; message: string; hint?: string | null } | null;
   new_queries?: number;
   interpretation?: { label: string; value: string }[];
+  /** Applied changes are undoable from the activity log (restores the previous criteria). */
+  audit_id?: number | null;
 }
 
 export interface AmendBody {

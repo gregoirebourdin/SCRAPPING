@@ -1770,6 +1770,7 @@ async def amend_campaign(a: AmendCampaignArgs, ctx: ToolContext) -> ToolOutcome:
             "resumed": out["resumed"],
             "resume_blocked": out["resume_blocked"],
             "list_id": str(list_id) if list_id else None,
+            "audit_id": out.get("audit_id"),
         },
     )
 
