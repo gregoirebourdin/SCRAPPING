@@ -857,10 +857,11 @@ async def _process_batch(
         )
         check_catch_all = intel.catch_all is None or stale
         try:
-            probe = await verifier.probe_domain(
+            probe = await _probe_with_pilot(
+                verifier,
                 d,
-                list(intel.mx_hosts),
-                addresses,
+                intel,
+                requests,
                 check_catch_all=check_catch_all,
                 provider=provider if provider not in (MailProvider.unknown, MailProvider.none) else None,
                 catch_all_addresses=meta.random_probes or None,
@@ -891,6 +892,92 @@ async def _process_batch(
         )
         out[outcome] = out.get(outcome, 0) + 1
     return out
+
+
+def merge_probes(first: DomainProbeResult, second: DomainProbeResult) -> DomainProbeResult:
+    """One view of two sessions on the same domain (pilot, then the rest): catch-all comes from the first."""
+    session = (
+        first.session
+        if second.session in (SessionOutcome.ok, SessionOutcome.not_attempted)
+        else second.session
+    )
+    return dataclasses.replace(
+        first,
+        session=session,
+        verdicts={**first.verdicts, **second.verdicts},
+        probes=first.probes + second.probes,
+        duration_ms=first.duration_ms + second.duration_ms,
+        error=first.error or second.error,
+    )
+
+
+async def _narrow_request(req: EmailVerificationRequest, candidates: list[dict[str, Any]]) -> None:
+    """Persist a pilot-narrowed candidate list (kept in lockstep with the in-memory row for ``_finalize``)."""
+    E = EmailVerificationRequest
+    async with session_scope() as s:
+        res = await s.execute(
+            sa.update(E)
+            .where(E.id == req.id, E.status == RS.processing, E.candidates == req.candidates)
+            .values(candidates=candidates, updated_at=sa.func.now())
+            .returning(E.id)
+        )
+        if res.first() is not None:
+            req.candidates = candidates
+
+
+async def _probe_with_pilot(
+    verifier: DeepVerifier,
+    d: str,
+    intel: DomainIntel,
+    requests: list[EmailVerificationRequest],
+    *,
+    check_catch_all: bool,
+    provider: MailProvider | None,
+    catch_all_addresses: list[str] | None,
+) -> DomainProbeResult:
+    """Unknown convention + several people: probe one pilot person first, then one RCPT per other person on the
+    pattern the pilot confirmed (fewer RCPT commands and connections); otherwise one batch for everyone."""
+    from scout.email.engine import Candidate, narrow_after_pilot, pick_pilot
+
+    mx = list(intel.mx_hosts)
+    batch = [[Candidate.from_dict(c) for c in (r.candidates or [])] for r in requests]
+    pilot_idx = pick_pilot(batch, intel)
+    if pilot_idx is None:
+        return await verifier.probe_domain(
+            d,
+            mx,
+            list(dict.fromkeys(a for r in requests for a in _addresses(r))),
+            check_catch_all=check_catch_all,
+            provider=provider,
+            catch_all_addresses=catch_all_addresses,
+        )
+    pilot = requests[pilot_idx]
+    first = await verifier.probe_domain(
+        d,
+        mx,
+        _addresses(pilot),
+        check_catch_all=check_catch_all,
+        provider=provider,
+        catch_all_addresses=catch_all_addresses,
+    )
+    others = [r for i, r in enumerate(requests) if i != pilot_idx]
+    if first.catch_all is True or first.session not in (SessionOutcome.ok,):
+        return first  # catch-all, or the session failed / was deferred: the rest concludes from this answer
+    narrowed = narrow_after_pilot(
+        batch[pilot_idx], first, [batch[i] for i in range(len(batch)) if i != pilot_idx]
+    )
+    if narrowed is not None:
+        for req, cands in zip(others, narrowed, strict=True):
+            if len(cands) < len(req.candidates or []):
+                await _narrow_request(req, [c.as_dict() for c in cands])
+        log.info("email.deep.pilot", domain=d, pilot=str(pilot.id), narrowed=len(others))
+    rest = list(dict.fromkeys(a for r in others for a in _addresses(r) if a not in first.verdicts))
+    if not rest:
+        return first
+    second = await verifier.probe_domain(
+        d, mx, rest, check_catch_all=False, provider=provider, catch_all_addresses=None
+    )
+    return merge_probes(first, second)
 
 
 def retry_delay_s(attempt: int) -> int:

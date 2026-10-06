@@ -126,3 +126,44 @@ def test_no_expansion_when_the_answer_is_not_a_clean_rejection() -> None:
     assert not should_expand(
         published, intel, _probe({"john.smith@acme.com": SmtpResult.rejected}), H.HEALTHY
     )
+
+
+def test_pilot_person_narrows_the_rest_to_the_confirmed_pattern() -> None:
+    from scout.email.engine import narrow_after_pilot, pick_pilot
+
+    intel = _intel()
+    batch = [
+        build_candidates(f, l_, intel) for f, l_ in (("John", "Smith"), ("Marie", "Durand"), ("Paul", "Roux"))
+    ]
+    idx = pick_pilot(batch, intel)
+    assert idx is not None
+    pilot = batch[idx]
+    accepted = pilot[1]
+    probe = _probe(
+        {c.address: (SmtpResult.accepted if c is accepted else SmtpResult.rejected) for c in pilot}
+    )
+    others = [b for i, b in enumerate(batch) if i != idx]
+    narrowed = narrow_after_pilot(pilot, probe, others)
+    assert narrowed is not None
+    assert all(len(n) == 1 and n[0].pattern == accepted.pattern for n in narrowed)
+    # no narrowing on catch-all or when the pilot is ambiguous
+    assert (
+        narrow_after_pilot(pilot, _probe({accepted.address: SmtpResult.accepted}, catch_all=None), others)
+        is None
+    )
+    both = _probe({c.address: SmtpResult.accepted for c in pilot[:2]})
+    assert narrow_after_pilot(pilot, both, others) is None
+
+
+def test_no_pilot_when_the_convention_is_known_or_for_a_single_person() -> None:
+    from scout.email.engine import pick_pilot
+
+    known = _intel(patterns=[PatternStat("{first}.{last}", 1.0, 0.9, samples=4)])
+    assert (
+        pick_pilot(
+            [build_candidates("John", "Smith", known), build_candidates("Marie", "Durand", known)], known
+        )
+        is None
+    )
+    intel = _intel()
+    assert pick_pilot([build_candidates("John", "Smith", intel)], intel) is None

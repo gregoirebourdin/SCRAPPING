@@ -77,7 +77,10 @@ async def test_sufficient_first_answer_stops_the_chain() -> None:
 
 
 async def test_insufficient_is_explicit_and_does_not_escalate_by_default() -> None:
-    junk = [r("https://www.pagesjaunes.fr/x", "Annuaire"), r("https://fr.linkedin.com/company/a", "A | LinkedIn")]
+    junk = [
+        r("https://www.pagesjaunes.fr/x", "Annuaire"),
+        r("https://fr.linkedin.com/company/a", "A | LinkedIn"),
+    ]
     a, b = Scripted("searxng", junk), Scripted("duckduckgo", COMPANIES)
     res = await chain(a, b).search("q", assess=lambda rs: assess_companies(rs, min_companies=3))
     assert res.provider == "searxng" and not res.sufficient and b.calls == []

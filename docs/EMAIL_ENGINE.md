@@ -89,6 +89,9 @@ keeps `SAFE`; "risky OK" adds `RISKY`. `LIKELY_SAFE` is labelled distinctly in t
 
 * **Lean probes** (`deep_candidates`): a confirmation probes the chosen address only; a guess backed by a
   learned pattern (≥ 0.6) probes its best rendering only; otherwise ≤ 3 candidates.
+* **Pilot person** (`pick_pilot` / `narrow_after_pilot`): when the domain convention is unknown and several
+  people carry pattern guesses, one person is probed first; if exactly one pattern is accepted on a proven
+  non catch-all server, every other person is narrowed to that pattern (one RCPT each) in a second session.
 * **Expansion round** (`should_expand` / `expand_candidates`): when every guess was rejected as an unknown user
   by a healthy server on a domain proven not catch-all, and the domain has no proven convention, the next
   ≤ 3 patterns are tried once in the next per-domain batch. A rejected *published* address is not expanded
@@ -133,9 +136,9 @@ Run (1,000 synthetic domains, 1,845 people, seed 7, 2 waves — `APP_ENV=test`, 
 | P50 / P95 time to first verdict (ms) | 535 / 2,760 | 40 / 42 | 41 / 42 | 40 / 42 |
 | P95 time to final verdict incl. greylist backoff (ms) | 2,760 | 42 | 300,921 | 42 |
 | SMTP fallback rate | 0.95 | 0 | 0.45 | 0.003 |
-| SMTP sessions / RCPT commands | 2,591 / 3,653 | 0 / 0 | **817** / 4,027 | 10 / 0 |
-| Cost per email (assumed unit costs) | $5.7e-5 | $0 | $2.7e-5 | $2e-7 |
-| Emails resolved per minute (bounded pools) | 128 | 22,808 | 506 | 574 |
+| SMTP connections / RCPT commands | 2,591 / 3,653 | 0 / 0 | **975** / 3,881 | 20 / 0 |
+| Cost per email (assumed unit costs) | $5.7e-5 | $0 | $2.8e-5 | $2e-7 |
+| Emails resolved per minute (bounded pools) | 128 | 22,808 | 450 | 574 |
 
 Reading it honestly:
 
@@ -144,9 +147,11 @@ Reading it honestly:
   the health monitor closes the gate; no INVALID verdict caused by it).
 * `LIKELY_SAFE` without SMTP costs precision: in this world 8 % of people have no mailbox, so a proven
   convention is right ~95 % of the time. Campaigns that need certainty use "SAFE only".
-* `fast_deep` sends 3× fewer SMTP sessions than `legacy` (one per domain instead of one per address) but ~10 %
-  more RCPT commands (several candidates per batch). A pilot-person strategy for unknown domains is the next
-  optimisation to evaluate with this harness.
+* `fast_deep` opens 2.7× fewer SMTP connections than `legacy` (batched per domain instead of one per address)
+  and sends ~6 % more RCPT commands, essentially the second random catch-all probe per domain (`legacy` used
+  one; several random addresses make catch-all detection robust). A pilot person is probed first on domains
+  with an unknown convention, then one RCPT per other person on the confirmed pattern (`pick_pilot` /
+  `narrow_after_pilot`), which removed ~4 % of RCPTs at equal recall.
 * These are synthetic scenarios: they compare strategies and guard behaviour. No precision figure for real
   domains is claimed before a benchmark on a real labelled dataset (Benchmark Harness, `/benchmark`).
 
@@ -157,3 +162,10 @@ Article 14 notice and an opt-out (the suppression list enforces it everywhere). 
 kept minimal (one session per domain, catch-all cached) to avoid abusive patterns and IP blocklisting.
 No paid enrichment API is a dependency; reference projects were studied for ideas only (two have no
 licence, OpenEnrich is AGPL-3.0 — no code was copied).
+
+email-enrich (waterdoog, MIT, TypeScript) comparison — adopted: courtesy titles and suffixes stripped
+from names (`Dr`, `M.`, `Mme`, `Jr`, `PhD`…), the `{last}.{f}` pattern (`smith.j@`), Cloudflare /
+obfuscated website emails (see ARCHITECTURE.md §11.1). Not adopted: local-part-length pattern guessing,
+unlearned candidate scoring, an affinity guard without colleague conflicts, SMTP with a non-FQDN identity
+and 5xx = invalid; `www.` address rewriting (not observed evidence); `security.txt` / `humans.txt`
+harvesting (mostly role addresses, no decision makers).

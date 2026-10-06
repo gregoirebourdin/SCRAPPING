@@ -149,7 +149,10 @@ def test_company_identity_given_wrong_and_missing() -> None:
 
 
 def test_people_matching_exhaustive_vs_partial_and_duplicates() -> None:
-    expected = [{"first": "Marie", "last": "Dupont", "title": "Fondatrice"}, {"first": "Jean", "last": "Martin"}]
+    expected = [
+        {"first": "Marie", "last": "Dupont", "title": "Fondatrice"},
+        {"first": "Jean", "last": "Martin"},
+    ]
     actual = [
         {"first": "Marie", "last": "Dupont", "title": "CEO"},
         {"full_name": "DUPONT Marie"},  # duplicate of the first (order swapped)
@@ -169,10 +172,22 @@ def test_people_matching_exhaustive_vs_partial_and_duplicates() -> None:
 
 
 def test_email_verdicts_including_invalid_and_company_level() -> None:
-    exp_people = [{"first": "Marie", "last": "Dupont"}, {"first": "Jean", "last": "Martin"}, {"first": "Paul", "last": "Leroy"}]
+    exp_people = [
+        {"first": "Marie", "last": "Dupont"},
+        {"first": "Jean", "last": "Martin"},
+        {"first": "Paul", "last": "Leroy"},
+    ]
     actual = [
-        {"first": "Marie", "last": "Dupont", "email": {"address": "Marie.Dupont@acme-demo.fr", "status": "SAFE"}},
-        {"first": "Jean", "last": "Martin", "email": {"address": "j.martin@acme-demo.fr", "status": "LIKELY_SAFE"}},
+        {
+            "first": "Marie",
+            "last": "Dupont",
+            "email": {"address": "Marie.Dupont@acme-demo.fr", "status": "SAFE"},
+        },
+        {
+            "first": "Jean",
+            "last": "Martin",
+            "email": {"address": "j.martin@acme-demo.fr", "status": "LIKELY_SAFE"},
+        },
         {"first": "Paul", "last": "Leroy", "email": {"address": "paul@acme-demo.fr", "status": "SAFE"}},
     ]
     _, pairs = compare_people(exp_people, actual)
@@ -183,7 +198,9 @@ def test_email_verdicts_including_invalid_and_company_level() -> None:
         {"address": "contact@acme-demo.fr"},
         {"address": "ann@acme-demo.fr", "first": "Ann", "last": "Lee"},
     ]
-    v = compare_emails(exp_emails, exp_people, actual, [{"address": "contact@acme-demo.fr", "status": "UNKNOWN"}], pairs)
+    v = compare_emails(
+        exp_emails, exp_people, actual, [{"address": "contact@acme-demo.fr", "status": "UNKNOWN"}], pairs
+    )
     assert v is not None
     verdicts = [r["verdict"] for r in v["rows"]]
     assert verdicts == ["correct", "wrong", "invalid_fp", "correct", "missing"]
@@ -193,7 +210,9 @@ def test_email_verdicts_including_invalid_and_company_level() -> None:
 
 
 def test_invalid_address_rejected_by_engine_is_not_a_false_positive() -> None:
-    actual = [{"first": "Paul", "last": "Leroy", "email": {"address": "paul@acme-demo.fr", "status": "INVALID"}}]
+    actual = [
+        {"first": "Paul", "last": "Leroy", "email": {"address": "paul@acme-demo.fr", "status": "INVALID"}}
+    ]
     exp = [{"address": "paul@acme-demo.fr", "status": "INVALID", "first": "Paul", "last": "Leroy"}]
     v = compare_emails(exp, None, actual, [], [])
     assert v and v["rows"][0]["verdict"] == "invalid_ok" and v["fp"] == 0
@@ -232,7 +251,9 @@ def test_expected_pattern_inferred_from_named_addresses_and_ties_are_unknown() -
 def test_catch_all_truth_from_status_and_unknown_engine_verdict_counts_as_wrong() -> None:
     expected = {
         "company": {"domain": "acme-demo.fr"},
-        "emails": [{"address": "marie@acme-demo.fr", "status": "CATCH_ALL", "first": "Marie", "last": "Dupont"}],
+        "emails": [
+            {"address": "marie@acme-demo.fr", "status": "CATCH_ALL", "first": "Marie", "last": "Dupont"}
+        ],
     }
     unknown = compare_item(expected, {"company": {"found": True, "domain": "acme-demo.fr"}, "domain": {}})
     assert unknown["catch_all"] == {"expected": True, "actual": None, "correct": False}
@@ -240,13 +261,21 @@ def test_catch_all_truth_from_status_and_unknown_engine_verdict_counts_as_wrong(
         expected,
         {
             "company": {"found": True, "domain": "acme-demo.fr"},
-            "people": [{"first": "Marie", "last": "Dupont", "email": {"address": "marie@acme-demo.fr", "status": "CATCH_ALL"}}],
+            "people": [
+                {
+                    "first": "Marie",
+                    "last": "Dupont",
+                    "email": {"address": "marie@acme-demo.fr", "status": "CATCH_ALL"},
+                }
+            ],
             "domain": {"catch_all": None, "pattern": "{first}"},
         },
     )
     assert from_status["catch_all"]["correct"] is True
     assert from_status["pattern"] == {"expected": "{first}", "actual": "{first}", "correct": True}
-    explicit = compare_item({"company": {"domain": "acme-demo.fr", "catch_all": False}}, {"domain": {"catch_all": True}})
+    explicit = compare_item(
+        {"company": {"domain": "acme-demo.fr", "catch_all": False}}, {"domain": {"catch_all": True}}
+    )
     assert explicit["catch_all"]["correct"] is False
 
 
@@ -289,12 +318,22 @@ def _item(**actual_overrides):
 def test_aggregate_rates_carry_n_and_interval_and_given_identity_is_excluded() -> None:
     e1, a1 = _item()
     e2, a2 = _item(
-        people=[{"first": "Zoé", "last": "Bernard", "email": {"address": "zoe@acme-demo.fr", "status": "SAFE"}}],
+        people=[
+            {"first": "Zoé", "last": "Bernard", "email": {"address": "zoe@acme-demo.fr", "status": "SAFE"}}
+        ],
         email_resolutions=[{"ms": 300, "deep": True, "cache_hit": False}],
     )
     outcomes = [
-        {"verdicts": compare_item(e1, a1, {"company": {"domain": "acme-demo.fr"}}), "latency_ms": 100, "cost_usd": 0.01},
-        {"verdicts": compare_item(e2, a2, {"company": {"name": "Acme"}}), "latency_ms": 300, "cost_usd": 0.03},
+        {
+            "verdicts": compare_item(e1, a1, {"company": {"domain": "acme-demo.fr"}}),
+            "latency_ms": 100,
+            "cost_usd": 0.01,
+        },
+        {
+            "verdicts": compare_item(e2, a2, {"company": {"name": "Acme"}}),
+            "latency_ms": 300,
+            "cost_usd": 0.03,
+        },
     ]
     m = aggregate(outcomes, mode="live", total_cost_usd=0.04, duration_ms=60_000)
     # company: item 1 identity was given (excluded), item 2 discovered → 1/1
@@ -306,7 +345,9 @@ def test_aggregate_rates_carry_n_and_interval_and_given_identity_is_excluded() -
     assert m["email_precision"]["value"] == 1.0 and m["email_recall"]["value"] == 0.5
     assert m["safe_email_precision"]["value"] == 1.0
     assert m["smtp_fallback_rate"]["value"] == 0.5 and m["cache_hit_rate"]["value"] == 0.5
-    assert m["avg_email_resolution_ms"]["value"] == 200 and m["p95_email_resolution_ms"]["value"] == pytest.approx(290)
+    assert m["avg_email_resolution_ms"]["value"] == 200 and m["p95_email_resolution_ms"][
+        "value"
+    ] == pytest.approx(290)
     assert m["enrichment_accuracy"]["value"] == 1.0
     assert m["qualified_leads"]["value"] == 1
     assert m["cost_per_qualified_lead"]["value"] == pytest.approx(0.04)
@@ -320,7 +361,9 @@ def test_aggregate_rates_carry_n_and_interval_and_given_identity_is_excluded() -
 
 def test_aggregate_registry_mode_has_coverage_but_no_throughput() -> None:
     e, a = _item()
-    m = aggregate([{"verdicts": compare_item(e, a, {"company": {"domain": "acme-demo.fr"}})}], mode="registry")
+    m = aggregate(
+        [{"verdicts": compare_item(e, a, {"company": {"domain": "acme-demo.fr"}})}], mode="registry"
+    )
     assert m["company_coverage"]["value"] == 1.0
     assert "emails_resolved_per_minute" not in m and "cost_per_email" not in m
     assert m["cost_usd"]["value"] == 0
@@ -329,7 +372,11 @@ def test_aggregate_registry_mode_has_coverage_but_no_throughput() -> None:
 def test_duplicate_rate_counts_people_and_shared_addresses() -> None:
     e, a = _item(
         people=[
-            {"first": "Marie", "last": "Dupont", "email": {"address": "marie@acme-demo.fr", "status": "SAFE"}},
+            {
+                "first": "Marie",
+                "last": "Dupont",
+                "email": {"address": "marie@acme-demo.fr", "status": "SAFE"},
+            },
             {"full_name": "Dupont Marie", "email": {"address": "marie@acme-demo.fr", "status": "SAFE"}},
         ]
     )

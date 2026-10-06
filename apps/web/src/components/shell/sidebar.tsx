@@ -1,7 +1,22 @@
 "use client";
 
 import { cn, Kbd, Logo, Tip } from "@scout/design-system";
-import { Activity, Building2, ChartNoAxesColumn, CircleUserRound, Database, Inbox, ListChecks, PanelLeft, Radar, Search, Settings, Sparkles, Users } from "lucide-react";
+import {
+  Activity,
+  Building2,
+  ChartNoAxesColumn,
+  CircleUserRound,
+  Database,
+  FlaskConical,
+  Inbox,
+  ListChecks,
+  PanelLeft,
+  Radar,
+  Search,
+  Settings,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -18,6 +33,7 @@ const NAV = [
   { href: "/review", label: "Review", icon: Inbox },
   { href: "/activity", label: "Activity", icon: Activity },
   { href: "/sources", label: "Sources", icon: Database },
+  { href: "/benchmark", label: "Benchmark", icon: FlaskConical },
   { href: "/usage", label: "Usage", icon: ChartNoAxesColumn },
 ];
 

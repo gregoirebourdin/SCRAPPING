@@ -117,7 +117,9 @@ async def test_challenged_l2_escalates_to_dynamic():
 async def test_unrecovered_block_reraises_l1_error():
     l2 = FakeTier("scrapling_fetcher", _resp("", tier="scrapling_fetcher"))
     l2_403 = FakeTier("scrapling_dynamic", _resp(REAL, status=403, tier="scrapling_dynamic"))
-    chain = tiers.TierChain(tiers={"scrapling_fetcher": l2, "scrapling_dynamic": l2_403}, l1=FakeL1(_blocked()))
+    chain = tiers.TierChain(
+        tiers={"scrapling_fetcher": l2, "scrapling_dynamic": l2_403}, l1=FakeL1(_blocked())
+    )
     with pytest.raises(HttpBlockedError):
         await chain.fetch(URL)
     assert chain.sticky is None
@@ -204,7 +206,9 @@ def test_challenge_detection():
     assert tiers.looks_challenged(_resp(CHALLENGE))
     assert not tiers.looks_challenged(_resp(REAL))
     cf_page = "<html><head><title>Acme</title><script src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'></script>"
-    assert not tiers.looks_challenged(_resp(cf_page + "</head><body>ok</body></html>"))  # CF bot JS on a real page
+    assert not tiers.looks_challenged(
+        _resp(cf_page + "</head><body>ok</body></html>")
+    )  # CF bot JS on a real page
     mitigated = _resp(REAL)
     mitigated.headers["cf-mitigated"] = "challenge"
     assert tiers.looks_challenged(mitigated)

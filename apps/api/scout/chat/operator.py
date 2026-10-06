@@ -594,8 +594,8 @@ async def _run_model(
         results: list[tuple[ToolCallRequest, dict[str, Any]]] = []
         stop = False
         for call in calls:
-            async for ev in _emit_tool(call, turn, tctx, ui):
-                yield ev
+            async for tool_ev in _emit_tool(call, turn, tctx, ui):
+                yield tool_ev
             res, _card, status, confirm = turn.last
             executed_any = True
             results.append((call, res))
@@ -795,16 +795,19 @@ async def _run_route(
         )
     async for ev in _emit_tool(call, turn, tctx, tctx.ui):
         yield ev
-    _res, card, status, _confirm = turn.last
-    if route.launch and status == "executed" and card and card.get("action_id"):
+    _res, plan_card, status, _confirm = turn.last
+    planned: dict[str, Any] = plan_card or {}
+    if route.launch and status == "executed" and planned.get("action_id"):
         yield turn.step("launch", t("launch", turn.lang))
-        out = await launch_plan(tctx.ws, uuid.UUID(card["action_id"]), tctx.ui, append_to_plan_message=False)
+        out = await launch_plan(
+            tctx.ws, uuid.UUID(planned["action_id"]), tctx.ui, append_to_plan_message=False
+        )
         for p in turn.parts:
-            if p.get("type") == "card" and (p.get("card") or {}).get("action_id") == card["action_id"]:
+            if p.get("type") == "card" and (p.get("card") or {}).get("action_id") == planned["action_id"]:
                 p["card"] = {**p["card"], "launched_campaign_id": out["campaign_id"]}
         yield (
             "card_update",
-            {"action_id": card["action_id"], "patch": {"launched_campaign_id": out["campaign_id"]}},
+            {"action_id": planned["action_id"], "patch": {"launched_campaign_id": out["campaign_id"]}},
         )
         yield turn.step("launch", "", "done")
         run = {**out["card"], "lang": turn.lang}
@@ -843,7 +846,7 @@ async def launch_plan(
             raise NotFound("Plan not found")
         if a.status != ActionStatus.executed or not (a.result or {}).get("definition"):
             raise Conflict("This plan can't be launched", code="not_a_plan")
-        res = dict(a.result)
+        res = dict(a.result or {})
         if res.get("campaign_id"):
             already = True
             cid = uuid.UUID(res["campaign_id"])
@@ -886,8 +889,9 @@ async def launch_plan(
                 assistant_action_id=a.id,
                 summary=f'Started campaign "{c.name}"',
             )
-        c = await s.get(Campaign, cid)
-        assert c is not None
+        camp = await s.get(Campaign, cid)
+        assert camp is not None
+        c = camp
         card = {
             "kind": "campaign_started",
             "title": c.name,

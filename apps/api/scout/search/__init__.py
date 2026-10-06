@@ -9,6 +9,7 @@ Gemini Google Search grounding *only when the free search could not resolve the 
   ``lookup_chain()``, ``gemini_fallback_only()``.
 * ``assess`` — explicit sufficiency rules (``assess_companies``, ``assess_subject``).
 * ``people`` — decision-maker discovery from search results (public profile titles, press snippets).
+* ``website`` — website candidates for resolution (identity still proven by ``scout.crawl.resolve``).
 * ``telemetry`` — usage ledger ($0 for free engines) + ``scout.learning.stats`` events (optional).
 """
 

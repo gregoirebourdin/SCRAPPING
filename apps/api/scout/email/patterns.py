@@ -30,6 +30,7 @@ PATTERNS: list[str] = [
     "{last}{f}",
     "{f}{l}",
     "{first}.{l}",
+    "{last}.{f}",
 ]
 PATTERN_SET: frozenset[str] = frozenset(PATTERNS)
 
@@ -75,6 +76,32 @@ _SEPARATORS = re.compile(r"[._-]+")
 VARIANT_DECAY = 0.6
 
 
+# Courtesy titles and post-nominal suffixes are never part of a mailbox ("Dr Jean Dupont", "John Smith Jr.").
+HONORIFICS: frozenset[str] = frozenset(
+    {
+        "dr",
+        "mr",
+        "mrs",
+        "ms",
+        "miss",
+        "mx",
+        "prof",
+        "pr",
+        "sir",
+        "dame",
+        "m",
+        "mme",
+        "mlle",
+        "me",
+        "herr",
+        "frau",
+    }
+)
+SUFFIXES: frozenset[str] = frozenset(
+    {"jr", "jnr", "sr", "snr", "ii", "iii", "iv", "phd", "md", "mba", "esq", "dds", "cpa", "msc", "bsc"}
+)
+
+
 @dataclass(frozen=True)
 class NameParts:
     """Ascii-folded, lowercase spelling variants of a person's name (primary variant first)."""
@@ -101,8 +128,18 @@ def _dedupe(items: Iterable[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(i for i in items if i))
 
 
+def _strip_titles(words: list[str]) -> list[str]:
+    """Drop leading courtesy titles and trailing suffixes, never the whole name."""
+    out = list(words)
+    while len(out) > 1 and out[0] in HONORIFICS:
+        out.pop(0)
+    while len(out) > 1 and out[-1] in SUFFIXES:
+        out.pop()
+    return out
+
+
 def _first_variants(raw: str | None) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    words = _clean(raw).replace("'", "").split()
+    words = _strip_titles(_clean(raw).replace("'", "").split())
     if not words:
         return (), ()
     if len(words) > 2:
@@ -133,7 +170,7 @@ def _core_variants(words: list[str]) -> list[str]:
 
 def _last_variants(raw: str | None) -> tuple[str, ...]:
     s = _ELISION.sub(r"\1 ", _clean(raw)).replace("'", "")
-    words = s.split()
+    words = _strip_titles(s.split())
     particles: list[str] = []
     while len(words) > 1 and words[0] in PARTICLES:
         particles.append(words.pop(0))
@@ -244,7 +281,8 @@ def _shape_weights(local_part: str) -> dict[str, float]:
             if len(a) == 1 and len(b) > 1:
                 return {"{f}.{last}": 1.0}
             if len(b) == 1 and len(a) > 1:
-                return {"{first}.{l}": 1.0}
+                # "jean.d" or "dupont.j": without names the order cannot be told apart
+                return {"{first}.{l}": 0.5, "{last}.{f}": 0.5}
             if len(a) > 1 and len(b) > 1:
                 return {"{first}.{last}": 1.0}
         if sep == "_" and len(a) > 1 and len(b) > 1:
@@ -290,7 +328,7 @@ def infer_from_local_parts(local_parts: Iterable[str]) -> list[tuple[str, float,
 
 # Share of business domains using each pattern (B2B mailbox surveys; Europe-weighted).
 GLOBAL_PRIORS: dict[str, float] = {
-    "{first}.{last}": 0.41,
+    "{first}.{last}": 0.40,
     "{first}": 0.20,
     "{f}{last}": 0.13,
     "{first}{last}": 0.06,
@@ -303,6 +341,7 @@ GLOBAL_PRIORS: dict[str, float] = {
     "{last}{f}": 0.02,
     "{f}{l}": 0.01,
     "{first}.{l}": 0.01,
+    "{last}.{f}": 0.01,
 }
 
 _EU_DOT = {"FR", "BE", "LU", "CH", "ES", "IT", "PT", "NL", "MC"}

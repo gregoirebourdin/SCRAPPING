@@ -266,7 +266,9 @@ async def test_request_upsert_and_one_job_per_domain(env, workspace):
 # ---- batching ------------------------------------------------------------------------------------
 
 
-async def test_twenty_requests_one_probe_session(env, workspace, stub):
+async def test_twenty_requests_pilot_then_one_rcpt_each(env, workspace, stub):
+    """Unknown convention: one pilot person is probed first, then one RCPT per other person on the confirmed
+    pattern — two sessions for 20 people instead of 20 × 3 guesses."""
     ws, _ = workspace
     world = MailWorld()
     people = await make_people(ws, 20)
@@ -279,7 +281,8 @@ async def test_twenty_requests_one_probe_session(env, workspace, stub):
     verifier = WorldDeepVerifier(world, monitor=env)
     summary = await deep.process_domain("acme.fr", verifier=verifier, concluder=stub, monitor=env)
 
-    assert world.sessions == 1 and world.connections == 20 and world.rcpt_commands == 62
+    assert world.sessions == 2 and world.rcpt_commands == 3 + 2 + 19  # pilot's 3 guesses + 2 random, then 1 each
+    assert world.connections == 1 + 7  # ≤ 3 targets per connection
     assert summary["claimed"] == 20 and summary["done"] == 20 and summary["probed"]
     assert len(stub.calls) == 20 and len(stub.persisted) == 20
     for call in stub.calls:
@@ -299,7 +302,7 @@ async def test_twenty_requests_one_probe_session(env, workspace, stub):
         prof is not None and prof.catch_all is False and prof.catch_all_method == "smtp_random_probes:world"
     )
     assert prof.smtp_reachable is True and prof.catch_all_checked_at is not None
-    assert hrow is not None and len(hrow.window) == 1  # one health entry for the whole domain batch
+    assert hrow is not None and len(hrow.window) == 2  # one health entry per session: pilot, then the rest
     assert summary.get("followup_job") is None
 
 
@@ -331,12 +334,13 @@ async def test_greylisting_retries_with_backoff_then_concludes(env, workspace, s
     assert len(saved) == 2
 
     # not due yet: nothing is probed
+    n1 = world.sessions  # pilot greylisted → everyone else probed too, so every address starts its greylist timer
     s_early = await deep.process_domain("grey.fr", verifier=verifier, concluder=stub, monitor=env)
-    assert s_early["claimed"] == 0 and world.sessions == 1
+    assert s_early["claimed"] == 0 and world.sessions == n1
 
     await make_due("grey.fr")
     s2 = await deep.process_domain("grey.fr", verifier=verifier, concluder=stub, monitor=env)
-    assert s2["done"] == 2 and world.sessions == 2
+    assert s2["done"] == 2 and world.sessions > n1
     second = stub.calls[-2:]
     assert all(c["attempt"] == 2 for c in second)
     assert second[0]["catch_all"] is False  # same random probes passed greylisting on the retry
@@ -495,7 +499,7 @@ async def test_worker_runs_the_deep_job(env, workspace, stub):
     await request_for(ws, people, "acme.fr")
     await Worker(slots=2, types=[deep.JOB_TYPE]).run_until_idle(timeout_s=30)
     assert {r.status for r in await rows()} == {RS.done}
-    assert world.sessions == 1 and len(stub.persisted) == 3
+    assert world.sessions <= 2 and len(stub.persisted) == 3  # pilot + the rest, one job
     (job,) = await jobs()
     assert job.status == JobStatus.completed and job.result and job.result["done"] == 3
 

@@ -192,3 +192,13 @@ def test_relative_yield() -> None:
     poor = routing.estimate(*k, {k: row(attempts=500, successes=50, correct=1, wrong=100)})
     assert routing.relative_yield(great) == routing.FACTOR_RANGE[1]
     assert routing.relative_yield(poor) == routing.FACTOR_RANGE[0]
+
+
+def test_crawl_tier_priors_match_crawl_tiers_keys() -> None:
+    from scout.crawl import tiers
+
+    keys = set(P.priors_for("crawl.tier"))
+    assert keys == {"http", "scrapling_fetcher", "scrapling_dynamic", "crawl4ai", "playwright"}
+    for k in keys:  # same cost classes as the telemetry
+        assert P.prior("crawl.tier", k).cost_usd == pytest.approx(tiers._cost(k))
+    assert P.prior("crawl.tier", "http").coverage >= P.prior("crawl.tier", "scrapling_fetcher").coverage

@@ -32,7 +32,8 @@ from typing import Any
 
 from scout.db.enums import EmailDiscoveryMethod, EmailEvidenceSource, EmailStatus, SmtpHealthState, SmtpResult
 from scout.email.confidence import STATUS_RANK
-from scout.email.contracts import DomainIntel, DomainProbeResult, ObservedEmail
+from scout.email.contracts import DomainIntel, DomainProbeResult, ObservedEmail, SessionOutcome
+from scout.email.deep import merge_probes
 from scout.email.engine import (
     Candidate,
     build_candidates,
@@ -41,7 +42,9 @@ from scout.email.engine import (
     deep_plan,
     evaluate,
     expand_candidates,
+    narrow_after_pilot,
     pick,
+    pick_pilot,
     should_expand,
 )
 from scout.email.finder import find_email
@@ -129,6 +132,7 @@ class Resources:
     smtp_sessions: int = 0
     smtp_rcpts: int = 0
     expansions: int = 0
+    pilots: int = 0
     chains: list[tuple[int, list[int]]] = field(
         default_factory=list
     )  # (fast_ms, [smtp session ms…]) per domain-wave
@@ -316,22 +320,50 @@ async def _deep(
             out.path = "deep"
             _apply(out, v, mode)
         return
-    addrs = list(dict.fromkeys(c.address for _, _, cands, _ in pending for c in cands))
-    w0, r0 = run.world.simulated_latency_ms, run.world.rcpt_commands
-    probe = await run.verifier.probe_domain(
-        d.domain,
-        intel.mx_hosts,
-        addrs,
-        check_catch_all=intel.catch_all is None,
-        provider=intel.provider,
-        catch_all_addresses=mem.catch_all_probes or None,
-    )
-    if not mem.catch_all_probes:
-        mem.catch_all_probes = list(getattr(probe, "random_verdicts", {}) or {})
-    session_ms = (run.world.simulated_latency_ms - w0) + run.lat.smtp_overhead_ms
-    sessions.append(session_ms)
-    run.res.smtp_sessions += 1
-    run.res.smtp_rcpts += run.world.rcpt_commands - r0
+
+    async def probe_once(addrs: list[str], check_catch_all: bool) -> DomainProbeResult:
+        w0, r0 = run.world.simulated_latency_ms, run.world.rcpt_commands
+        p = await run.verifier.probe_domain(
+            d.domain,
+            intel.mx_hosts,
+            addrs,
+            check_catch_all=check_catch_all,
+            provider=intel.provider,
+            catch_all_addresses=(mem.catch_all_probes or None) if check_catch_all else None,
+        )
+        if check_catch_all and not mem.catch_all_probes:
+            mem.catch_all_probes = list(getattr(p, "random_verdicts", {}) or {})
+        sessions.append((run.world.simulated_latency_ms - w0) + run.lat.smtp_overhead_ms)
+        run.res.smtp_sessions += 1
+        run.res.smtp_rcpts += run.world.rcpt_commands - r0
+        return p
+
+    # same plan as the deep job (_probe_with_pilot): pilot person first when the convention is unknown
+    n_sessions = len(sessions)
+    batch = [cands for _, _, cands, _ in pending]
+    pilot_idx = pick_pilot(batch, intel)
+    if pilot_idx is None:
+        addrs = list(dict.fromkeys(c.address for cands in batch for c in cands))
+        probe = await probe_once(addrs, intel.catch_all is None)
+    else:
+        first = await probe_once([c.address for c in batch[pilot_idx]], intel.catch_all is None)
+        probe = first
+        if first.catch_all is not True and first.session == SessionOutcome.ok:
+            others = [i for i in range(len(pending)) if i != pilot_idx]
+            narrowed = narrow_after_pilot(batch[pilot_idx], first, [batch[i] for i in others])
+            if narrowed is not None:
+                run.res.pilots += 1
+                for i, cands in zip(others, narrowed, strict=True):
+                    p, out, _, mode = pending[i]
+                    pending[i] = (p, out, cands, mode)
+            rest = list(
+                dict.fromkeys(
+                    c.address for i in others for c in pending[i][2] if c.address not in first.verdicts
+                )
+            )
+            if rest:
+                probe = merge_probes(first, await probe_once(rest, False))
+    session_ms = sum(sessions[n_sessions:])
     if probe.catch_all is not None:
         mem.catch_all = intel.catch_all = probe.catch_all
         mem.catch_all_confidence = intel.catch_all_confidence = probe.catch_all_confidence
@@ -671,6 +703,8 @@ def metrics(run: _Run, *, cost: CostModel) -> dict[str, Any]:
         "smtp_sessions": run.res.smtp_sessions,
         "smtp_rcpts": run.res.smtp_rcpts,
         "expansion_rounds": run.res.expansions,
+        "pilot_narrowings": run.res.pilots,
+        "smtp_connections": run.world.connections,
         "rcpts_per_resolved_email": round(run.res.smtp_rcpts / resolved, 2) if resolved else None,
         "cache_hit_rate": _rate(sum(o.profile_cached for o in outs), len(outs)),
         "cost_usd": round(cost_usd, 6),
@@ -782,7 +816,8 @@ TABLE_ROWS: list[tuple[str, str]] = [
     ("p95_resolution_ms", "P95 resolution (ms)"),
     ("p95_first_verdict_ms", "P95 first verdict (ms)"),
     ("smtp_fallback_rate", "SMTP fallback rate"),
-    ("smtp_sessions", "SMTP sessions (connections)"),
+    ("smtp_sessions", "SMTP sessions (probe batches)"),
+    ("smtp_connections", "SMTP connections"),
     ("smtp_rcpts", "RCPT commands"),
     ("cache_hit_rate", "Cache hit rate"),
     ("cost_per_email_usd", "Cost / email (assumed $)"),

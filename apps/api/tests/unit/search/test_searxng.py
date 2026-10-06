@@ -43,7 +43,9 @@ async def test_search_sends_json_query_and_parses() -> None:
     route = respx.get(SEARXNG_SEARCH).mock(return_value=httpx.Response(200, json=sx_payload(COMPANY_RESULTS)))
     provider = SearXNGProvider()
     assert provider.is_configured()
-    results = await provider.search("agence marketing Lyon", num=3, lang="fr", region="FR", time_range="month")
+    results = await provider.search(
+        "agence marketing Lyon", num=3, lang="fr", region="FR", time_range="month"
+    )
     assert len(results) == 3 and results[0].url == "https://www.pixel-studio-lyon.fr/"
     params = dict(route.calls.last.request.url.params)
     assert params == {
@@ -82,7 +84,9 @@ def test_unconfigured() -> None:
         (httpx.Response(502), SearchProviderError, FetchError),
         (httpx.Response(200, text="<html>not json</html>"), SearchProviderError, FetchError),
         (
-            httpx.Response(200, json=sx_payload([], unresponsive=[["bing", "CAPTCHA"], ["brave", "timeout"]])),
+            httpx.Response(
+                200, json=sx_payload([], unresponsive=[["bing", "CAPTCHA"], ["brave", "timeout"]])
+            ),
             SearchBlockedError,
             BlockedError,
         ),

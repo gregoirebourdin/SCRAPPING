@@ -570,10 +570,13 @@ async def compare_runs(
             columns.append({**base, "column": str(r.id)})
             metric_sets.append(r.metrics or {})
     order = list(METRIC_DEFS)
-    keys = sorted(
-        {k for m in metric_sets for k in m}, key=lambda k: (order.index(k) if k in order else len(order), k)
-    )
-    metrics = []
+
+    def rank(k: str) -> tuple[int, int, str]:
+        own = min((int(m[k].get("order", 10_000)) for m in metric_sets if k in m), default=10_000)
+        return (order.index(k) if k in order else len(order), own, k)
+
+    keys = sorted({k for m in metric_sets for k in m}, key=rank)
+    metrics: list[dict[str, Any]] = []
     for k in keys:
         sample: dict[str, Any] = next((m[k] for m in metric_sets if k in m), {})
         metrics.append(
@@ -583,6 +586,7 @@ async def compare_runs(
                 "group": sample.get("group", "other"),
                 "unit": sample.get("unit", "number"),
                 "definition": sample.get("definition", ""),
+                "order": len(metrics),
                 "values": [
                     {kk: m[k].get(kk) for kk in ("value", "n", "k", "ci90")} if k in m else None
                     for m in metric_sets

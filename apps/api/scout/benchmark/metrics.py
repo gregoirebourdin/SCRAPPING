@@ -709,6 +709,12 @@ METRIC_DEFS: dict[str, tuple[str, str, str, str]] = {
         "rate",
         "Correct company identities / expected companies (identity not given as input).",
     ),
+    "company_identity_given": (
+        "Identities given as input",
+        "company",
+        "count",
+        "Items whose input already carried the expected domain (excluded from company precision / recall).",
+    ),
     "company_coverage": (
         "Registry coverage",
         "company",
@@ -1074,16 +1080,10 @@ def aggregate(
         "cost_per_qualified_lead", total_cost_usd / c["qualified"] if c["qualified"] else None, c["qualified"]
     )
     if c["company_given"]:
-        m["company_identity_given"] = {
-            "label": "Identities given as input",
-            "group": "company",
-            "unit": "count",
-            "definition": "Items whose input already carried the expected domain (excluded from company precision / recall).",
-            "value": c["company_given"],
-            "n": items,
-            "k": None,
-            "ci90": None,
-        }
+        m["company_identity_given"] = _value_metric("company_identity_given", c["company_given"], items)
+    rank = {k: i for i, k in enumerate(METRIC_DEFS)}
+    for key, metric in m.items():  # JSONB does not keep key order: the display order travels with the metric
+        metric["order"] = rank.get(key, len(rank))
     return m
 
 
@@ -1126,7 +1126,7 @@ def normalize_metrics(
     Non-numeric values (breakdowns, nested dicts) are skipped.
     """
     out: dict[str, dict[str, Any]] = {}
-    for key, v in raw.items():
+    for position, (key, v) in enumerate(raw.items()):
         if isinstance(v, Mapping):
             if "value" not in v:
                 continue  # a breakdown (e.g. counts per status), not a metric
@@ -1157,5 +1157,6 @@ def normalize_metrics(
             "n": int(n) if isinstance(n, int | float) else None,
             "k": int(k) if isinstance(k, int | float) else None,
             "ci90": list(ci) if ci else None,
+            "order": position,
         }
     return out

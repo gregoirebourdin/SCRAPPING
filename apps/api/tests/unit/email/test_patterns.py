@@ -161,3 +161,18 @@ def test_priors_reflect_company_size_and_country():
     for ctx in (micro_fr, large, ranked_priors()):
         assert sum(v for _, v in ctx) == pytest.approx(1.0, abs=0.01)
     assert prior_for("{unknown}") == 0.0
+
+
+def test_titles_and_suffixes_are_not_part_of_names() -> None:
+    # email-enrich comparison: "Dr Jean" must not yield "dr-jean@", "Smith Jr." must not yield "smithjr@"
+    assert name_parts("Dr Jean", "Dupont").first == ("jean",)
+    assert name_parts("Mme Marie", "Curie PhD").last == ("curie",)
+    assert name_parts("John", "Smith Jr.").last == ("smith",)
+    assert name_parts("M.", "Dupont").first == ("m",)  # a lone initial is kept
+
+
+def test_last_dot_initial_pattern() -> None:
+    assert render("{last}.{f}", "John", "Smith") == ["smith.j"]
+    assert infer_pattern("John", "Smith", "smith.j") == "{last}.{f}"
+    shapes = dict((p, c) for p, c, _ in infer_from_local_parts(["smith.j", "doe.a", "martin.p"]))
+    assert set(shapes) == {"{first}.{l}", "{last}.{f}"}  # order unknown without names

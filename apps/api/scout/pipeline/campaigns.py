@@ -838,7 +838,7 @@ async def _extend_sources(s: AsyncSession, c: Campaign, defn: CampaignDefinition
         plan = list(cs.query_plan or [])
         seen = {(q.get("key"), orjson.dumps(q.get("params", {}), option=orjson.OPT_SORT_KEYS)) for q in plan}
         keys = {q.get("key") for q in plan}
-        new_q = []
+        new_q: list[dict[str, Any]] = []
         for q in src.plan(defn, expansion=0):
             qd = asdict(q)
             sig = (qd.get("key"), orjson.dumps(qd.get("params", {}), option=orjson.OPT_SORT_KEYS))
@@ -1124,7 +1124,9 @@ async def live_snapshot(s: AsyncSession, workspace_id: uuid.UUID, campaign_id: u
             "last_progress_at": c.last_progress_at if c else None,
             "jobs": {k.value if hasattr(k, "value") else str(k): int(v) for k, v in jobs.items()},
             "overdue_jobs": int(overdue[0] or 0),
-            "oldest_overdue_s": int((now - overdue[1]).total_seconds()) if overdue[1] is not None else None,
+            "oldest_overdue_s": int((now - overdue[1]).total_seconds())
+            if overdue[1] is not None and now is not None
+            else None,
             "last_error": last_error,
             "workers_enabled": get_settings().worker_enabled,
         },

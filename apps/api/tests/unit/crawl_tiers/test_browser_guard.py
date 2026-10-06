@@ -66,7 +66,10 @@ async def test_guard_serves_allowed_requests_from_our_fetcher():
     await guard.handle(route)
     assert route.fulfilled is not None and not route.aborted
     assert route.fulfilled["body"] == b"<html>ok" and route.fulfilled["status"] == 200
-    assert route.fulfilled["headers"] == {"content-type": "text/html", "set-cookie": "a=b"}  # encoding dropped
+    assert route.fulfilled["headers"] == {
+        "content-type": "text/html",
+        "set-cookie": "a=b",
+    }  # encoding dropped
     assert calls == [("https://acme-test.fr/#top", {"cookie": "sid=1", "accept": "text/html"})]  # no UA leak
     assert guard.served("https://acme-test.fr/")
 
@@ -109,7 +112,9 @@ async def test_guard_aborts_when_fetcher_refuses_and_never_passes_redirects():
 async def test_guard_request_budget_and_handler_errors():
     fetch, calls = _fetcher(OK)
     guard = BrowserGuard(fetch, max_requests=2)
-    routes = [FakeRoute(FakeRequest(f"https://acme-test.fr/{i}.js", resource_type="script")) for i in range(3)]
+    routes = [
+        FakeRoute(FakeRequest(f"https://acme-test.fr/{i}.js", resource_type="script")) for i in range(3)
+    ]
     for r in routes:
         await guard.handle(r)
     assert [r.aborted for r in routes] == [False, False, True] and len(calls) == 2

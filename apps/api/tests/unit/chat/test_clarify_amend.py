@@ -12,8 +12,7 @@ from scout.chat.clarify import ClarifyAnswer, apply_answers, build_questions, wa
 from scout.chat.i18n import detect_lang
 from scout.db.enums import CampaignMode, EmailStatus, ExclusionMode
 from scout.errors import ValidationFailed
-from scout.pipeline.icp import heuristic_parse, to_definition
-from scout.pipeline.icp import ParseContext
+from scout.pipeline.icp import ParseContext, heuristic_parse, to_definition
 from scout.schemas.campaign import CampaignDefinition, CompanyFilters, PeopleFilters
 
 
@@ -180,8 +179,16 @@ CTX = 'workspace: Test\ncampaign "Agences · Lyon": paused 3/50 qualified'
         ("stop", "pause_campaign", {}),
         ("annule la campagne", "cancel_campaign", {}),
         ("reprends", "resume_campaign", {}),
-        ("reprends en ajoutant Marseille", "amend_campaign", {"instruction": "ajoutant Marseille", "resume": True}),
-        ("ajoute aussi Marseille", "amend_campaign", {"instruction": "ajoute aussi Marseille", "resume": True}),
+        (
+            "reprends en ajoutant Marseille",
+            "amend_campaign",
+            {"instruction": "ajoutant Marseille", "resume": True},
+        ),
+        (
+            "ajoute aussi Marseille",
+            "amend_campaign",
+            {"instruction": "ajoute aussi Marseille", "resume": True},
+        ),
         ("+200 leads", "amend_campaign", {"instruction": "+200 leads", "resume": True}),
         ("Only keep SAFE emails", "filter_table", None),
     ],

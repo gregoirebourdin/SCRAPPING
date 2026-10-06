@@ -1,6 +1,6 @@
 "use client";
 
-import { Checkbox, cn, Skeleton } from "@scout/design-system";
+import { Checkbox, cn, ShimmerText, Skeleton } from "@scout/design-system";
 import type { FieldMeta, LeadRow, SortSpec } from "@scout/schemas";
 import {
   type ColumnDef,
@@ -43,6 +43,15 @@ function resolve<T>(u: Updater<T>, old: T): T {
   return typeof u === "function" ? (u as (o: T) => T)(old) : u;
 }
 
+/** A candidate being worked on right now (skeleton row at the end of a list that a search is filling). */
+export interface PendingRow {
+  key: string;
+  title: string;
+  subtitle?: string | null;
+  stage: string;
+  paused?: boolean;
+}
+
 export interface LeadTableProps {
   scope: TableScope;
   specs: ColumnSpec[];
@@ -59,10 +68,20 @@ export interface LeadTableProps {
   onAddColumn?: () => void;
   onConfigureColumn?: (columnId: string) => void;
   emptyState?: React.ReactNode;
+  /** live run: in-flight candidates rendered as skeleton rows after the last row */
+  pending?: PendingRow[];
+  /** live run: more candidates queued than shown */
+  pendingMore?: number;
+  /** row ids that just arrived (enter animation) */
+  fresh?: Record<string, number>;
+  /** row id → column id → time of an in-place update (cell flash) */
+  flash?: Record<string, Record<string, number>>;
 }
 
 export function LeadTable(props: LeadTableProps) {
   const { scope, specs, rows, total, loading, fetchingMore, hasMore, onLoadMore, sort, onSort } = props;
+  const pending = !loading && !hasMore ? (props.pending ?? []) : [];
+  const pendingMore = !loading && !hasMore ? (props.pendingMore ?? 0) : 0;
   const layout = useUI((s) => s.layouts[scope.key]);
   const patchLayout = useUI((s) => s.patchLayout);
   const selectedIds = useUI((s) => s.selection[scope.key]);
@@ -138,7 +157,8 @@ export function LeadTable(props: LeadTableProps) {
   /* ---- virtualization ------------------------------------------------------------------------ */
   const scrollRef = useRef<HTMLDivElement>(null);
   const placeholderCount = loading && rows.length === 0 ? 18 : hasMore ? 6 : 0;
-  const count = rows.length + placeholderCount;
+  const liveCount = pending.length + (pendingMore > 0 ? 1 : 0);
+  const count = rows.length + liveCount + placeholderCount;
   // TanStack Virtual returns non-memoizable functions; this component opts out of compiler memoization on purpose.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -453,6 +473,41 @@ export function LeadTable(props: LeadTableProps) {
         <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
           {items.map((vi) => {
             const row = rows[vi.index];
+            const live = !row && vi.index - rows.length < liveCount ? vi.index - rows.length : -1;
+            if (live >= 0) {
+              const p = pending[live];
+              return (
+                <div
+                  key={p ? `live-${p.key}` : "live-more"}
+                  role="row"
+                  aria-busy="true"
+                  className="absolute left-0 flex items-center border-b border-line/60 text-table animate-fade-in"
+                  style={{ height: rowH, transform: `translateY(${vi.start}px)`, width: totalWidth, minWidth: "100%" }}
+                >
+                  <div style={{ width: SELECT_W }} className="flex shrink-0 items-center justify-center">
+                    <span className={cn("size-1.5 rounded-full", p?.paused ? "bg-warning/70" : "bg-accent/70 animate-pulse-soft")} />
+                  </div>
+                  {p ? (
+                    <>
+                      <div style={{ width: widthOf(dataColIds[0] ?? "") }} className="flex min-w-0 shrink-0 flex-col justify-center px-2.5 leading-tight">
+                        <span className="truncate text-fg-2">{p.title}</span>
+                        {rowH > 32 && p.subtitle && <span className="truncate text-micro text-fg-3">{p.subtitle}</span>}
+                      </div>
+                      <div style={{ width: widthOf(dataColIds[1] ?? "") }} className="min-w-0 shrink-0 truncate px-2.5 text-meta">
+                        {p.paused ? <span className="text-fg-3">{p.stage}</span> : <ShimmerText>{p.stage}…</ShimmerText>}
+                      </div>
+                      {dataColIds.slice(2, 8).map((id, i) => (
+                        <div key={id} style={{ width: widthOf(id) }} className="shrink-0 px-2.5">
+                          <span className={cn("block h-2 rounded-xs skeleton-shimmer", i % 3 === 0 ? "w-3/4" : i % 3 === 1 ? "w-1/2" : "w-2/3")} />
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="px-2.5 text-meta text-fg-3">+{pendingMore.toLocaleString()} more companies queued</div>
+                  )}
+                </div>
+              );
+            }
             if (!row) {
               return (
                 <div
@@ -487,6 +542,8 @@ export function LeadTable(props: LeadTableProps) {
                 activeCol={active?.r === vi.index ? active.c : -1}
                 isOpen={drawer?.id === row.id}
                 editing={editor.target?.row.id === row.id ? editor.target : null}
+                fresh={Boolean(props.fresh?.[row.id])}
+                flash={props.flash?.[row.id]}
                 scope={scope}
                 onToggle={toggleRow}
                 onCellClick={(c, e) => {
@@ -503,7 +560,7 @@ export function LeadTable(props: LeadTableProps) {
           })}
         </div>
       </div>
-      {!loading && rows.length === 0 && props.emptyState && (
+      {!loading && rows.length === 0 && liveCount === 0 && props.emptyState && (
         <div className="pointer-events-none absolute inset-x-0 top-8 bottom-0 grid place-items-center">
           <div className="pointer-events-auto">{props.emptyState}</div>
         </div>
@@ -528,6 +585,8 @@ interface RowProps {
   activeCol: number;
   isOpen: boolean;
   editing: EditTarget | null;
+  fresh?: boolean;
+  flash?: Record<string, number>;
   scope: TableScope;
   onToggle: (index: number, shift: boolean) => void;
   onCellClick: (c: number, e: React.MouseEvent) => void;
@@ -543,7 +602,7 @@ const TableRow = memo(function TableRow(p: RowProps) {
         role="row"
         aria-rowindex={p.index + 2}
         aria-selected={p.selected}
-        className="group/row absolute left-0 flex border-b border-line/60 text-table"
+        className={cn("group/row absolute left-0 flex border-b border-line/60 text-table", p.fresh && "row-enter")}
         style={{ height: p.height, transform: `translateY(${p.top}px)`, width: p.width, minWidth: "100%" }}
       >
         {p.colIds.map((id, c) => {
@@ -586,6 +645,7 @@ const TableRow = memo(function TableRow(p: RowProps) {
                 bg,
                 isPinned && id === p.lastPinned && "shadow-[inset_-1px_0_0_var(--border-subtle)]",
                 isActive && "z-[3] shadow-[inset_0_0_0_1.5px_var(--accent)]",
+                p.flash?.[id] && "cell-flash",
               )}
             >
               {editingHere ? <EditCell target={p.editing!} editor={p.editor} /> : spec.render(p.row)}

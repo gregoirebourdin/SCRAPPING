@@ -120,19 +120,21 @@ async def _process_item(
         inserted = await s.scalar(
             pg_insert(BenchmarkResult)
             .values(
-                id=uuid7(),
-                run_id=run.id,
-                item_id=item.id,
-                ordinal=item.ordinal,
-                label=item.label,
-                expected=item.expected or {},
-                actual=actual,
-                verdicts=verdicts,
-                fp=verdicts["fp"],
-                fn=verdicts["fn"],
-                latency_ms=latency_ms,
-                cost_usd=Decimal(str(round(cost, 6))),
-                error=error,
+                {  # dict form: a column named `fn` would clash with values()'s own keyword
+                    "id": uuid7(),
+                    "run_id": run.id,
+                    "item_id": item.id,
+                    "ordinal": item.ordinal,
+                    "label": item.label,
+                    "expected": item.expected or {},
+                    "actual": actual,
+                    "verdicts": verdicts,
+                    "fp": verdicts["fp"],
+                    "fn": verdicts["fn"],
+                    "latency_ms": latency_ms,
+                    "cost_usd": Decimal(str(round(cost, 6))),
+                    "error": error,
+                }
             )
             .on_conflict_do_nothing(
                 index_elements=["run_id", "item_id"], index_where=sa.text("item_id IS NOT NULL")
@@ -348,21 +350,25 @@ async def execute(run_id: uuid.UUID, *, slice_s: float | None = SLICE_S) -> str:
 
     launched = 0
     for item in pending:
-        if deadline is not None and time.monotonic() >= deadline:
-            break
+        # at most `concurrency` items in flight: the slice deadline, cancellation and the cost cap are
+        # checked once a slot is free, i.e. with the cost of the items that just finished
+        while sum(1 for t in tasks if not t.done()) >= concurrency:
+            await asyncio.wait([t for t in tasks if not t.done()], return_when=asyncio.FIRST_COMPLETED)
+        if deadline is not None and launched and time.monotonic() >= deadline:
+            break  # every slice makes progress (≥ 1 item), then yields
         if launched % 5 == 0 and await _status(run_id) == BenchmarkRunStatus.cancelled:
             stop_reason = "cancelled"
             break
         if not await budget_ok():
             stop_reason = "budget"
             break
-        # keep at most `concurrency` items in flight so the time slice and budget are checked between items
-        while sum(1 for t in tasks if not t.done()) >= concurrency:
-            await asyncio.wait([t for t in tasks if not t.done()], return_when=asyncio.FIRST_COMPLETED)
         tasks.append(asyncio.create_task(one(item)))
         launched += 1
     if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+        outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+        failures = [o for o in outcomes if isinstance(o, BaseException)]
+        if failures:  # infrastructure errors (engine errors are scored as misses): retry the slice
+            raise failures[0]
     left = len(pending) - launched
     if stop_reason is None and left > 0:
         return "continue"

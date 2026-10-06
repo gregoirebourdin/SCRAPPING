@@ -67,6 +67,34 @@ interface Diagnostics {
   job_failures: Record<string, number>;
 }
 
+/** One (dimension, key) of Empirical Source Scoring (GET /v1/learning/sources). */
+interface ReliabilityRow {
+  dimension: string;
+  dimension_label: string;
+  key: string;
+  label: string;
+  attempts: number;
+  successes: number;
+  coverage: number | null;
+  confirmed_correct: number;
+  confirmed_wrong: number;
+  inconclusive: number;
+  precision: number;
+  raw_precision: number | null;
+  precision_interval: [number, number] | null;
+  effective_precision: number;
+  effective_coverage: number;
+  avg_latency_ms: number | null;
+  avg_cost_usd: number | null;
+  prior: number | null;
+  prior_coverage: number | null;
+  evidence_level: "prior only" | "learning" | "learned";
+  last_outcome_at: string | null;
+  updated_at: string | null;
+}
+
+const EVIDENCE_TONE: Record<ReliabilityRow["evidence_level"], "success" | "info" | "muted"> = { learned: "success", learning: "info", "prior only": "muted" };
+
 function P({ v }: { v: number | null | undefined }) {
   return <>{v == null ? "—" : `${Math.round(v * 10) / 10}%`}</>;
 }
@@ -78,12 +106,27 @@ export function SourcesPage() {
   const sources = useQuery({ queryKey: qk.sources, queryFn: () => api<SourceRow[]>("sources"), refetchInterval: 30_000 });
   const diag = useQuery({ queryKey: ["diagnostics", hours], queryFn: () => api<Diagnostics>(`diagnostics?hours=${hours}`), refetchInterval: 30_000 });
   const em = useQuery({ queryKey: ["email-metrics", hours], queryFn: () => api<EmailMetrics>(`email/metrics?hours=${hours}`), refetchInterval: 30_000 });
+  const ws = me.data?.workspaces.find((w) => w.id === me.data?.current_workspace_id) ?? me.data?.workspaces[0];
+  const isAdmin = ws?.role === "owner" || ws?.role === "admin";
+  const reliability = useQuery({
+    queryKey: ["learning-sources"],
+    queryFn: () => api<ReliabilityRow[]>("learning/sources"),
+    refetchInterval: 60_000,
+    enabled: isAdmin,
+  });
   const e = em.data;
   const d = diag.data;
   const f = me.data?.features ?? {};
   const all = (sources.data ?? []).filter((s) => s.key !== "fixture" || f.demo_data);
   const discovery = all.filter((s) => s.kind !== "evidence");
   const evidence = all.filter((s) => s.kind === "evidence");
+  const reliabilityGroups: { dimension: string; label: string; rows: ReliabilityRow[] }[] = [];
+  for (const r of reliability.data ?? []) {
+    if (r.key === "fixture" && !f.demo_data) continue;
+    const g = reliabilityGroups.find((x) => x.dimension === r.dimension);
+    if (g) g.rows.push(r);
+    else reliabilityGroups.push({ dimension: r.dimension, label: r.dimension_label, rows: [r] });
+  }
 
   return (
     <Page
@@ -284,6 +327,29 @@ export function SourcesPage() {
         />
       </Block>
 
+      {isAdmin && (
+        <Block
+          title="Source reliability"
+          aside={
+            <span className="text-meta text-fg-3">Learned from confirmed outcomes — drives source routing, confidence and enrichment planning; priors until enough evidence</span>
+          }
+        >
+          {reliability.isLoading && <DataTable<ReliabilityRow> rows={[]} loading rowKey={(r) => r.key} columns={reliabilityColumns} />}
+          {reliability.isError && <p className="text-meta text-fg-3">Source reliability is unavailable right now.</p>}
+          <div className="flex flex-col gap-4">
+            {reliabilityGroups.map((g) => (
+              <div key={g.dimension} className="flex flex-col gap-1.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-body text-fg">{g.label}</span>
+                  <span className="text-micro text-fg-3">{g.dimension}</span>
+                </div>
+                <DataTable<ReliabilityRow> rows={g.rows} rowKey={(r) => `${r.dimension}:${r.key}`} columns={reliabilityColumns} />
+              </div>
+            ))}
+          </div>
+        </Block>
+      )}
+
       {evidence.length > 0 && (
         <Block title="Evidence sources" aside={<span className="text-meta text-fg-3">Where field values come from — shown in every source inspector</span>}>
           <Panel className="divide-y divide-line">
@@ -300,3 +366,79 @@ export function SourcesPage() {
     </Page>
   );
 }
+
+const reliabilityColumns: { key: string; label: React.ReactNode; className?: string; render: (r: ReliabilityRow) => React.ReactNode }[] = [
+  {
+    key: "source",
+    label: "Source",
+    render: (r) => (
+      <span className="flex flex-col">
+        <span className="text-fg">{r.label}</span>
+        <span className="text-micro text-fg-3">{r.key}</span>
+      </span>
+    ),
+  },
+  { key: "attempts", label: "Attempts", className: "text-right", render: (r) => <span className="tabular">{n(r.attempts)}</span> },
+  {
+    key: "coverage",
+    label: "Coverage",
+    className: "text-right",
+    render: (r) => (
+      <span className="tabular text-fg-2" title={r.prior_coverage != null ? `Prior ${pct(r.prior_coverage)} · ${n(r.successes)} usable results` : undefined}>
+        {pct(r.coverage)}
+      </span>
+    ),
+  },
+  {
+    key: "precision",
+    label: "Precision (90% CI)",
+    className: "text-right",
+    render: (r) => (
+      <span
+        className="flex flex-col items-end"
+        title={`${n(r.confirmed_correct)} confirmed correct · ${n(r.confirmed_wrong)} wrong${r.prior != null ? ` · prior ${pct(r.prior)}` : ""} · used: ${pct(r.effective_precision, 1)}`}
+      >
+        <span className={cn("tabular", r.confirmed_correct + r.confirmed_wrong ? "text-fg" : "text-fg-3")}>{pct(r.precision, 1)}</span>
+        {r.precision_interval && (
+          <span className="tabular text-micro text-fg-3">
+            {pct(r.precision_interval[0])}–{pct(r.precision_interval[1])}
+          </span>
+        )}
+      </span>
+    ),
+  },
+  {
+    key: "judged",
+    label: "Confirmed",
+    className: "text-right",
+    render: (r) => (
+      <span className="tabular">
+        <span className="text-success">{n(r.confirmed_correct)}</span>
+        <span className="text-fg-3"> / </span>
+        <span className={cn(r.confirmed_wrong ? "text-danger" : "text-fg-3")}>{n(r.confirmed_wrong)}</span>
+      </span>
+    ),
+  },
+  {
+    key: "latency",
+    label: "Latency",
+    className: "text-right",
+    render: (r) => <span className="tabular text-fg-2">{r.avg_latency_ms != null ? `${n(Math.round(r.avg_latency_ms))} ms` : "—"}</span>,
+  },
+  {
+    key: "cost",
+    label: "Cost / attempt",
+    className: "text-right",
+    render: (r) => <span className="tabular text-fg-2">{r.avg_cost_usd == null ? "—" : r.avg_cost_usd > 0 ? usd(r.avg_cost_usd, 4) : "free"}</span>,
+  },
+  {
+    key: "evidence",
+    label: "Evidence",
+    className: "text-right",
+    render: (r) => (
+      <Badge tone={EVIDENCE_TONE[r.evidence_level]} dot>
+        {r.evidence_level}
+      </Badge>
+    ),
+  },
+];

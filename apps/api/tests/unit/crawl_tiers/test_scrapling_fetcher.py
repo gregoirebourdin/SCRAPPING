@@ -22,7 +22,9 @@ PAGE = "<html><head><title>Pinned</title></head><body><p>Bonjour depuis pinned-s
 
 @pytest.fixture
 def site(fixture_server, monkeypatch):
-    configure_overrides(monkeypatch, {HOST: fixture_server.target(), "other-site.fr": fixture_server.target()})
+    configure_overrides(
+        monkeypatch, {HOST: fixture_server.target(), "other-site.fr": fixture_server.target()}
+    )
     return fixture_server
 
 

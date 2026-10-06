@@ -603,3 +603,63 @@ export function DialogContent({
     </RDialog.Portal>
   );
 }
+
+/* ------------------------------------------------------------------------------------------------
+ * Live-run primitives (additive): animated counters, shimmering status text, breathing dot.
+ * ----------------------------------------------------------------------------------------------*/
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Counts from the previous value to the new one (ease-out, ~450 ms); jumps when motion is reduced. */
+export function NumberTicker({
+  value,
+  className,
+  format = (v: number) => v.toLocaleString(),
+  duration = 450,
+}: {
+  value: number;
+  className?: string;
+  format?: (v: number) => string;
+  duration?: number;
+}) {
+  const [shown, setShown] = React.useState(value);
+  const [bump, setBump] = React.useState(0);
+  const from = React.useRef(value);
+  React.useEffect(() => {
+    const start = from.current;
+    if (start === value) return;
+    from.current = value;
+    if (prefersReducedMotion() || duration <= 0) {
+      setShown(value);
+      return;
+    }
+    setBump((b) => b + 1);
+    let raf = 0;
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - t0) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setShown(Math.round(start + (value - start) * eased));
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+  return (
+    <span key={bump} className={cn("tabular inline-block", bump > 0 && "tick-up", className)}>
+      {format(shown)}
+    </span>
+  );
+}
+
+/** Text with a soft light sweeping across it while `active` (current step / stage). */
+export function ShimmerText({ children, active = true, className }: { children: React.ReactNode; active?: boolean; className?: string }) {
+  return <span className={cn(active ? "shimmer-text" : "text-fg-2", className)}>{children}</span>;
+}
+
+/** Breathing status dot (live, reconnecting, stalled). */
+export function LiveDot({ tone = "accent", className }: { tone?: Tone; className?: string }) {
+  return <span aria-hidden className={cn("live-dot inline-block size-1.5 shrink-0 rounded-full", dotClass[tone], className)} style={{ color: `var(--${tone === "accent" ? "accent" : tone === "neutral" || tone === "muted" ? "text-muted" : tone})` }} />;
+}

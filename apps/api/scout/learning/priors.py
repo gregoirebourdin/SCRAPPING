@@ -105,11 +105,17 @@ SEARCH_ENGINE_PRIORS: dict[str, Prior] = {
     "gemini_grounded": Prior(0.7, 0.8, _GROUNDED_SEARCH_USD, 9000, "Gemini grounded search"),
 }
 
-# ---- crawl tiers (scout.crawl) — coverage: P(fetch returns usable content) --------------------------
+# ---- crawl tiers (scout.crawl.tiers keys) — coverage: P(fetch returns usable content) --------------
+# cost mirrors scout.crawl.tiers._cost: Settings.cost_crawl_request_usd for HTTP-class tiers,
+# Settings.cost_browser_request_usd for tiers that drive a Chromium.
+_CRAWL_REQUEST_USD = 0.00002
+_BROWSER_REQUEST_USD = 0.0004
 CRAWL_TIER_PRIORS: dict[str, Prior] = {
-    "http": Prior(0.9, 0.8, 0.00002, 800, "Plain HTTP"),
-    "crawl4ai": Prior(0.9, 0.9, 0.0001, 3000, "Crawl4AI"),
-    "browser": Prior(0.92, 0.95, 0.0004, 8000, "Headless browser"),
+    "http": Prior(0.9, 0.85, _CRAWL_REQUEST_USD, 800, "Plain HTTP"),
+    "scrapling_fetcher": Prior(0.9, 0.75, _CRAWL_REQUEST_USD, 1500, "Scrapling fetcher (impersonated TLS)"),
+    "scrapling_dynamic": Prior(0.92, 0.85, _BROWSER_REQUEST_USD, 7000, "Scrapling dynamic (Chromium)"),
+    "crawl4ai": Prior(0.9, 0.85, _BROWSER_REQUEST_USD, 4000, "Crawl4AI (Chromium)"),
+    "playwright": Prior(0.92, 0.9, _BROWSER_REQUEST_USD, 8000, "Playwright browser"),
 }
 
 _STATIC: dict[str, dict[str, Prior]] = {

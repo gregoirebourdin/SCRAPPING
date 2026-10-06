@@ -69,7 +69,7 @@ def stats(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[dict[str, Any]]]:
 
     class _Mod:
         @staticmethod
-        def StatEvent(**kw: Any) -> dict[str, Any]:  # noqa: N802 - mirrors scout.learning.stats.StatEvent
+        def StatEvent(**kw: Any) -> dict[str, Any]:
             return kw
 
         @staticmethod
@@ -89,7 +89,9 @@ def stats(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[dict[str, Any]]]:
         yield events
 
 
-def sx_result(url: str, title: str, content: str = "", engines: tuple[str, ...] = ("bing",)) -> dict[str, Any]:
+def sx_result(
+    url: str, title: str, content: str = "", engines: tuple[str, ...] = ("bing",)
+) -> dict[str, Any]:
     return {
         "url": url,
         "title": title,
@@ -117,7 +119,9 @@ def sx_payload(results: list[dict[str, Any]], unresponsive: list[list[str]] | No
 
 
 COMPANY_RESULTS = [
-    sx_result("https://www.pixel-studio-lyon.fr/", "Agence Web Lyon - Pixel Studio", "Agence marketing à Lyon"),
+    sx_result(
+        "https://www.pixel-studio-lyon.fr/", "Agence Web Lyon - Pixel Studio", "Agence marketing à Lyon"
+    ),
     sx_result("https://lumiere-digitale.fr/agence", "Lumière Digitale – Agence marketing digital à Lyon"),
     sx_result("https://www.pagesjaunes.fr/annuaire/lyon/agences", "Agences marketing Lyon - PagesJaunes"),
     sx_result("https://fr.linkedin.com/company/kreacom", "Kreacom | LinkedIn"),

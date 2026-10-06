@@ -301,6 +301,7 @@ class ScraplingDynamicTier:
             try:
                 await asyncio.wait_for(sem.acquire(), timeout=DYNAMIC_POOL_WAIT_S)
             except TimeoutError:
+                self._failed = True  # don't wait again on every page of this crawl
                 log.info("scrapling_dynamic_pool_busy")
                 return None
             self._holds_slot = True

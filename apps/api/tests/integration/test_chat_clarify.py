@@ -44,7 +44,9 @@ async def _say(
 
 
 def _cards(events, kind: str) -> list[dict[str, Any]]:
-    return [d["card"] for e, d in events if e == "tool_result" and d.get("card") and d["card"]["kind"] == kind]
+    return [
+        d["card"] for e, d in events if e == "tool_result" and d.get("card") and d["card"]["kind"] == kind
+    ]
 
 
 async def _campaigns(ws: uuid.UUID) -> list[Campaign]:
@@ -160,7 +162,9 @@ async def test_use_defaults_and_answer_and_launch(workspace):
         user,
         thread,
         "Use defaults",
-        clarification=operator.ClarificationIn(action_id=uuid.UUID(card["action_id"]), use_defaults=True, launch=True),
+        clarification=operator.ClarificationIn(
+            action_id=uuid.UUID(card["action_id"]), use_defaults=True, launch=True
+        ),
     )
     (plan,) = _cards(events, "campaign_plan")
     (started,) = _cards(events, "campaign_started")
@@ -226,7 +230,9 @@ async def test_resume_with_a_change_shows_a_diff_then_applies_and_resumes(worksp
         }
     ]
     async with session_scope() as s:
-        assert (await s.get(Campaign, cid)).status == CampaignStatus.paused, "nothing changes before confirming"
+        assert (await s.get(Campaign, cid)).status == CampaignStatus.paused, (
+            "nothing changes before confirming"
+        )
     wctx = WorkspaceContext(workspace_id=ws, user_id=user, role=MemberRole.owner)
     out = await operator.confirm_action(wctx, uuid.UUID(confirm["action_id"]), UIContext(), approve=True)
     assert out["status"] == "executed" and out["card"]["kind"] == "campaign_amended"

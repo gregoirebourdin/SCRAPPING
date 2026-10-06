@@ -18,7 +18,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  ProgressBar,
   Segmented,
   Tip,
 } from "@scout/design-system";
@@ -27,13 +26,15 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowDownUp, Columns3, Copy, Download, Filter, MoreHorizontal, Pencil, Plus, RotateCcw, Save, Search, Sparkles, Trash2, Upload, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { useLive } from "@/components/shell/live-events";
+import { RunHeader } from "@/components/campaign/run-header";
+import { ACTIVE as RUN_ACTIVE, candidateStage, useNow } from "@/components/campaign/run-state";
+import { type LiveCandidate, useLive } from "@/components/shell/live-events";
 import { api } from "@/lib/api";
 import { n, pct } from "@/lib/format";
-import { qk, useCampaign, useList, useViews } from "@/lib/queries";
+import { qk, useCampaigns, useList, useViews } from "@/lib/queries";
 import { defaultLayout, EMPTY_FILTERS, type TableLayout, useScope, useUI } from "@/lib/store";
 import { TABLET_UP, useMediaQuery } from "@/lib/use-media";
 
@@ -42,9 +43,9 @@ import { BulkBar } from "./bulk-bar";
 import { type ColumnSpec, companyColumns, customColumnSpec, personColumns } from "./cells";
 import { AddColumnDialog, ColumnConfigDialog } from "./column-dialogs";
 import { FilterBuilder, opLabel } from "./filter-builder";
-import { LeadTable } from "./lead-table";
+import { LeadTable, type PendingRow } from "./lead-table";
 import { MobileRows } from "./mobile-rows";
-import { type TableScope, useFields, useRows } from "./use-rows";
+import { refetchTail, type TableScope, useFields, useRows } from "./use-rows";
 
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
@@ -128,6 +129,64 @@ export function TableView({
   const activeFilterCount = conditions.filter(
     (c) => (c.value !== null && c.value !== "") || ["is_empty", "not_empty", "is_true", "is_false", "is_unknown"].includes(c.operator),
   ).length;
+
+  /* ---- live run: searches feeding this list ------------------------------------------------------ */
+  const runs = useListRuns(scope.listId);
+  const activeRuns = runs.filter((r) => r.active || r.status === "paused");
+  // Unsorted, unfiltered view: new leads are appended at the end as they qualify (no reorder, no jump).
+  // Sorted / filtered / searched: the "+N new" pill lets the user merge when ready.
+  const liveAppend = scope.kind === "list" && layout.sort.length === 0 && activeFilterCount === 0 && !search;
+  const tailTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!scope.listId || !liveAppend || newLeads === 0 || tailTimer.current) return;
+    tailTimer.current = setTimeout(() => {
+      tailTimer.current = null;
+      const added = useLive.getState().newLeads[scope.listId!] ?? 0;
+      clearNew(scope.listId!);
+      void refetchTail(qc, scope, debouncedFilters, layout.sort, search, added).then((ids) => ids.length && useLive.getState().markFresh(ids));
+    }, 500);
+  }, [newLeads, liveAppend, scope, qc, debouncedFilters, layout.sort, search, clearNew]);
+  useEffect(
+    () => () => {
+      if (tailTimer.current) clearTimeout(tailTimer.current);
+    },
+    [],
+  );
+  const candA = useLive((s) => (activeRuns[0] ? s.candidates[activeRuns[0].id] : undefined));
+  const candB = useLive((s) => (activeRuns[1] ? s.candidates[activeRuns[1].id] : undefined));
+  const flightA = useLive((s) => (activeRuns[0] ? s.campaigns[activeRuns[0].id]?.in_flight : undefined));
+  const flightB = useLive((s) => (activeRuns[1] ? s.campaigns[activeRuns[1].id]?.in_flight : undefined));
+  const fresh = useLive((s) => s.fresh);
+  const flash = useLive((s) => s.flash);
+  const { pending, pendingMore } = useMemo(() => {
+    if (!liveAppend || !activeRuns.length) return { pending: [] as PendingRow[], pendingMore: 0 };
+    const all: (LiveCandidate & { paused: boolean })[] = [];
+    [candA, candB].forEach((m, i) => {
+      for (const c of Object.values(m ?? {})) if (c.stage !== "deliver") all.push({ ...c, paused: activeRuns[i]?.status === "paused" });
+    });
+    all.sort((a, b) => (a.stage === "discovered" ? 1 : 0) - (b.stage === "discovered" ? 1 : 0) || b.at - a.at);
+    const shown = all.slice(0, 6).map<PendingRow>((c) => ({
+      key: c.event_id,
+      title: c.name ?? c.domain ?? "Company",
+      subtitle: c.domain,
+      stage: c.paused ? "Paused" : candidateStage(c.stage, "en"),
+      paused: c.paused,
+    }));
+    const inFlight = (flightA ?? 0) + (flightB ?? 0);
+    return { pending: shown, pendingMore: Math.max(0, Math.max(inFlight, all.length) - shown.length) };
+  }, [liveAppend, activeRuns, candA, candB, flightA, flightB]);
+  const searching = activeRuns.some((r) => r.active);
+  const liveEmpty = searching ? (
+    <div className="flex max-w-sm flex-col items-center text-center animate-fade-in">
+      <span className="mb-3 grid size-9 place-items-center rounded-md bg-accent-soft text-accent">
+        <Sparkles className="size-4" />
+      </span>
+      <p className="text-body font-medium text-fg">
+        <span className="shimmer-text">Searching for your first leads…</span>
+      </p>
+      <p className="mt-1 text-meta text-fg-3">Companies appear here while they are analysed; qualified leads stay.</p>
+    </div>
+  ) : null;
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -256,18 +315,25 @@ export function TableView({
         </div>
       )}
 
+      {scope.kind === "list" &&
+        runs.slice(0, 2).map((r) => <RunHeader key={r.id} campaignId={r.id} onDismiss={r.active || r.status === "paused" ? undefined : () => r.dismiss()} />)}
+      {runs.length > 2 && (
+        <Link href="/campaigns" className="shrink-0 border-b border-line px-3 py-1 text-meta text-fg-3 hover:text-fg">
+          +{runs.length - 2} more searches on this list
+        </Link>
+      )}
       {scope.listId && <QualityStrip listId={scope.listId} />}
 
       {/* ---------- table ---------- */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        {newLeads > 0 && (
+        {newLeads > 0 && !liveAppend && (
           <button
             type="button"
             onClick={() => {
               clearNew(scope.listId!);
               invalidateRows(qc);
             }}
-            className="absolute left-1/2 top-10 z-30 -translate-x-1/2 animate-fade-in rounded-full bg-accent px-3 py-1 text-meta font-medium text-accent-contrast shadow-popover hover:bg-accent-strong"
+            className="press absolute left-1/2 top-10 z-30 -translate-x-1/2 animate-fade-in rounded-full bg-accent px-3 py-1 text-meta font-medium text-accent-contrast shadow-popover hover:bg-accent-strong"
           >
             +{n(newLeads)} new lead{newLeads === 1 ? "" : "s"}
           </button>
@@ -289,6 +355,10 @@ export function TableView({
               onAddFilter={addFilter}
               onAddColumn={() => setAddColOpen(true)}
               onConfigureColumn={setConfigCol}
+              pending={pending}
+              pendingMore={pendingMore}
+              fresh={fresh}
+              flash={flash}
               emptyState={
                 q.isError ? (
                   <div className="max-w-sm text-center">
@@ -307,7 +377,7 @@ export function TableView({
                     </Button>
                   </div>
                 ) : (
-                  emptyState
+                  (liveEmpty ?? emptyState)
                 )
               }
             />
@@ -321,7 +391,10 @@ export function TableView({
             hasMore={Boolean(q.hasNextPage)}
             fetchingMore={q.isFetchingNextPage}
             onLoadMore={() => void q.fetchNextPage()}
-            emptyState={emptyState}
+            emptyState={liveEmpty ?? emptyState}
+            pending={pending}
+            pendingMore={pendingMore}
+            fresh={fresh}
           />
         )}
       </div>
@@ -711,9 +784,8 @@ function ViewTab({ active, onClick, children }: { active: boolean; onClick: () =
 
 function QualityStrip({ listId }: { listId: string }) {
   const list = useList(listId);
-  const campaignId = list.data?.source_campaign_id ?? null;
   const s = list.data?.summary;
-  if (!s || s.total === 0) return campaignId ? <CampaignStrip id={campaignId} /> : null;
+  if (!s || s.total === 0) return null;
   const safePct = s.total ? (s.safe_emails ?? 0) / s.total : 0;
   return (
     <div className="flex shrink-0 items-center gap-4 overflow-x-auto border-b border-line bg-bg/40 px-3 py-1.5 text-meta">
@@ -725,7 +797,6 @@ function QualityStrip({ listId }: { listId: string }) {
       {s.boolean_columns.slice(0, 4).map((b) => (
         <Stat key={b.column_id} label={b.name} value={n(b.true_count)} hint="yes" />
       ))}
-      {campaignId && <CampaignStrip id={campaignId} inline />}
     </div>
   );
 }
@@ -740,23 +811,25 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
   );
 }
 
-function CampaignStrip({ id, inline }: { id: string; inline?: boolean }) {
-  const c = useCampaign(id);
-  const live = useLive((s) => s.campaigns[id]);
-  if (!c.data) return null;
-  const status = live?.status ?? c.data.status;
-  if (!["running", "planning", "paused"].includes(status)) return null;
-  const qualified = live?.qualified ?? c.data.stats?.qualified ?? 0;
-  return (
-    <Link href={`/campaigns/${id}`} className={cn("ml-auto flex shrink-0 items-center gap-2 text-meta text-fg-2 hover:text-fg", !inline && "border-b border-line px-3 py-1.5")}>
-      <Badge tone={status === "paused" ? "warning" : "info"} dot>
-        {status === "paused" ? "Paused" : "Finding leads"}
-      </Badge>
-      <span className="tabular">
-        {n(qualified)} / {n(c.data.target)}
-      </span>
-      <ProgressBar value={qualified} max={Math.max(1, c.data.target)} className="w-24" />
-      {live?.eta_minutes ? <span className="text-fg-3">~{live.eta_minutes} min</span> : null}
-    </Link>
-  );
+/* ---- searches feeding a list (several may run on the same list) ----------------------------------- */
+
+const RECENT_MS = 12 * 3600 * 1000;
+
+function useListRuns(listId: string | null) {
+  const campaigns = useCampaigns();
+  const liveStatus = useLive((s) => s.campaigns);
+  const [dismissed, setDismissed] = useState<Record<string, true>>({});
+  const now = useNow(60_000);
+  return useMemo(() => {
+    if (!listId) return [];
+    return (campaigns.data ?? [])
+      .filter((c) => c.target_list_id === listId)
+      .map((c) => {
+        const status = liveStatus[c.id]?.status ?? c.status;
+        return { id: c.id, status, active: RUN_ACTIVE.includes(status), created: Date.parse(c.created_at), stopped: c.stopped_at ? Date.parse(c.stopped_at) : null };
+      })
+      .filter((r) => !dismissed[r.id] && (r.active || r.status === "paused" || (r.status !== "cancelled" && (r.stopped === null || now - r.stopped < RECENT_MS))))
+      .sort((a, b) => Number(b.active) - Number(a.active) || Number(b.status === "paused") - Number(a.status === "paused") || b.created - a.created)
+      .map((r) => ({ ...r, dismiss: () => setDismissed((d) => ({ ...d, [r.id]: true })) }));
+  }, [listId, campaigns.data, liveStatus, dismissed, now]);
 }

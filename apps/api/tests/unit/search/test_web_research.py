@@ -59,7 +59,9 @@ def grounded_calls(fake_ai: FakeProvider) -> list[str]:
                 evidence_quote="La Ruche Sociale recrute un growth marketer",
                 source_url="https://jobs.example/ruche",
             ),
-            sources=[GroundingSource(uri="https://jobs.example/ruche", title="jobs.example", domain="jobs.example")],
+            sources=[
+                GroundingSource(uri="https://jobs.example/ruche", title="jobs.example", domain="jobs.example")
+            ],
             search_queries=["La Ruche Sociale jobs"],
             supports=[],
             usage=AIUsage(model="fake-search", cost_usd=0.014, grounded_queries=1),
@@ -78,7 +80,10 @@ async def _ctx() -> ResolveContext:
 
 @respx.mock
 async def test_resolved_by_free_search_gemini_not_invoked(
-    fake_ai: FakeProvider, grounded_calls: list[str], stored: list[dict[str, Any]], stats: list[dict[str, Any]]
+    fake_ai: FakeProvider,
+    grounded_calls: list[str],
+    stored: list[dict[str, Any]],
+    stats: list[dict[str, Any]],
 ) -> None:
     sx = respx.get(SEARXNG_SEARCH).mock(return_value=httpx.Response(200, json=sx_payload(SERP)))
     fake_ai.on(
@@ -106,7 +111,10 @@ async def test_resolved_by_free_search_gemini_not_invoked(
 
 @respx.mock
 async def test_unverified_quote_falls_back_to_gemini(
-    fake_ai: FakeProvider, grounded_calls: list[str], stored: list[dict[str, Any]], stats: list[dict[str, Any]]
+    fake_ai: FakeProvider,
+    grounded_calls: list[str],
+    stored: list[dict[str, Any]],
+    stats: list[dict[str, Any]],
 ) -> None:
     respx.get(SEARXNG_SEARCH).mock(return_value=httpx.Response(200, json=sx_payload(SERP)))
     fake_ai.on(

@@ -20,7 +20,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
@@ -461,6 +461,56 @@ def expand_candidates(
     for c in fresh:
         c.round = EXPANSION_ROUND
     return fresh[:max_new]
+
+
+PILOT_MAX_CONVENTION = 0.5  # below this, the domain's convention is treated as unknown
+
+
+def pick_pilot(batch: Sequence[Sequence[Candidate]], intel: DomainIntel | None) -> int | None:
+    """Index of the person to probe first when a domain batch would otherwise send every person's ≤ 3 guesses.
+
+    Only when the convention is unknown and at least two people carry several pattern guesses: the pilot's
+    answer tells which pattern the domain uses, and the others then need a single RCPT each.
+    """
+    dom = intel.dominant if intel is not None else None
+    if dom is not None and dom.confidence >= PILOT_MAX_CONVENTION:
+        return None
+    if intel is not None and intel.catch_all is True:
+        return None
+    multi = [
+        i
+        for i, cands in enumerate(batch)
+        if len(cands) >= 2 and all(c.resolver in _GUESS_RESOLVERS and c.pattern for c in cands)
+    ]
+    if len(multi) < 2:
+        return None
+    return max(multi, key=lambda i: (len(batch[i]), -i))
+
+
+def narrow_after_pilot(
+    pilot: Sequence[Candidate], probe: DomainProbeResult, others: Sequence[Sequence[Candidate]]
+) -> list[list[Candidate]] | None:
+    """After the pilot's probe: each other person's candidates restricted to the confirmed pattern.
+
+    None when the pilot did not identify the convention unambiguously (not exactly one accepted pattern on a
+    proven non catch-all server); the caller then probes everyone's candidates as usual.
+    """
+    if probe.session != SessionOutcome.ok or probe.catch_all is not False:
+        return None
+    accepted = {
+        c.pattern
+        for c in pilot
+        if c.pattern and (rv := probe.verdicts.get(c.address)) is not None and rv.result == SmtpResult.accepted
+    }
+    if len(accepted) != 1:
+        return None
+    pattern = next(iter(accepted))
+    out: list[list[Candidate]] = []
+    for cands in others:
+        same = [c for c in cands if c.pattern == pattern]
+        # the pattern was just confirmed on this server: a rejection means "no mailbox", never "expand"
+        out.append([replace(same[0], round=EXPANSION_ROUND)] if same else list(cands))
+    return out
 
 
 def conclude_after_probe(

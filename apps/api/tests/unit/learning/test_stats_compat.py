@@ -112,3 +112,14 @@ async def test_record_in_never_raises() -> None:
             raise _Boom("no savepoint")
 
     await S.record_in(Session(), [S.StatEvent("enrich.resolver", "keyword", correct=False, outcome=True)])  # type: ignore[arg-type]
+
+
+def test_estimates_never_raise_on_malformed_snapshots() -> None:
+    from scout.learning import routing
+
+    bad = {("resolver", "github"): object(), ("enrich.resolver", "keyword"): "garbage"}
+    assert S.precision("resolver", "github", 0.82, bad) == 0.82  # type: ignore[arg-type]
+    assert S.coverage("resolver", "github", 0.5, bad) == 0.5  # type: ignore[arg-type]
+    e = routing.estimate("enrich.resolver", "keyword", bad)  # type: ignore[arg-type]
+    assert not e.learned and e.precision == routing.estimate("enrich.resolver", "keyword").precision
+    assert [r.key for r in routing.rank("enrich.resolver", ["keyword", "regex"], bad)] == ["keyword", "regex"]  # type: ignore[arg-type]

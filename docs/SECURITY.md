@@ -81,3 +81,15 @@ already downloaded, SMTP probes) are never presented as undoable.
 
 Pinned versions (pnpm lockfile, uv lockfile, Go modules), licenses verified (MIT/Apache-2.0
 only for bundled components), `pnpm audit` / `pip-audit` in CI.
+
+## Browser tiers and SSRF (2026-10)
+
+Playwright route handlers never see redirect follow-ups: a public page answering
+`302 → http://169.254.169.254/` made the browser fetch the internal address even though the
+final-URL check discarded the content (blind SSRF, found and fixed during the fetch-tier work).
+All browser tiers now run air-gapped through `BrowserGuard`: the browser has a dead proxy and no
+resolvable host names, service workers / WebSockets / WebRTC are blocked, only GET is allowed,
+and every request is fulfilled by our own fetchers, which validate and pin each hop (including
+redirects) to a public address. The HTTP impersonation tier (curl_cffi, pinned past
+GHSA-qw2m-4pqf-rmpp) disables libcurl redirects and environment proxies and pins hosts with
+`CURLOPT_RESOLVE`. CAPTCHA solving / TLS-check bypass (`StealthyFetcher`) is not used.

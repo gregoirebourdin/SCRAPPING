@@ -17,7 +17,9 @@ CSV = (
 
 
 def test_header_synonyms_and_enrich_columns() -> None:
-    mapping, ignored = map_headers(["Domain", "Prénom", "nom", "Job title", "E-mail", "enrich:Uses HubSpot", "Notes"])
+    mapping, ignored = map_headers(
+        ["Domain", "Prénom", "nom", "Job title", "E-mail", "enrich:Uses HubSpot", "Notes"]
+    )
     assert mapping == {
         "Domain": "company_domain",
         "Prénom": "person_first",
@@ -39,17 +41,30 @@ def test_csv_rows_group_by_company_with_normalized_truth() -> None:
     assert exp["company"] == {"domain": "acme-demo.fr", "name": "Acme Demo"}
     assert [p["first"] for p in exp["people"]] == ["Marie", "Jean", "Paul"]
     assert exp["people"][0]["title"] == "Fondatrice"
-    assert exp["emails"][0] == {"address": "marie.dupont@acme-demo.fr", "status": "SAFE", "first": "Marie", "last": "Dupont"}
+    assert exp["emails"][0] == {
+        "address": "marie.dupont@acme-demo.fr",
+        "status": "SAFE",
+        "first": "Marie",
+        "last": "Dupont",
+    }
     assert exp["emails"][2] == {"status": "INVALID", "first": "Paul", "last": "Leroy"}  # no mailbox
     assert exp["enrichment"] == {"uses_hubspot": "oui"}
     assert exp["people_exhaustive"] is True
     assert globex["expected"]["emails"][0]["status"] == "CATCH_ALL"
-    assert summarize(parsed.items) == {"items": 2, "people": 4, "emails": 3, "invalid_emails": 1, "enrichment_values": 2}
+    assert summarize(parsed.items) == {
+        "items": 2,
+        "people": 4,
+        "emails": 3,
+        "invalid_emails": 1,
+        "enrichment_values": 2,
+    }
 
 
 def test_company_input_name_hides_the_domain_from_the_engine() -> None:
     parsed = parse_csv(
-        "company_domain,company_name,company_city\nacme-demo.fr,Acme Demo,Lyon\n", company_input="name", people_exhaustive=False
+        "company_domain,company_name,company_city\nacme-demo.fr,Acme Demo,Lyon\n",
+        company_input="name",
+        people_exhaustive=False,
     )
     item = parsed.items[0]
     assert item["input"] == {"company": {"name": "Acme Demo", "city": "Lyon"}}
@@ -60,7 +75,8 @@ def test_company_input_name_hides_the_domain_from_the_engine() -> None:
 
 def test_email_kind_gives_people_identities_as_input() -> None:
     parsed = parse_csv(
-        "company_domain,person_first,person_last,email\nacme-demo.fr,Marie,Dupont,marie@acme-demo.fr\n", kind="email"
+        "company_domain,person_first,person_last,email\nacme-demo.fr,Marie,Dupont,marie@acme-demo.fr\n",
+        kind="email",
     )
     assert parsed.items[0]["input"]["people"] == [{"first": "Marie", "last": "Dupont", "full_name": None}]
 
@@ -113,7 +129,14 @@ def test_json_items_validation_and_derived_input() -> None:
                 "expected": {
                     "company": {"domain": "https://acme-demo.fr", "email_pattern": "prenom.nom"},
                     "people": [{"first": "Marie", "last": "Dupont"}],
-                    "emails": [{"address": "MARIE.DUPONT@acme-demo.fr", "status": "valid", "first": "Marie", "last": "Dupont"}],
+                    "emails": [
+                        {
+                            "address": "MARIE.DUPONT@acme-demo.fr",
+                            "status": "valid",
+                            "first": "Marie",
+                            "last": "Dupont",
+                        }
+                    ],
                     "enrichment": {"uses_hubspot": True, "tags": ["a", "b"]},
                 }
             }

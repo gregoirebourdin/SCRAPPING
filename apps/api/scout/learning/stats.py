@@ -270,7 +270,10 @@ def precision(dimension: str, key: str, prior: float, snap: Snapshot | None = No
     row = _row(dimension, key, snap)
     if row is None:
         return prior
-    return beta_mean(row.correct, row.correct + row.wrong, prior)
+    try:
+        return beta_mean(row.correct, row.correct + row.wrong, prior)
+    except Exception:  # malformed row: the prior, never an exception on the hot path
+        return prior
 
 
 def coverage(dimension: str, key: str, prior: float, snap: Snapshot | None = None) -> float:
@@ -278,7 +281,10 @@ def coverage(dimension: str, key: str, prior: float, snap: Snapshot | None = Non
     row = _row(dimension, key, snap)
     if row is None:
         return prior
-    return beta_mean(row.successes, row.attempts, prior)
+    try:
+        return beta_mean(row.successes, row.attempts, prior)
+    except Exception:
+        return prior
 
 
 def wilson_interval(hits: int, n: int, z: float = WILSON_Z_90) -> tuple[float, float] | None:

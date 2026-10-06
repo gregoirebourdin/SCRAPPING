@@ -12,11 +12,21 @@ import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
 import structlog
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
+from scout.extract.email_extract import (  # noqa: F401 - EMAIL_RE re-exported for callers
+    EMAIL_RE,
+    cfemail_from_href,
+    clean_email,
+    decode_cfemail,
+    emails_from_jsonld,
+    emails_from_mailto,
+    emails_from_text,
+    emails_from_tree,
+)
 from scout.extract.social import LINKEDIN_PERSON, normalize_social_url
 from scout.util.text import collapse_ws
 from scout.util.urls import absolutize, canonical_url, registrable_domain
@@ -121,112 +131,6 @@ _SOCIAL_HOST_DOMAINS = frozenset(
         "pin.it",
         "threads.net",
         "whatsapp.com",
-    }
-)
-
-# ---- emails ---------------------------------------------------------------------------------
-
-EMAIL_RE = re.compile(
-    r"(?<![\w.+-])[a-z0-9][a-z0-9._%+\-]{0,63}@[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}(?![\w-])",
-    re.IGNORECASE,
-)
-_OBFUSCATED_EMAIL_RE = re.compile(
-    r"([a-z0-9][a-z0-9._%+\-]{0,63})\s*[\[\(\{<]\s*(?:at|arobase|@)\s*[\]\)\}>]\s*"
-    r"([a-z0-9\-]+(?:\s*(?:[\[\(\{<]\s*(?:dot|point|\.)\s*[\]\)\}>]|\.)\s*[a-z0-9\-]+)+)",
-    re.IGNORECASE,
-)
-_SPACED_EMAIL_RE = re.compile(
-    r"\b([a-z0-9][a-z0-9._\-]{0,63})\s+(?:at|arobase)\s+([a-z0-9\-]+(?:\s+(?:dot|point)\s+[a-z0-9\-]+)+)\b",
-    re.IGNORECASE,
-)
-_DOT_TOKEN_RE = re.compile(
-    r"\s*(?:[\[\(\{<]\s*(?:dot|point|\.)\s*[\]\)\}>]|\s(?:dot|point)\s|\.)\s*", re.IGNORECASE
-)
-_FILE_EXTS = frozenset(
-    {
-        "png",
-        "jpg",
-        "jpeg",
-        "gif",
-        "svg",
-        "webp",
-        "avif",
-        "ico",
-        "bmp",
-        "tif",
-        "tiff",
-        "css",
-        "js",
-        "mjs",
-        "json",
-        "map",
-        "woff",
-        "woff2",
-        "ttf",
-        "eot",
-        "otf",
-        "mp4",
-        "webm",
-        "mov",
-        "mp3",
-        "wav",
-        "pdf",
-        "zip",
-        "php",
-        "html",
-        "htm",
-    }
-)
-_NOISE_EMAIL_DOMAINS = (
-    "sentry.io",
-    "wixpress.com",
-    "sentry-next.wixpress.com",
-    "example.com",
-    "example.org",
-    "example.net",
-    "example.fr",
-    "domain.com",
-    "domaine.com",
-    "domaine.fr",
-    "yourdomain.com",
-    "votredomaine.fr",
-    "votredomaine.com",
-    "mysite.com",
-    "monsite.fr",
-    "test.com",
-    "email.com",
-    "sentry.com",
-    "ingest.sentry.io",
-)
-_PLACEHOLDER_LOCALS = frozenset(
-    {
-        "prenom.nom",
-        "nom.prenom",
-        "firstname.lastname",
-        "first.last",
-        "john.doe",
-        "jane.doe",
-        "johndoe",
-        "you",
-        "your.name",
-        "yourname",
-        "votre.nom",
-        "votrenom",
-        "name",
-        "username",
-        "user",
-        "exemple",
-        "example",
-        "email",
-        "votremail",
-        "votre-email",
-        "votreemail",
-        "votre.email",
-        "your-email",
-        "youremail",
-        "mail",
-        "nom",
-        "prenom",
     }
 )
 
@@ -426,60 +330,7 @@ def normalize_phone(raw: str, *, default_country: str | None = "FR") -> str | No
     return None
 
 
-def clean_email(raw: str) -> str | None:
-    """Lowercase + validate + drop asset filenames / tracker noise / placeholders."""
-    e = unquote(raw or "").strip().strip(".,;:<>()[]{}\"'").lower()
-    if e.startswith("mailto:"):
-        e = e[7:]
-    e = e.split("?", 1)[0].strip()
-    m = EMAIL_RE.fullmatch(e)
-    if not m:
-        return None
-    local, _, domain = e.rpartition("@")
-    tld = domain.rsplit(".", 1)[-1]
-    if tld in _FILE_EXTS:
-        return None
-    if re.search(r"@\d+x\.", e) or re.fullmatch(r"[0-9a-f]{16,}", local):
-        return None
-    if any(domain == d or domain.endswith("." + d) for d in _NOISE_EMAIL_DOMAINS):
-        return None
-    if local in _PLACEHOLDER_LOCALS:
-        return None
-    return e
-
-
-def _decode_cfemail(hexstr: str) -> str | None:
-    """Cloudflare email protection: first byte is the XOR key."""
-    try:
-        data = bytes.fromhex(hexstr)
-    except ValueError:
-        return None
-    if len(data) < 2:
-        return None
-    key = data[0]
-    try:
-        return bytes(b ^ key for b in data[1:]).decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-
-
-def emails_from_text(text: str) -> list[str]:
-    """Plain and obfuscated (``name [at] domain [dot] fr``, ``name(at)domain.fr``) emails in text."""
-    found: list[str] = []
-    for m in EMAIL_RE.finditer(text):
-        found.append(m.group(0))
-    for rx in (_OBFUSCATED_EMAIL_RE, _SPACED_EMAIL_RE):
-        for m in rx.finditer(text):
-            local, dom = m.group(1), m.group(2)
-            dom = _DOT_TOKEN_RE.sub(".", dom)
-            dom = re.sub(r"\s+", "", dom)
-            found.append(f"{local}@{dom}")
-    out: list[str] = []
-    for raw in found:
-        e = clean_email(raw)
-        if e and e not in out:
-            out.append(e)
-    return out
+_decode_cfemail = decode_cfemail  # backwards-compatible alias
 
 
 def phones_from_text(text: str) -> list[str]:
@@ -693,13 +544,13 @@ def parse_html(html: str, url: str, *, is_home: bool = False) -> ParsedPage:
             continue
         low = href.lower()
         if low.startswith("mailto:"):
-            raw_emails.extend(p for p in re.split(r"[,;]", href[7:].split("?", 1)[0]) if p)
+            raw_emails.extend(emails_from_mailto(href))
             continue
         if low.startswith(("tel:", "callto:")):
             raw_phones.append(href.split(":", 1)[1])
             continue
         if "/cdn-cgi/l/email-protection" in low and "#" in href:
-            decoded = _decode_cfemail(href.rsplit("#", 1)[1])
+            decoded = cfemail_from_href(href)
             if decoded:
                 raw_emails.append(decoded)
             continue
@@ -731,10 +582,7 @@ def parse_html(html: str, url: str, *, is_home: bool = False) -> ParsedPage:
         elif key not in seen_external and len(external) < MAX_EXTERNAL_LINKS:
             seen_external.add(key)
             external.append({"url": absolute, "text": text})
-    for node in tree.css("[data-cfemail]"):
-        decoded = _decode_cfemail(_attr(node, "data-cfemail") or "")
-        if decoded:
-            raw_emails.append(decoded)
+    raw_emails.extend(emails_from_tree(tree))  # data-cfemail, CSS-reversed text, JSON data islands
     links: dict[str, Any] = {"social": social, "internal": internal, "external": external}
     if profiles:
         links["people_profiles"] = profiles[:50]
@@ -762,15 +610,9 @@ def parse_html(html: str, url: str, *, is_home: bool = False) -> ParsedPage:
         e = clean_email(raw)
         if e and e not in emails:
             emails.append(e)
-    for e in emails_from_text(text):
+    for e in [*emails_from_text(text, site_domain=page_domain), *emails_from_jsonld(page.structured_data)]:
         if e not in emails:
             emails.append(e)
-    for obj in page.structured_data:
-        val = obj.get("email") if isinstance(obj, dict) else None
-        if isinstance(val, str):
-            e = clean_email(val)
-            if e and e not in emails:
-                emails.append(e)
     page.emails = emails[:50]
     phones: list[str] = []
     for raw in raw_phones:

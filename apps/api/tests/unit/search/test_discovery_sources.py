@@ -24,7 +24,13 @@ from .conftest import COMPANY_RESULTS, DDG, SEARXNG_SEARCH, sx_payload, sx_resul
 def ws_query(**extra: Any) -> DiscoveryQuery:
     return DiscoveryQuery(
         key="ddg:fr-fr:agence marketing lyon",
-        params={"q": "agence marketing Lyon", "kl": "fr-fr", "max_pages": 2, "expand_listicles": False, **extra},
+        params={
+            "q": "agence marketing Lyon",
+            "kl": "fr-fr",
+            "max_pages": 2,
+            "expand_listicles": False,
+            **extra,
+        },
     )
 
 
@@ -54,7 +60,9 @@ async def test_web_search_uses_searxng_first(src: WebSearchSource) -> None:
     assert page.next_cursor is not None and page.next_cursor["engine"] == "searxng"
     assert page.next_cursor["form"] == {"pageno": 2} and page.next_cursor["page"] == 2
 
-    sx.mock(return_value=httpx.Response(200, json=sx_payload([sx_result("https://agence-boreal.fr/", "Boréal")])))
+    sx.mock(
+        return_value=httpx.Response(200, json=sx_payload([sx_result("https://agence-boreal.fr/", "Boréal")]))
+    )
     page2 = await src.discover(ws_query(), page.next_cursor)
     assert sx.calls.last.request.url.params["pageno"] == "2"
     assert [c.domain for c in page2.candidates] == ["agence-boreal.fr"] and page2.next_cursor is None
@@ -98,7 +106,9 @@ def _grounded(calls: list[str]) -> Any:
             value=GroundedCompanies.model_validate(
                 {"companies": [{"name": "Acme Analytics", "website": "https://acme-analytics.io"}]}
             ),
-            sources=[GroundingSource(uri="https://acme-analytics.io/", title="Acme", domain="acme-analytics.io")],
+            sources=[
+                GroundingSource(uri="https://acme-analytics.io/", title="Acme", domain="acme-analytics.io")
+            ],
             search_queries=["saas austin"],
             supports=[],
             usage=AIUsage(model="fake", cost_usd=0.02, grounded_queries=1),

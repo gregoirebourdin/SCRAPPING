@@ -32,8 +32,24 @@ This document is the entry point. Companion documents:
 7. **Lean infrastructure.** Vercel + Neon + Railway + Gemini + OSS components. No Redis,
    Kafka, Elastic, vector DB or paid enrichment API until measurements require it.
 
+8. **Cheapest reliable resolver first.** Every question (a company, a person, an email, a
+   column value) is answered in this order and stops as soon as the evidence is sufficient:
+   **deterministic / public sources → cached data → Scrapling / Crawl4AI → SearXNG → Gemini
+   only when still unresolved.** Each layer sits behind a replaceable adapter.
+9. **Learned, not hard-coded, reliability.** Source and resolver quality is measured
+   (attempts, coverage, confirmed correct / wrong, latency, cost) and drives routing,
+   confidence and fallback order; defaults are only priors (§11.4).
+10. **Measured, never claimed.** Quality is reported from the benchmark harness on labelled
+    data with sample sizes and intervals; no comparison with another product is claimed
+    without a real measurement (§11.5).
+
 The four foundational systems that must never be sacrificed:
 **global lead registry, exclusion system, provenance system, dynamic enrichment engine.**
+
+Where Research competes: not on database size or mobile numbers, but on **freshness,
+ultra-niche qualification, real understanding of company websites, custom enrichments,
+provenance, answering any requested column, exclusion of already-seen leads, and very low
+cost per qualified lead.**
 
 ---
 
@@ -61,6 +77,11 @@ The four foundational systems that must never be sacrificed:
                  │  │ AfterShip verifier +       │  │ pinned image, web API)     │  │
                  │  │ wappalyzergo fingerprints  │  │ optional, on demand        │  │
                  │  └────────────────────────────┘  └────────────────────────────┘  │
+                 │  ┌────────────────────────────┐                                  │
+                 │  │ Service D services/searxng │  free web search (JSON API),     │
+                 │  │ (pinned SearXNG image,     │  isolated & replaceable; Gemini  │
+                 │  │ our settings.yml)          │  grounding only as a fallback    │
+                 │  └────────────────────────────┘                                  │
                  └───────────────┬──────────────────────────────────────────────────┘
                                  │ TLS
                  ┌───────────────▼──────────┐       ┌──────────────────────────────┐
@@ -273,10 +294,11 @@ not_started ─► queued ─► running ─► success | unknown | failed
 
 ### 6.4 Email status
 
-`SAFE | RISKY | CATCH_ALL | UNKNOWN | INVALID` with the raw signals kept separately
-(`mx_valid`, `smtp_result`, `catch_all`, `disposable`, `role_address`, `free_provider`,
-`pattern_confidence`, `overall_confidence`, `last_checked_at`). A catch-all domain never
-yields `SAFE` for a guessed address.
+`SAFE | LIKELY_SAFE | RISKY | CATCH_ALL | UNKNOWN | TEMPORARY_UNKNOWN | INVALID` with the
+raw signals kept separately (`mx_valid`, `smtp_result`, `catch_all`, `disposable`,
+`role_address`, `free_provider`, `pattern_confidence`, `overall_confidence`, explainable
+signals, `last_checked_at`). A catch-all domain never yields `SAFE` for a guessed address;
+an unhealthy SMTP path never yields `INVALID`. Details: [EMAIL_ENGINE.md](EMAIL_ENGINE.md).
 
 ---
 
@@ -326,10 +348,10 @@ by workspace monthly budgets and per-campaign hard caps.
 
 | # | Risk | Impact | Mitigation |
 |---|---|---|---|
-| R1 | **Outbound SMTP blocked on Railway Hobby** (ports 25/465/587/2525 are Pro-only as of 2026) | Without SMTP probing, guessed emails cannot reach `SAFE`; campaigns requiring SAFE emails stall | Verifier is pluggable; `SMTP_ENABLED=false` gives honest `UNKNOWN`/`RISKY` statuses; published emails still reach `SAFE`; the UI reports “SMTP verification unavailable”. Options: Railway Pro, or run Service B on a small VPS that permits port 25 |
+| R1 | **Outbound SMTP blocked on Railway Hobby** (ports 25/465/587/2525 are Pro-only as of 2026) | Without SMTP probing, guessed emails cannot reach `SAFE`; campaigns requiring SAFE emails stall | SMTP health monitor (`HEALTHY/DEGRADED/BLOCKED/UNKNOWN`) stops probing and never concludes `INVALID` on infrastructure failures; the fast path still yields `SAFE` (published) and `LIKELY_SAFE` (proven convention); options: Railway Pro, or Service B on a VPS that permits port 25 |
 | R2 | SMTP probing from datacenter IPs is greylisted / accept-all (M365, Google) | Many domains look catch-all | Catch-all detection with random recipients; `RISKY` + pattern confidence; domain pattern memory improves over time |
 | R3 | Google Maps scraping fragility / blocking | Local-business discovery drops | Isolated adapter, source health metrics, automatic deprioritization, alternative sources (registry, OSM, web search, grounding) |
-| R4 | DuckDuckGo HTML endpoint rate limits | Free web-search adapter fails | Health tracking, backoff, Gemini grounding fallback within budget |
+| R4 | Free web-search endpoints rate-limit / block datacenter IPs | Web-search discovery and research fail | Self-hosted SearXNG (several engines) → DuckDuckGo HTML → Gemini grounding only when insufficient; health tracking and empirical routing |
 | R5 | Grounded search cost beyond free tier | Budget overrun | Cost-class planner: grounding only when cheaper resolvers cannot answer; hard caps |
 | R6 | Hallucinated people/facts | Trust destroyed | Evidence required: AI-extracted names must literally appear in the cited page; grounded answers without sources are `UNKNOWN`/low confidence |
 | R7 | Prompt injection in scraped pages | Tool misuse, data exfiltration | Enrichment calls have no tools; content wrapped as untrusted data; chat tools need server-side authorization; destructive tools require confirmation |
@@ -358,3 +380,95 @@ by workspace monthly budgets and per-campaign hard caps.
 | 8 | Qualification: scoring, quality gate, live progress, completion | `scout/pipeline/scoring.py` |
 | 9 | Dynamic enrichment engine | `scout/enrich/` |
 | 10 | Hardening: retries, source health, budgets, benchmark, load tests, observability | across |
+| 11 | Resolution layers: fetch tiers, search layer, email intelligence, empirical scoring, benchmark harness, live runs | §11 |
+
+---
+
+## 11. Resolution layers (2026-10 update)
+
+Each layer is an adapter behind a small interface, so a component can be swapped without
+touching the pipeline. Telemetry from every layer feeds the empirical scoring tables.
+
+### 11.1 Fetch tiers (`scout/crawl/tiers.py`)
+
+Pages are fetched through a per-crawl `TierChain` of replaceable `FetchTierAdapter`s, cheapest
+first, escalating only on evidence:
+
+| Tier | Implementation | Runs when |
+|---|---|---|
+| L1 `http` | httpx, SSRF-safe transport, conditional requests | always first |
+| L2 `scrapling_fetcher` | Scrapling `FetcherSession` (curl_cffi, Chrome TLS/HTTP2 fingerprint) | L1 blocked (403 / anti-bot challenge) or an empty 2xx body |
+| L3 `scrapling_dynamic` | Scrapling `AsyncDynamicSession`, one Chromium per crawl | L2 did not recover the page and `SCRAPLING_DYNAMIC_ENABLED` |
+| render | `scrapling_dynamic → crawl4ai → playwright` | client-rendered pages (`render.needs_js`); Crawl4AI stays the semantic / LLM-oriented option |
+
+A tier that recovers a page stays sticky for the rest of the crawl. `429`, SSRF refusals and
+network errors are never escalated; robots.txt and per-domain politeness apply before any
+tier. L2 presents a browser fingerprint only after the honest L1 was blocked
+(`SCRAPLING_IMPERSONATE=""` keeps the honest UA); CAPTCHA solving (`StealthyFetcher`) is not
+used.
+
+SSRF: L2 disables environment proxies and libcurl redirects (each hop is followed and
+re-validated), caps the body and pins every host with `CURLOPT_RESOLVE` to the address
+validated by `resolve_safe`. Browser tiers are air-gapped by `BrowserGuard`
+(`scout/crawl/browser_guard.py`): dead proxy, every host name unresolvable, service workers /
+WebSockets / WebRTC blocked, GET only, and every request served through `route.fulfill` from
+our pinned fetchers — route handlers never see redirect follow-ups, which is how the previous
+Playwright tier could be redirected to an internal address (fixed). Crawl4AI only gets URL
+pre/post checks and stays off for untrusted URLs.
+
+Scrapling is an optional extra (`uv sync --extra scraping`; Docker build arg / Railway variable
+`SCOUT_EXTRAS=scraping`, ~330 MB, browsers never installed in the image); every tier degrades to
+"not available" when its dependency is missing. The persisted `FetchTier` stays
+`http | crawl4ai | browser`; per-tier attempts, success, latency and cost are recorded under the
+learning dimension `crawl.tier`.
+
+Website email extraction (`scout/extract/email_extract.py`) decodes Cloudflare
+`data-cfemail` / `/cdn-cgi/l/email-protection`, `mailto:` (percent-encoding, cc/bcc), bracketed
+and spelled-out obfuscations (`[at]`, `(at)`, `{arobase}`, `[dot]`, with context guards),
+entities / zero-width characters / full-width `＠`, CSS-reversed text, JSON-LD and JSON data
+islands; every address must end in a real public suffix. On a 58-case labelled corpus (19
+decoys, written for the test — not a real-site measurement): precision 0.81 → 1.00, recall
+0.69 → 0.95 versus the previous rules (an email-enrich port, MIT, used only as a test baseline:
+0.65 / 0.67).
+
+### 11.2 Search layer (`scout/search/`, `services/searxng`)
+
+`WebSearchProvider` adapters (SearXNG JSON API, DuckDuckGo HTML) chained with health,
+caching and an explicit "insufficient results" rule. Discovery, website resolution, person
+discovery and the enrichment `web_research` resolver use the chain first; Gemini Google Search
+grounding runs only when the chain is insufficient or the question needs reasoning over
+sources.
+
+### 11.3 Email Intelligence Engine (`scout/email/`)
+
+Domain-first: one Domain Intelligence Profile per domain (MX, provider, observed emails,
+learned patterns, catch-all, SMTP facts, evidence), fast path without SMTP, deep path batched
+per domain with an SMTP health monitor, explainable confidence and statuses. See
+[EMAIL_ENGINE.md](EMAIL_ENGINE.md).
+
+### 11.4 Empirical Source Scoring (`scout/learning/`)
+
+`resolver_stats` keeps, per (dimension, key) — e.g. `people.source/official_team_page`,
+`search.engine/searxng`, `enrich.resolver/semantic_classifier`, `crawl.tier/scrapling_fetcher`,
+email resolvers / patterns / techniques — attempts, successes (coverage), confirmed correct /
+wrong, latency and cost. Precision and coverage are Beta-smoothed around priors kept in one
+place (`learning/priors.py`); routing, fallback order, enrichment planning and confidence blend
+the learned values once enough evidence exists. Outcomes come from SMTP verdicts, user
+corrections in the table and benchmark ground truth.
+
+### 11.5 Benchmark Harness (`scout/benchmark/`, `/benchmark`)
+
+Ground-truth datasets are imported (CSV / JSON), runs compare our output with the expected
+values (registry mode: what the workspace already has; live mode: run the engine; suite mode:
+synthetic suites such as the email engine benchmark) and report company / person / role / email
+precision and recall, SAFE precision, enrichment accuracy, false positives / negatives,
+duplicate rate, processing time and cost per qualified lead — each rate with its sample size and
+interval. Benchmark outcomes also feed the empirical scoring.
+
+### 11.6 Live runs
+
+The chat clarifies a request with at most 2–3 targeted questions, shows a plan, launches the
+campaign and narrates each step; the table streams rows (skeletons for in-flight candidates),
+detects stalls, and a run can be paused without losing anything, resumed, or resumed with an
+amendment (new constraint, larger target) that goes through the ICP parser and the exclusion
+rules again.

@@ -99,13 +99,15 @@ def estimate(
 ) -> Estimate:
     """Effective estimate for one key (priors until the minimum evidence is reached)."""
     pr = _as_prior(dimension, key, prior)
-    row: StatRow | None
     try:
-        row = (snap or {}).get((dimension, key))
-    except Exception:
-        row = None
-    if row is None:
-        return Estimate(dimension, key, pr, pr.precision, pr.coverage, pr.latency_ms, pr.cost_usd)
+        row: StatRow | None = (snap or {}).get((dimension, key))
+        learned = _learned_estimate(dimension, key, pr, row) if row is not None else None
+    except Exception:  # malformed snapshot: priors (never raise on a hot path)
+        learned = None
+    return learned or Estimate(dimension, key, pr, pr.precision, pr.coverage, pr.latency_ms, pr.cost_usd)
+
+
+def _learned_estimate(dimension: str, key: str, pr: P.Prior, row: StatRow) -> Estimate:
     judged = row.correct + row.wrong
     p_learned = judged >= MIN_OUTCOMES
     c_learned = row.attempts >= MIN_ATTEMPTS

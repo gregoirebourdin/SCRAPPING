@@ -42,7 +42,7 @@ async def run(config: dict[str, Any]) -> SuiteResult:
     for strategy in wanted:
         tp = fp = fn = 0
         latencies: list[float] = []
-        for i, (a, b, same) in enumerate(PAIRS):
+        for a, b, same in PAIRS:
             t0 = time.perf_counter()
             got = _match(strategy, a, b)
             latencies.append((time.perf_counter() - t0) * 1000)
@@ -51,7 +51,7 @@ async def run(config: dict[str, Any]) -> SuiteResult:
             fn += same and not got
             items.append(
                 {
-                    "label": f"#{i + 1} {a} ↔ {b}",
+                    "label": f"{a} ↔ {b}",
                     "strategy": strategy,
                     "expected": {"same_person": same},
                     "actual": {"same_person": got},

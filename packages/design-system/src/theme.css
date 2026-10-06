@@ -96,3 +96,187 @@
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone; /* inline titles: one gradient per line */
 }
+
+/* ------------------------------------------------------------------------------------------------
+   Live runs & micro-interactions (append-only). Fast (120–250 ms) and quiet; every animation is
+   disabled under prefers-reduced-motion (content stays readable, nothing moves).
+   ------------------------------------------------------------------------------------------------ */
+
+/* Active step / current stage: a soft light sweeping across muted text. */
+@utility shimmer-text {
+  background-image: linear-gradient(
+    100deg,
+    var(--text-muted) 0%,
+    var(--text-muted) 38%,
+    var(--text-primary) 50%,
+    var(--text-muted) 62%,
+    var(--text-muted) 100%
+  );
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: scout-shimmer-text 1.9s linear infinite;
+}
+
+/* Skeleton bars with a travelling highlight (in-flight rows). */
+@utility skeleton-shimmer {
+  background-color: var(--surface-3);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--text-primary) 7%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: scout-skeleton 1.4s ease-in-out infinite;
+}
+
+/* A new row slides in (the `translate` property composes with the virtualizer's inline transform) and keeps a
+   fading accent wash on top of its opaque cells for a moment. */
+@utility row-enter {
+  animation: scout-row-in 260ms var(--motion-ease) both;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    animation: scout-row-wash 1.8s ease-out both;
+  }
+}
+
+/* A cell whose value just arrived flashes softly once (overlay: cells keep their own background). */
+@utility cell-flash {
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    animation: scout-cell-wash 1.4s ease-out both;
+  }
+}
+
+/* Number that just changed. */
+@utility tick-up {
+  animation: scout-tick-up 260ms var(--motion-ease) both;
+}
+
+/* Press feedback for buttons / chips. */
+@utility press {
+  transition: transform var(--dur-1) var(--motion-ease);
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* Hover lift for cards. */
+@utility lift {
+  transition:
+    transform var(--dur-2) var(--motion-ease),
+    box-shadow var(--dur-2) var(--motion-ease);
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px -10px rgba(0, 0, 0, 0.6), inset 0 0 0 1px var(--border-strong);
+  }
+}
+
+/* Breathing dot (live / reconnecting). */
+@utility live-dot {
+  animation: scout-live-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes scout-shimmer-text {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+@keyframes scout-skeleton {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+@keyframes scout-row-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes scout-row-wash {
+  0% {
+    background-color: var(--accent-soft);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  65% {
+    background-color: var(--accent-softer);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: inset 2px 0 0 transparent;
+  }
+}
+@keyframes scout-cell-wash {
+  0% {
+    background-color: var(--accent-soft);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+@keyframes scout-tick-up {
+  from {
+    opacity: 0.4;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes scout-live-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text {
+    animation: none;
+    background: none;
+    color: var(--text-secondary);
+    -webkit-text-fill-color: currentColor;
+  }
+  .skeleton-shimmer,
+  .row-enter,
+  .row-enter::after,
+  .cell-flash::after,
+  .tick-up,
+  .live-dot {
+    animation: none;
+  }
+  .row-enter::after {
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .press:active:not(:disabled),
+  .lift:hover {
+    transform: none;
+  }
+}
