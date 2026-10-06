@@ -1,7 +1,7 @@
-# Scout — Architecture
+# Research — Architecture
 
-Scout is an AI-native B2B lead intelligence workspace. A user describes an ICP in
-natural language; Scout plans a campaign, discovers companies from appropriate
+Research is an AI-native B2B lead intelligence workspace. A user describes an ICP in
+natural language; Research plans a campaign, discovers companies from appropriate
 sources, crawls them, resolves decision makers, finds and verifies professional
 emails, scores every candidate, attaches field-level evidence and streams
 **qualified, never-seen-before** leads into a fast table that the AI chat can operate.

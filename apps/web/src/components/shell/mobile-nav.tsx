@@ -22,7 +22,10 @@ export function MobileNav() {
   const setOpen = useUI((s) => s.setMobileChatOpen);
   return (
     <>
-      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 flex h-14 items-stretch border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-30 flex h-14 items-stretch border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      >
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
@@ -32,7 +35,11 @@ export function MobileNav() {
             </Link>
           );
         })}
-        <button type="button" onClick={() => setOpen(!open)} className={cn("flex flex-1 flex-col items-center justify-center gap-0.5 text-micro", open ? "text-accent-strong" : "text-fg-3")}>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className={cn("flex flex-1 flex-col items-center justify-center gap-0.5 text-micro", open ? "text-accent-strong" : "text-fg-3")}
+        >
           <MessageSquare className="size-[18px]" />
           Assistant
         </button>

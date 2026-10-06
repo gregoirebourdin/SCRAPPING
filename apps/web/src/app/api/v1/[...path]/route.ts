@@ -55,7 +55,7 @@ async function proxy(req: NextRequest, ctx: { params: Promise<{ path: string[] }
       signal: req.signal,
     });
   } catch {
-    return NextResponse.json({ error: { code: "api_unreachable", message: "The Scout API is unreachable. Is it running?" } }, { status: 502 });
+    return NextResponse.json({ error: { code: "api_unreachable", message: "The Research API is unreachable. Is it running?" } }, { status: 502 });
   }
   const out = new Headers();
   for (const h of FORWARD_RESPONSE_HEADERS) {

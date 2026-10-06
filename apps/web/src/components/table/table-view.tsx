@@ -135,7 +135,7 @@ export function TableView({
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
         <div className="flex min-w-0 items-center gap-2">
           {icon}
-          <h1 className="truncate text-heading text-fg">{title}</h1>
+          <h1 className="title-gradient truncate text-title tracking-[-0.01em]">{title}</h1>
           <span className="tabular shrink-0 text-meta text-fg-3">{total === null ? "" : n(total)}</span>
           {subtitle}
         </div>

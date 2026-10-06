@@ -1,4 +1,4 @@
-# Scout — Security & Compliance
+# Research — Security & Compliance
 
 ## 1. Authentication
 

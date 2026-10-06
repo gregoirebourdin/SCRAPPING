@@ -1,6 +1,6 @@
 "use client";
 
-import { cn, Kbd, Tip } from "@scout/design-system";
+import { cn, Kbd, Logo, Tip } from "@scout/design-system";
 import { Activity, Building2, ChartNoAxesColumn, CircleUserRound, Database, Inbox, ListChecks, PanelLeft, Radar, Search, Settings, Sparkles, Users } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
@@ -8,8 +8,6 @@ import { usePathname } from "next/navigation";
 
 import { useLists } from "@/lib/queries";
 import { useUI } from "@/lib/store";
-
-import { Logo } from "../../app/(auth)/auth-form";
 
 const NAV = [
   { href: "/discover", label: "Discover", icon: Sparkles },
@@ -65,9 +63,8 @@ export function Sidebar({ user, expanded }: { user: { name: string; email: strin
       style={{ width }}
     >
       <div className={cn("mb-2 flex h-8 items-center px-3", expanded ? "justify-between" : "justify-center")}>
-        <Link href="/discover" className="flex items-center gap-2" aria-label="Scout home">
-          <Logo size={22} />
-          {expanded && <span className="text-heading text-fg">Scout</span>}
+        <Link href="/discover" className="flex items-center rounded-sm px-0.5" aria-label="Research home">
+          <Logo size={17} wordmark={expanded} />
         </Link>
         {expanded && (
           <button type="button" onClick={() => setSidebarExpanded(false)} className="rounded-sm p-1 text-fg-3 hover:bg-surface-2 hover:text-fg" aria-label="Collapse sidebar">

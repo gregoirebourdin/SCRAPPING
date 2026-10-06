@@ -43,7 +43,7 @@ export function EntityTable({ kind }: { kind: "people" | "companies" | "review" 
       title: "People",
       icon: <Users className="size-4 text-fg-3" />,
       empty: (
-        <EmptyHint icon={<Users />} title="No people yet" body="Everyone Scout discovers or you import lands here, deduplicated across all lists.">
+        <EmptyHint icon={<Users />} title="No people yet" body="Everyone Research discovers or you import lands here, deduplicated across all lists.">
           <DiscoverButtons />
         </EmptyHint>
       ),

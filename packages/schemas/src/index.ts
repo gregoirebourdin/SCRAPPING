@@ -21,7 +21,7 @@ export type ParseOut = S["ParseOut"];
 export type MembershipResult = S["MembershipResult"];
 export type RowRef = S["RowRef"];
 export type EntityType = "person" | "company";
-export type EmailStatus = "SAFE" | "RISKY" | "CATCH_ALL" | "UNKNOWN" | "INVALID";
+export type EmailStatus = "SAFE" | "LIKELY_SAFE" | "RISKY" | "CATCH_ALL" | "UNKNOWN" | "TEMPORARY_UNKNOWN" | "INVALID";
 export type CellStatus = "not_started" | "queued" | "running" | "success" | "unknown" | "failed" | "stale";
 export type FilterOperator = FilterCondition["operator"];
 

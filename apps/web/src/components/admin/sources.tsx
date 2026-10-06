@@ -29,6 +29,23 @@ interface SourceRow {
   last_success_at: string | null;
 }
 
+interface EmailMetrics {
+  resolutions: number;
+  by_path: { cache: number; fast: number; deep: number };
+  by_status: Record<string, number>;
+  avg_ms: number | null;
+  p50_ms: number | null;
+  p95_ms: number | null;
+  smtp_probes: number;
+  smtp_fallback_rate: number | null;
+  cache_hit_rate: number | null;
+  avg_candidates: number | null;
+  resolved_per_minute: number | null;
+  pending_deep: Record<string, number>;
+  smtp_health: { scope: string; state: string; reason: string | null; blocked_until: string | null }[];
+  resolvers: { resolver: string; attempts: number; confirmed_correct: number; confirmed_wrong: number; precision: number | null; avg_ms: number | null }[];
+}
+
 interface Diagnostics {
   window_hours: number;
   companies_per_min: number;
@@ -60,6 +77,8 @@ export function SourcesPage() {
   const [hours, setHours] = useState("24");
   const sources = useQuery({ queryKey: qk.sources, queryFn: () => api<SourceRow[]>("sources"), refetchInterval: 30_000 });
   const diag = useQuery({ queryKey: ["diagnostics", hours], queryFn: () => api<Diagnostics>(`diagnostics?hours=${hours}`), refetchInterval: 30_000 });
+  const em = useQuery({ queryKey: ["email-metrics", hours], queryFn: () => api<EmailMetrics>(`email/metrics?hours=${hours}`), refetchInterval: 30_000 });
+  const e = em.data;
   const d = diag.data;
   const f = me.data?.features ?? {};
   const all = (sources.data ?? []).filter((s) => s.key !== "fixture" || f.demo_data);
@@ -117,6 +136,71 @@ export function SourcesPage() {
             }
           />
         </div>
+      </Block>
+
+      <Block title="Email engine" aside={<span className="text-meta text-fg-3">Domain intelligence → fast path; SMTP only for ambiguous cases</span>}>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
+          <Metric label="Resolutions" value={n(e?.resolutions)} hint={e ? `${n(e.by_path.cache)} cache · ${n(e.by_path.fast)} fast · ${n(e.by_path.deep)} deep` : undefined} />
+          <Metric label="Resolved / min" value={e?.resolved_per_minute != null ? e.resolved_per_minute.toFixed(1) : "—"} hint="SAFE + likely safe" />
+          <Metric label="P50 / P95" value={e?.p50_ms != null ? `${Math.round(e.p50_ms)} / ${Math.round(e.p95_ms ?? 0)} ms` : "—"} />
+          <Metric label="Cache hit rate" value={e?.cache_hit_rate != null ? pct(e.cache_hit_rate) : "—"} hint="email or domain profile reused" />
+          <Metric
+            label="SMTP fallback"
+            value={e?.smtp_fallback_rate != null ? pct(e.smtp_fallback_rate) : "—"}
+            hint={`${n(e?.smtp_probes)} probes · ${e?.avg_candidates ?? "—"} cand./person`}
+          />
+          <Metric
+            label="SMTP health"
+            value={e?.smtp_health.find((h) => h.scope === "global")?.state ?? "UNKNOWN"}
+            tone={e?.smtp_health.some((h) => h.state === "BLOCKED") ? "danger" : e?.smtp_health.some((h) => h.state === "DEGRADED") ? "warning" : undefined}
+            hint={
+              e?.smtp_health
+                .filter((h) => h.state !== "HEALTHY" && h.scope !== "global")
+                .map((h) => `${h.scope.replace("provider:", "")}: ${h.state}`)
+                .join(" · ") || undefined
+            }
+          />
+        </div>
+        {e && Object.keys(e.by_status).length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {Object.entries(e.by_status).map(([k, v]) => (
+              <Badge key={k} tone="neutral">
+                {k.replace(/_/g, " ").toLowerCase()} · {n(v)}
+              </Badge>
+            ))}
+            {Object.entries(e.pending_deep).map(([k, v]) => (
+              <Badge key={k} tone="info" dot>
+                deep {k} · {n(v)}
+              </Badge>
+            ))}
+          </div>
+        )}
+        {e && e.resolvers.length > 0 && (
+          <div className="mt-3">
+            <DataTable<EmailMetrics["resolvers"][number]>
+              rows={e.resolvers}
+              rowKey={(r) => r.resolver}
+              columns={[
+                { key: "r", label: "Resolver", render: (r) => <span className="text-fg">{r.resolver.replace(/_/g, " ")}</span> },
+                { key: "a", label: "Attempts", className: "text-right", render: (r) => <span className="tabular">{n(r.attempts)}</span> },
+                { key: "c", label: "Confirmed", className: "text-right", render: (r) => <span className="tabular text-success">{n(r.confirmed_correct)}</span> },
+                { key: "w", label: "Wrong", className: "text-right", render: (r) => <span className="tabular text-danger">{n(r.confirmed_wrong)}</span> },
+                {
+                  key: "p",
+                  label: "Precision (smoothed)",
+                  className: "text-right",
+                  render: (r) => <span className="tabular">{r.precision != null ? pct(r.precision, 1) : "—"}</span>,
+                },
+                {
+                  key: "ms",
+                  label: "Avg time",
+                  className: "text-right",
+                  render: (r) => <span className="tabular text-fg-2">{r.avg_ms != null ? `${Math.round(r.avg_ms)} ms` : "—"}</span>,
+                },
+              ]}
+            />
+          </div>
+        )}
       </Block>
 
       <Block title="Capabilities">

@@ -29,7 +29,7 @@ log = structlog.get_logger("chat")
 MAX_TOOL_ROUNDS = 8
 HISTORY_TURNS = 16
 
-SYSTEM_PROMPT = """You are Scout's operator: the AI that runs a B2B lead intelligence workspace for the user.
+SYSTEM_PROMPT = """You are Research's operator: the AI that runs a B2B lead intelligence workspace for the user.
 You act through tools — never claim you did something without calling the tool. Be concise (1–3 short sentences);
 the UI shows rich cards for tool results, so don't repeat their numbers at length.
 

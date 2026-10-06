@@ -27,20 +27,21 @@ function initials(name?: string | null): string {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1]![0] : "")).toUpperCase();
 }
 
-const AVATAR_TONES = ["#8b8ff7", "#4fbf8b", "#d9a24a", "#62a8de", "#c486e8", "#e2826f"];
+// Monochrome: a few foreground intensities keep neighbours distinguishable without colour.
+const AVATAR_MIX = [9, 13, 17, 22];
 
-function avatarTone(seed: string): string {
+function avatarMix(seed: string): number {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-  return AVATAR_TONES[Math.abs(h) % AVATAR_TONES.length]!;
+  return AVATAR_MIX[Math.abs(h) % AVATAR_MIX.length]!;
 }
 
 export function Avatar({ name, size = 18 }: { name?: string | null; size?: number }) {
-  const tone = avatarTone(name ?? "?");
+  const mix = avatarMix(name ?? "?");
   return (
     <span
-      className="inline-grid shrink-0 place-items-center rounded-full font-medium"
-      style={{ width: size, height: size, fontSize: size * 0.42, background: `color-mix(in srgb, ${tone} 18%, transparent)`, color: tone }}
+      className="inline-grid shrink-0 place-items-center rounded-full font-medium text-fg-2"
+      style={{ width: size, height: size, fontSize: size * 0.42, background: `color-mix(in srgb, var(--text-primary) ${mix}%, transparent)` }}
       aria-hidden
     >
       {initials(name)}
@@ -296,7 +297,7 @@ export function personColumns(): ColumnSpec[] {
             onClick={(e) => e.stopPropagation()}
             className="inline-flex items-center gap-1 text-fg-2 hover:text-accent-strong"
           >
-            <span className="rounded-[3px] bg-[#0a66c2]/20 px-1 text-micro font-semibold text-[#5aa4ff]">in</span>
+            <span className="rounded-[3px] bg-fg/12 px-1 text-micro font-semibold text-fg-2">in</span>
             <span className="text-meta">Profile</span>
           </a>
         ) : (

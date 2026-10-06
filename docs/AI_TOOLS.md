@@ -1,4 +1,4 @@
-# Scout — AI Layer & Chat Operator Tools
+# Research — AI Layer & Chat Operator Tools
 
 ## 1. Provider abstraction
 

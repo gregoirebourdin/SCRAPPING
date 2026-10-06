@@ -16,14 +16,30 @@ function inline(text: string, keyBase: string): React.ReactNode[] {
     const at = m.index ?? 0;
     if (at > last) out.push(text.slice(last, at));
     const k = `${keyBase}-${i++}`;
-    if (tok.startsWith("**")) out.push(<strong key={k} className="font-semibold text-fg">{tok.slice(2, -2)}</strong>);
-    else if (tok.startsWith("`")) out.push(<code key={k} className="rounded-xs bg-surface-3 px-1 font-mono text-[12px]">{tok.slice(1, -1)}</code>);
+    if (tok.startsWith("**"))
+      out.push(
+        <strong key={k} className="font-semibold text-fg">
+          {tok.slice(2, -2)}
+        </strong>,
+      );
+    else if (tok.startsWith("`"))
+      out.push(
+        <code key={k} className="rounded-xs bg-surface-3 px-1 font-mono text-[12px]">
+          {tok.slice(1, -1)}
+        </code>,
+      );
     else if (tok.startsWith("[")) {
       const label = tok.slice(1, tok.indexOf("]"));
       const href = tok.slice(tok.indexOf("(") + 1, -1);
       const external = href.startsWith("http");
       out.push(
-        <a key={k} href={href} target={external ? "_blank" : undefined} rel={external ? "noreferrer noopener" : undefined} className="text-accent-strong underline-offset-2 hover:underline">
+        <a
+          key={k}
+          href={href}
+          target={external ? "_blank" : undefined}
+          rel={external ? "noreferrer noopener" : undefined}
+          className="text-accent-strong underline-offset-2 hover:underline"
+        >
           {label}
         </a>,
       );
@@ -62,7 +78,9 @@ export function Markdown({ text }: { text: string }) {
       blocks.push(
         <Tag key={k} className={list.ordered ? "list-decimal space-y-0.5 pl-5" : "list-disc space-y-0.5 pl-5 marker:text-fg-3"}>
           {list.items.map((it, j) => (
-            <li key={j} className="leading-[20px]">{inline(it, `${k}-${j}`)}</li>
+            <li key={j} className="leading-[20px]">
+              {inline(it, `${k}-${j}`)}
+            </li>
           ))}
         </Tag>,
       );

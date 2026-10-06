@@ -1,4 +1,4 @@
-# Scout — Pipeline, Job Queue & Enrichment Engine
+# Research — Pipeline, Job Queue & Enrichment Engine
 
 ## 1. Job queue (Postgres, no Redis)
 

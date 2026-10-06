@@ -12,7 +12,13 @@ import {
   Tooltip as RTooltip,
 } from "radix-ui";
 import * as React from "react";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// Our type scale (theme.css --text-*) must be known to tailwind-merge, otherwise `text-body` is taken for a
+// colour and silently drops `text-accent-contrast` & co. when both are merged.
+const twMerge = extendTailwindMerge({
+  extend: { theme: { text: ["display", "title", "heading", "body", "table", "meta", "micro"] } },
+});
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
@@ -139,11 +145,17 @@ export function StatusDot({ tone = "neutral", pulse, className }: { tone?: Tone;
 }
 
 export const EMAIL_STATUS_META: Record<string, { label: string; tone: Tone; hint: string }> = {
-  SAFE: { label: "Safe", tone: "success", hint: "Mailbox accepted (or published on the official site); domain is not catch-all" },
-  RISKY: { label: "Risky", tone: "warning", hint: "Likely valid (strong pattern) but not confirmed" },
+  SAFE: { label: "Safe", tone: "success", hint: "Confirmed: published for this person on the company site, or accepted by the mail server on a domain that is not catch-all" },
+  LIKELY_SAFE: {
+    label: "Likely safe",
+    tone: "success",
+    hint: "Strong evidence without mailbox confirmation: the company's confirmed email convention, valid MX and a strong name match",
+  },
+  RISKY: { label: "Risky", tone: "warning", hint: "Plausible but not confirmed" },
   CATCH_ALL: { label: "Catch-all", tone: "warning", hint: "Domain accepts any address — cannot be verified" },
-  UNKNOWN: { label: "Unknown", tone: "muted", hint: "Verification inconclusive" },
-  INVALID: { label: "Invalid", tone: "danger", hint: "Rejected, no MX, or disposable" },
+  TEMPORARY_UNKNOWN: { label: "Retrying", tone: "info", hint: "The mail server asked to try again later (greylisting / rate limit) — a re-check is scheduled" },
+  UNKNOWN: { label: "Unknown", tone: "muted", hint: "Not enough evidence" },
+  INVALID: { label: "Invalid", tone: "danger", hint: "Mailbox rejected as unknown, no MX, or disposable domain" },
 };
 
 export function EmailStatusBadge({ status }: { status?: string | null }) {
@@ -154,7 +166,13 @@ export function EmailStatusBadge({ status }: { status?: string | null }) {
       tone={meta.tone}
       dot
       title={meta.hint}
-      className={status === "CATCH_ALL" ? "bg-transparent shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--warning)_40%,transparent)]" : undefined}
+      className={
+        status === "CATCH_ALL"
+          ? "bg-transparent shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--warning)_40%,transparent)]"
+          : status === "LIKELY_SAFE"
+            ? "bg-transparent shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--success)_40%,transparent)]"
+            : undefined
+      }
     >
       {meta.label}
     </Badge>
@@ -199,7 +217,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     <input
       ref={ref}
       className={cn(
-        "h-7 w-full rounded-sm bg-surface-2 px-2.5 text-body text-fg shadow-[inset_0_0_0_1px_var(--border-strong)] outline-none transition-shadow duration-[var(--dur-1)] placeholder:text-fg-3 focus:shadow-[inset_0_0_0_1px_var(--accent)]",
+        "h-7 w-full rounded-sm bg-surface-2 px-2.5 text-body text-fg shadow-[inset_0_0_0_1px_var(--border-strong)] outline-none transition-shadow duration-[var(--dur-1)] placeholder:text-fg-3 focus:shadow-[inset_0_0_0_1px_var(--border-focus)]",
         className,
       )}
       {...props}
@@ -212,7 +230,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
     <textarea
       ref={ref}
       className={cn(
-        "w-full resize-none rounded-sm bg-surface-2 px-2.5 py-2 text-body text-fg shadow-[inset_0_0_0_1px_var(--border-strong)] outline-none placeholder:text-fg-3 focus:shadow-[inset_0_0_0_1px_var(--accent)]",
+        "w-full resize-none rounded-sm bg-surface-2 px-2.5 py-2 text-body text-fg shadow-[inset_0_0_0_1px_var(--border-strong)] outline-none placeholder:text-fg-3 focus:shadow-[inset_0_0_0_1px_var(--border-focus)]",
         className,
       )}
       {...props}

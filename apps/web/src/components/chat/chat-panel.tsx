@@ -338,7 +338,7 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
           <header className="flex h-11 shrink-0 items-center gap-1 border-b border-line px-3">
             <Menu>
               <MenuTrigger className="flex min-w-0 items-center gap-1 rounded-sm px-1.5 py-1 text-heading text-fg hover:bg-surface-2">
-                <span className="truncate">Scout</span>
+                <span className="truncate">Research</span>
                 <ChevronDown className="size-3.5 text-fg-3" />
               </MenuTrigger>
               <MenuContent className="w-72">
@@ -392,7 +392,7 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
             )}
           </div>
           <div className="shrink-0 border-t border-line p-2.5">
-            <div className="rounded-md bg-surface-1 shadow-[inset_0_0_0_1px_var(--border-strong)] focus-within:shadow-[inset_0_0_0_1px_var(--accent)]">
+            <div className="rounded-md bg-surface-1 shadow-[inset_0_0_0_1px_var(--border-strong)] focus-within:shadow-[inset_0_0_0_1px_var(--border-focus)]">
               <textarea
                 ref={inputRef}
                 value={input}
@@ -408,8 +408,8 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
                     void send(input);
                   }
                 }}
-                placeholder="Ask Scout to find, filter, enrich, organize…"
-                aria-label="Message Scout"
+                placeholder="Ask Research to find, filter, enrich, organize…"
+                aria-label="Message Research"
                 className="block max-h-40 min-h-[38px] w-full resize-none bg-transparent px-3 pt-2.5 text-body text-fg outline-none placeholder:text-fg-3"
               />
               <div className="flex items-center gap-2 px-2 pb-2">
@@ -430,7 +430,7 @@ export function ChatPanel({ open, overlay = false }: { open: boolean; overlay?: 
               </div>
             </div>
             <div className="mt-1.5 flex items-center justify-between px-1 text-micro text-fg-3">
-              <span>Scout acts with tools. Destructive actions ask first.</span>
+              <span>Research acts with tools. Destructive actions ask first.</span>
               <span className="flex items-center gap-1">
                 <Kbd>⌘J</Kbd>
               </span>
@@ -446,7 +446,7 @@ function EmptyChat({ onPick }: { onPick: (t: string) => void }) {
   return (
     <div className="flex h-full flex-col justify-end pb-2">
       <p className="text-heading text-fg">Your lead operator</p>
-      <p className="mt-1 text-body text-fg-3">Describe who you want to reach, or tell Scout what to do with this table.</p>
+      <p className="mt-1 text-body text-fg-3">Describe who you want to reach, or tell Research what to do with this table.</p>
       <div className="mt-3 space-y-1">
         {EXAMPLES.map((e) => (
           <button

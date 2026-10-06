@@ -95,11 +95,13 @@ export function Discover() {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="mx-auto flex w-full max-w-[720px] flex-1 flex-col justify-center px-4 py-12">
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: [0.2, 0, 0, 1] }}>
-          <h1 className="text-display text-fg">Find your next customers.</h1>
-          <p className="mt-1.5 text-body text-fg-3">Describe the companies or people you want to find. Scout only returns leads that are new to you, verified and sourced.</p>
+          <h1 className="text-[34px] leading-[42px] font-bold tracking-[-0.02em]">
+            <span className="title-gradient">Find your next customers.</span>
+          </h1>
+          <p className="mt-1.5 text-body text-fg-3">Describe the companies or people you want to find. Research only returns leads that are new to you, verified and sourced.</p>
 
           <form
-            className="mt-6 rounded-lg bg-surface-2 shadow-[inset_0_0_0_1px_var(--border-strong)] focus-within:shadow-[inset_0_0_0_1px_var(--accent)]"
+            className="mt-6 rounded-lg bg-surface-2 shadow-[inset_0_0_0_1px_var(--border-strong)] focus-within:shadow-[inset_0_0_0_1px_var(--border-focus)]"
             onSubmit={(e) => {
               e.preventDefault();
               void parse();

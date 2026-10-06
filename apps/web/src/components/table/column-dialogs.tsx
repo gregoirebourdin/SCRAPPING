@@ -107,7 +107,7 @@ function AddColumnBody({ onOpenChange, listId, rows, entityType }: AddColumnProp
   const companyLevel = plan?.plan.entity_type === "company" && entityType === "person";
 
   return (
-    <DialogContent title="Add a column" description="Describe what you want to know. Scout picks the cheapest reliable method and reuses cached data." width={560}>
+    <DialogContent title="Add a column" description="Describe what you want to know. Research picks the cheapest reliable method and reuses cached data." width={560}>
       <div className="space-y-3 px-4 py-3">
         <div className="grid grid-cols-[96px_1fr] items-center gap-x-3 gap-y-2.5">
           <label htmlFor="col-name" className="text-meta text-fg-3">

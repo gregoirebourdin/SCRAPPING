@@ -149,7 +149,7 @@ export function CampaignDetail({ id }: { id: string }) {
         <Link href="/campaigns" className="rounded-sm p-1 text-fg-3 hover:bg-surface-2 hover:text-fg" aria-label="All campaigns">
           <ArrowLeft className="size-4" />
         </Link>
-        <h1 className="truncate text-heading text-fg">{c.name}</h1>
+        <h1 className="title-gradient truncate text-title tracking-[-0.01em]">{c.name}</h1>
         <StatusText status={status} />
         <div className="ml-auto flex items-center gap-1">
           {ACTIVE.includes(status) && (

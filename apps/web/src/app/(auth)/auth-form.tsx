@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Input } from "@scout/design-system";
+import { Button, Input, Logo } from "@scout/design-system";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -34,11 +34,10 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg px-4">
       <div className="w-full max-w-[340px]">
-        <div className="mb-6 flex items-center gap-2.5">
-          <Logo />
-          <span className="text-heading text-fg">Scout</span>
+        <div className="mb-8">
+          <Logo size={20} />
         </div>
-        <h1 className="text-display font-semibold tracking-[-0.01em] text-fg">{mode === "sign-in" ? "Welcome back" : "Create your workspace"}</h1>
+        <h1 className="title-gradient text-[26px] leading-[32px] font-bold tracking-[-0.015em]">{mode === "sign-in" ? "Welcome back" : "Create your workspace"}</h1>
         <p className="mt-1 text-body text-fg-3">{mode === "sign-in" ? "Sign in to continue to your lead workspace." : "Fresh, evidence-backed leads on demand."}</p>
         <form onSubmit={submit} className="mt-6 space-y-2.5">
           {mode === "sign-up" && (
@@ -92,17 +91,5 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         </p>
       </div>
     </div>
-  );
-}
-
-export function Logo({ size = 22 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
-      <rect width="32" height="32" rx="8" fill="var(--surface-3)" />
-      <path
-        d="M10 20.5c1.4 1.3 3.2 2 5.6 2 3 0 5-1.5 5-3.8 0-2.2-1.6-3.1-4.6-3.8l-1.4-.3c-1.7-.4-2.4-.9-2.4-1.8 0-1 1-1.7 2.6-1.7 1.5 0 2.7.5 3.8 1.5l1.6-2c-1.4-1.3-3.2-2-5.3-2-2.9 0-4.9 1.6-4.9 3.9 0 2.1 1.4 3.1 4.3 3.8l1.4.3c1.9.4 2.6.9 2.6 1.9 0 1.1-1 1.8-2.7 1.8-1.8 0-3.2-.6-4.4-1.8z"
-        fill="var(--accent)"
-      />
-    </svg>
   );
 }

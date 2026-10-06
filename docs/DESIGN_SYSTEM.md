@@ -1,6 +1,6 @@
-# Scout — Design System
+# Research — Design System
 
-An operational data workspace: premium, dark, technical, quiet, precise, dense, fast.
+An operational data workspace: premium, black & white with a violet accent, readable, approachable, fast.
 Quality bar: Linear / Attio / Raycast / Clay — without copying any of them.
 
 Source of truth: `packages/design-system/src/tokens.css` (CSS variables) mapped into
@@ -8,28 +8,44 @@ Tailwind v4 via `@theme inline` in `packages/design-system/src/theme.css`. Compo
 hard-code colors, radii, shadows or font sizes; they use semantic utilities
 (`bg-surface-1`, `text-secondary`, `border-subtle`, `text-meta`…).
 
+## 0. Brand
+
+* Name: **Research**. Mark: the geometric "R" (`LogoMark` / `Logo` in
+  `packages/design-system/src/brand.tsx`, `currentColor` fill — white on dark, black on light).
+* Files: `apps/web/public/brand/research-logo-white.svg`, `research-logo-black.svg`; favicon
+  `apps/web/public/icon.svg` (white mark on a black rounded square).
+
 ## 1. Color tokens (dark — primary theme)
+
+Black & white base with **one violet accent** (primary actions, focus, selection, progress, active
+cell). Other colour is reserved for small status signals (badges, dots), never for chrome. Text
+tokens keep ≥ 4.5:1 contrast on their canvas (WCAG AA), muted text included.
 
 | Token | Value | Use |
 |---|---|---|
-| `--background` | `#0c0d0f` | app canvas (near-black, never `#000`) |
-| `--surface-1` | `#111215` | panels: sidebar, chat, table body |
-| `--surface-2` | `#16171b` | hover rows, inputs, header row |
-| `--surface-3` | `#1c1d22` | popovers, menus, active items |
-| `--surface-overlay` | `rgba(8,8,10,0.62)` | scrim behind dialogs |
-| `--border-subtle` | `rgba(255,255,255,0.055)` | grid lines, separators |
-| `--border-strong` | `rgba(255,255,255,0.10)` | inputs, popovers, focus-adjacent |
-| `--text-primary` | `#e9e9ec` | primary text |
-| `--text-secondary` | `#a0a1aa` | labels, secondary values |
-| `--text-muted` | `#686a74` | metadata, placeholders, disabled |
-| `--accent` | `#8b8ff7` | the ONE accent: focus, primary action, selection, progress |
-| `--accent-strong` | `#a3a6fa` | accent text on dark |
-| `--accent-soft` | `rgba(139,143,247,0.14)` | selected rows, accent backgrounds |
-| `--success` | `#4fbf8b` | SAFE, completed |
-| `--warning` | `#d9a24a` | RISKY, CATCH-ALL, budget warnings |
-| `--danger` | `#e2625f` | INVALID, errors, destructive |
+| `--background` | `#000000` | app canvas |
+| `--surface-1` | `#0a0a0a` | panels: sidebar, chat, table body |
+| `--surface-2` | `#111111` | hover rows, inputs, header row |
+| `--surface-3` | `#1a1a1a` | popovers, menus, active items |
+| `--surface-overlay` | `rgba(0,0,0,0.7)` | scrim behind dialogs |
+| `--border-subtle` | `rgba(255,255,255,0.07)` | grid lines, separators |
+| `--border-strong` | `rgba(255,255,255,0.13)` | inputs, popovers |
+| `--border-focus` | `rgba(139,143,247,0.6)` | focused inputs, focus ring |
+| `--text-primary` | `#fafafa` | primary text |
+| `--text-secondary` | `#b3b3b3` | labels, secondary values |
+| `--text-muted` | `#8a8a8a` | metadata, placeholders, disabled (6:1 on black) |
+| `--accent` | `#8b8ff7` | the ONE accent: primary action, focus, selection, progress, active cell |
+| `--accent-strong` | `#a9acfa` | accent text on dark |
+| `--accent-soft` | `rgba(139,143,247,0.15)` | selected rows, accent backgrounds |
+| `--title-from` → `--title-to` | `#ffffff` → `#8c8c8c` | vertical gradient on titles (`title-gradient`) |
+| `--success` | `#5cc995` | SAFE, completed |
+| `--warning` | `#d8a656` | RISKY, CATCH-ALL, budget warnings |
+| `--danger` | `#e5625f` | INVALID, errors, destructive |
 | `--info` | `#62a8de` | running, informational |
-| `--focus-ring` | `0 0 0 2px var(--background), 0 0 0 4px rgba(139,143,247,0.55)` | visible focus |
+
+Titles (page headers, drawer names, hero and auth headlines) use the `title-gradient` utility:
+a vertical gradient clipped to the glyphs, one gradient per line. Light theme: `#000` → `#7a7a7a`.
+Avatars are monochrome (foreground at 9–22 % on the canvas).
 
 Status colors are used at low saturation as 8–12 % tinted backgrounds with full-strength
 text/dot; never as large fills. A light theme token set exists (`[data-theme="light"]`) for
@@ -37,20 +53,26 @@ accessibility, but dark is the designed experience.
 
 ## 2. Typography
 
-Geist Sans (UI) and Geist Mono (emails, domains, ids, numbers where alignment matters),
-`font-feature-settings: "cv11", "ss01"`; numbers use `tabular-nums`.
+Self-hosted variable fonts (`@fontsource-variable/*`, no runtime call to Google):
+
+* **Inter** (optical sizing, `cv11` single-storey a) — all UI text: very legible at small sizes.
+* **Plus Jakarta Sans** — titles and the wordmark (`font-display`, applied by `title-gradient`): friendlier, more personality.
+* **JetBrains Mono** — emails, domains, ids, aligned numbers.
+
+Numbers use `tabular-nums` where they align.
 
 | Token | Size / line / weight | Use |
 |---|---|---|
-| `text-title` | 15px / 20px / 590 | workspace title (list name) |
-| `text-heading` | 13.5px / 20px / 560 | section headings, dialog titles |
-| `text-body` | 13px / 19px / 440 | body, chat |
-| `text-table` | 12.5px / 16px / 440 | table cells |
-| `text-meta` | 11.5px / 15px / 450 | metadata, badges, kbd, timestamps |
-| `text-micro` | 10.5px / 13px / 550, +0.02em, uppercase | section labels |
+| `text-display` | 24px / 30px | empty-state headlines |
+| `text-title` | 16px / 22px / 650 | workspace title (list name), drawer names |
+| `text-heading` | 14.5px / 20px / 600 | section headings, dialog titles |
+| `text-body` | 14px / 21px / 440 | body, chat (page default) |
+| `text-table` | 13px / 18px / 440 | table cells |
+| `text-meta` | 12px / 16px / 450 | metadata, badges, kbd, timestamps |
+| `text-micro` | 11px / 14px / 550, +0.02em, uppercase | section labels |
 
-No marketing-scale type anywhere inside the workspace (the largest text is the empty-state
-headline at 20px).
+No marketing-scale type inside the workspace; the only large headlines are the Discover hero
+(34px) and the auth pages (26px), both in Plus Jakarta Sans with the title gradient.
 
 ## 3. Spacing, radius, elevation
 

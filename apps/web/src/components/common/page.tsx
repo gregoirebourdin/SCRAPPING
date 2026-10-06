@@ -20,7 +20,7 @@ export function Page({
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
         {icon}
-        <h1 className="truncate text-heading text-fg">{title}</h1>
+        <h1 className="title-gradient truncate text-title tracking-[-0.01em]">{title}</h1>
         <div className="ml-auto flex items-center gap-1.5">{actions}</div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">

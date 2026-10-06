@@ -1131,7 +1131,7 @@ def describe_plan(plan: EnrichmentPlan) -> dict[str, Any]:
     elif strategy == "web_research":
         sources = "Web search with cited sources"
     elif strategy == "composite":
-        sources = "People & emails already in Scout"
+        sources = "People & emails already in Research"
     else:
         sources = "Lead record"
     return {

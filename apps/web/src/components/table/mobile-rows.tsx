@@ -50,11 +50,7 @@ export function MobileRows({
           return (
             <div key={r?.id ?? `ph-${it.index}`} className="absolute inset-x-0 border-b border-line/60" style={{ height: ROW, transform: `translateY(${it.start}px)` }}>
               {r ? (
-                <button
-                  type="button"
-                  onClick={() => openDrawer(entityType, r.id)}
-                  className="flex h-full w-full items-center gap-3 px-4 text-left active:bg-surface-2"
-                >
+                <button type="button" onClick={() => openDrawer(entityType, r.id)} className="flex h-full w-full items-center gap-3 px-4 text-left active:bg-surface-2">
                   <Avatar name={entityType === "person" ? r.full_name : r.company} size={32} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-body font-medium text-fg">{entityType === "person" ? r.full_name : r.company}</span>

@@ -134,7 +134,7 @@ def _prompt(rc: ResolveContext, passages: Sequence[Passage]) -> str:
         f"Task: {instruction}",
         f"Write in {'French' if lang == 'fr' else 'the language of the website' if lang else 'English'}.",
         "",
-        "Lead facts (from Scout's records; may originate from scraped data):",
+        "Lead facts (from Research's records; may originate from scraped data):",
         wrap_untrusted(_facts(rc), source="lead_record", kind="website_content"),
     ]
     if passages:

@@ -1,4 +1,4 @@
-# Scout — Database
+# Research — Database
 
 PostgreSQL (Neon in production, Postgres 16 locally) is the canonical store for every entity,
 campaign, job and event. The schema is defined by SQLAlchemy 2 models in

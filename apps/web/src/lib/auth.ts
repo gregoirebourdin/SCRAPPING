@@ -21,7 +21,8 @@ if (process.env.NODE_ENV !== "production") globalForPool.scoutAuthPool = pool;
 const https = (host?: string) => (host ? `https://${host}` : undefined);
 const vercelOrigins = [process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_URL].map(https).filter((u): u is string => Boolean(u));
 const baseURL =
-  process.env.BETTER_AUTH_URL ?? (process.env.VERCEL_ENV === "production" ? https(process.env.VERCEL_PROJECT_PRODUCTION_URL) : https(process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL));
+  process.env.BETTER_AUTH_URL ??
+  (process.env.VERCEL_ENV === "production" ? https(process.env.VERCEL_PROJECT_PRODUCTION_URL) : https(process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL));
 
 const googleId = process.env.GOOGLE_CLIENT_ID;
 const googleSecret = process.env.GOOGLE_CLIENT_SECRET;

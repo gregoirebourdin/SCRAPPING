@@ -403,6 +403,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/email/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Email Engine Metrics
+         * @description Email Intelligence Engine throughput, latency (P50/P95), fast/deep mix, cache hits, SMTP health.
+         */
+        get: operations["email_engine_metrics_v1_email_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events/stream": {
         parameters: {
             query?: never;
@@ -1207,9 +1227,16 @@ export interface components {
         };
         /**
          * EmailStatus
+         * @description Final verdict on an address (EMAIL_ENGINE.md §Statuses).
+         *
+         *     SAFE — confirmed: published for this person on the company's own domain, or accepted by a healthy
+         *     SMTP probe on a domain proven not catch-all. LIKELY_SAFE — strong evidence without a mailbox-level
+         *     confirmation (dominant domain pattern confirmed by real samples, MX valid, high name affinity).
+         *     TEMPORARY_UNKNOWN — the mail server answered "try later" (4xx, greylisting, timeout) or our SMTP
+         *     path is unhealthy: a retry is scheduled; never treated as INVALID.
          * @enum {string}
          */
-        EmailStatus: "SAFE" | "RISKY" | "CATCH_ALL" | "UNKNOWN" | "INVALID";
+        EmailStatus: "SAFE" | "LIKELY_SAFE" | "RISKY" | "CATCH_ALL" | "UNKNOWN" | "TEMPORARY_UNKNOWN" | "INVALID";
         /** EmployeeRange */
         EmployeeRange: {
             /** Max */
@@ -3069,6 +3096,42 @@ export interface operations {
         };
     };
     diagnostics_v1_diagnostics_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+            };
+            header?: {
+                "x-workspace-id"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    email_engine_metrics_v1_email_metrics_get: {
         parameters: {
             query?: {
                 hours?: number;

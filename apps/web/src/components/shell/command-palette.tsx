@@ -105,7 +105,7 @@ export function CommandPalette() {
             </div>
             <Command.List className="max-h-[min(420px,60vh)] overflow-y-auto p-1 scroll-quiet">
               <Command.Empty className="px-3 py-6 text-center text-body text-fg-3">
-                {page === "create-list" ? "Type a name and press Enter" : "No results. Press Enter in the chat to ask Scout instead."}
+                {page === "create-list" ? "Type a name and press Enter" : "No results. Press Enter in the chat to ask Research instead."}
               </Command.Empty>
               {page === "root" && (
                 <>
@@ -202,7 +202,7 @@ export function CommandPalette() {
                 <Kbd>↵</Kbd> run
               </span>
               <span className="ml-auto flex items-center gap-1">
-                Ask Scout <Kbd>⌘J</Kbd>
+                Ask Research <Kbd>⌘J</Kbd>
               </span>
               {scope.listName && <span className="truncate">in {scope.listName}</span>}
             </div>

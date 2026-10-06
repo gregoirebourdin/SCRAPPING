@@ -193,7 +193,7 @@ function ImportFlow({ onClose }: { onClose: () => void }) {
                 <tr className="border-b border-line">
                   <th className="px-4 py-1.5 font-medium">CSV column</th>
                   <th className="w-8" />
-                  <th className="px-2 py-1.5 font-medium">Scout field</th>
+                  <th className="px-2 py-1.5 font-medium">Research field</th>
                   <th className="px-4 py-1.5 font-medium">Sample</th>
                 </tr>
               </thead>

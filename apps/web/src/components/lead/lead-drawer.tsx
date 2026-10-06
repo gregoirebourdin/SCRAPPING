@@ -51,6 +51,25 @@ interface EmailInfo {
   last_checked_at: string | null;
   freshness: string;
   checks: { verifier: string; status: string; smtp_result: string; catch_all: boolean | null; checked_at: string; error: string | null }[];
+  explanation?: { name: string; weight: number; detail: string; source?: string | null; source_url?: string | null }[];
+  resolution_path?: string | null;
+  resolver?: string | null;
+  name_affinity?: number | null;
+}
+
+interface EmailIntel {
+  domain: string;
+  provider: string | null;
+  mx_hosts: string[];
+  accepts_mail: boolean | null;
+  catch_all: boolean | null;
+  catch_all_checked_at: string | null;
+  smtp_reachable: boolean | null;
+  greylisting_seen: boolean;
+  named_samples: number;
+  observed_emails: number;
+  updated_at: string | null;
+  patterns: { pattern: string; confidence: number; share: number; samples: number; successes: number; failures: number; last_confirmed_at: string | null }[];
 }
 
 interface Enrichment {
@@ -117,6 +136,7 @@ interface CompanyDetail {
   signals: { id: string; type: string; value: unknown; source_url: string | null; evidence: string | null; confidence: number | null; observed_at: string }[];
   pages: { id: string; url: string; page_type: string; title: string | null; fetched_at: string | null }[];
   company_emails: { address: string; status: string; kind: string; source_url: string | null }[];
+  email_intel?: EmailIntel | null;
   lists?: { id: string; name: string; added_at: string }[];
   campaigns?: { id: string; name: string; status: string; first_discovered_at: string }[];
   enrichments?: Enrichment[];
@@ -147,6 +167,7 @@ interface PersonDetail {
   freshness: string;
   observations: Record<string, Observation[]>;
   emails: EmailInfo[];
+  email_verifying?: boolean;
   score: {
     icp_score: number;
     qualified: boolean;
@@ -283,7 +304,7 @@ function PersonView({ id, onClose }: { id: string; onClose: () => void }) {
         <Avatar name={p.full_name} size={40} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-title text-fg">{p.full_name}</h2>
+            <h2 className="title-gradient truncate text-title tracking-[-0.01em]">{p.full_name}</h2>
             {p.needs_review && <Badge tone="warning">Review</Badge>}
             {p.suppressed_at && <Badge tone="danger">Suppressed</Badge>}
           </div>
@@ -368,8 +389,17 @@ function PersonView({ id, onClose }: { id: string; onClose: () => void }) {
               <Field label="Location" value={p.location} obs={p.observations.location} />
               <Field label="Identity" value={<ConfidenceMeter value={p.identity_confidence} />} />
             </Section>
-            <Section title="Contact">
-              {p.emails.length === 0 && <Empty>No email found yet</Empty>}
+            <Section
+              title="Contact"
+              aside={
+                p.email_verifying ? (
+                  <Badge tone="info" dot>
+                    Verifying email…
+                  </Badge>
+                ) : undefined
+              }
+            >
+              {p.emails.length === 0 && <Empty>{p.email_verifying ? "Verification in progress" : "No email found yet"}</Empty>}
               {p.emails.map((e) => (
                 <EmailRow key={e.id} e={e} />
               ))}
@@ -443,7 +473,7 @@ function CompanyView({ id, onClose }: { id: string; onClose: () => void }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-title text-fg">{c.name}</h2>
+            <h2 className="title-gradient truncate text-title tracking-[-0.01em]">{c.name}</h2>
             {c.needs_review && <Badge tone="warning">Review</Badge>}
           </div>
           <p className="truncate text-body text-fg-2">{[c.industry, [c.city, c.country].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "—"}</p>
@@ -492,6 +522,7 @@ function CompanyView({ id, onClose }: { id: string; onClose: () => void }) {
         {tab === "overview" && (
           <div className="divide-y divide-line">
             <CompanySections c={c} />
+            {c.email_intel && <DomainIntelSection intel={c.email_intel} />}
             <EnrichmentSection items={c.enrichments ?? []} />
             <MembershipSection lists={c.lists} campaigns={c.campaigns} />
             {c.pages.length > 0 && (
@@ -620,7 +651,7 @@ function CompanySections({ c, compact }: { c: CompanyDetail; compact?: boolean }
 /* ---- building blocks ----------------------------------------------------------------------------- */
 
 function InMark() {
-  return <span className="rounded-[3px] bg-[#0a66c2]/20 px-[3px] text-[9px] font-bold leading-[13px] text-[#5aa4ff]">in</span>;
+  return <span className="rounded-[3px] bg-fg/12 px-[3px] text-[9px] font-bold leading-[13px] text-fg-2">in</span>;
 }
 
 function Section({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
@@ -762,6 +793,7 @@ function formatValue(v: unknown): string {
 }
 
 function EmailRow({ e }: { e: EmailInfo }) {
+  const [open, setOpen] = useState(false);
   const method = e.discovery_method.replace(/_/g, " ");
   return (
     <div className="rounded-sm bg-surface-2/60 px-2 py-1.5 shadow-[inset_0_0_0_1px_var(--border-subtle)]">
@@ -789,8 +821,72 @@ function EmailRow({ e }: { e: EmailInfo }) {
             published here
           </a>
         )}
+        {(e.explanation?.length ?? 0) > 0 && (
+          <button type="button" onClick={() => setOpen((v) => !v)} className="text-accent-strong hover:underline">
+            {open ? "Hide why" : "Why?"}
+          </button>
+        )}
       </div>
+      {open && e.explanation && (
+        <ul className="mt-1.5 space-y-0.5 border-t border-line pt-1.5">
+          {e.explanation.map((sig, i) => (
+            <li key={`${sig.name}-${i}`} className="flex gap-1.5 text-micro">
+              <span className={cn("tabular w-9 shrink-0 text-right", sig.weight > 0 ? "text-success" : sig.weight < 0 ? "text-danger" : "text-fg-3")}>
+                {sig.name === "base" ? "base" : sig.weight > 0 ? `+${sig.weight.toFixed(1)}` : sig.weight.toFixed(1)}
+              </span>
+              <span className="min-w-0 flex-1 text-fg-2">{sig.detail}</span>
+            </li>
+          ))}
+          {e.resolution_path && <li className="text-micro text-fg-3">Resolved by the {e.resolution_path === "deep" ? "deep path (SMTP)" : "fast path (no SMTP)"}</li>}
+        </ul>
+      )}
     </div>
+  );
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  google_workspace: "Google Workspace",
+  microsoft_365: "Microsoft 365",
+  secure_gateway: "Secure email gateway",
+  self_hosted: "Self-hosted",
+  none: "No mail server",
+  unknown: "Unknown",
+};
+
+function DomainIntelSection({ intel }: { intel: EmailIntel }) {
+  const providerLabel = intel.provider ? (PROVIDER_LABELS[intel.provider] ?? intel.provider.replace(/_/g, " ")) : "—";
+  return (
+    <Section title="Email intelligence" aside={<span className="text-micro text-fg-3">{intel.domain}</span>}>
+      <Field label="Provider" value={providerLabel} />
+      <Field label="Accepts mail" value={intel.accepts_mail === false ? "No (no MX)" : intel.mx_hosts.length ? intel.mx_hosts.join(", ") : intel.accepts_mail ? "Yes" : null} />
+      <Field
+        label="Catch-all"
+        value={intel.catch_all == null ? "Not tested" : intel.catch_all ? "Yes — guessed addresses cannot be confirmed" : "No"}
+        extra={intel.catch_all_checked_at ? <span className="shrink-0 text-micro text-fg-3">{relTime(intel.catch_all_checked_at)}</span> : null}
+      />
+      {intel.greylisting_seen && <Field label="SMTP" value="Greylisting observed (retries scheduled)" />}
+      {intel.patterns.length > 0 ? (
+        <div className="space-y-1 pt-1">
+          {intel.patterns.map((p) => (
+            <div key={p.pattern} className="grid grid-cols-[96px_1fr_auto] items-center gap-2 text-meta">
+              <span className="font-mono text-[12px] text-fg">{p.pattern}</span>
+              <span className="h-1 overflow-hidden rounded-full bg-surface-3">
+                <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.round((p.share || p.confidence) * 100)}%` }} />
+              </span>
+              <span className="tabular text-fg-2" title={`${p.samples} real emails · ${p.successes} SMTP-confirmed · ${p.failures} rejected`}>
+                {Math.round(p.confidence * 100)}% · {p.samples + p.successes} ev.
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <Empty>No email convention learned yet for this domain</Empty>
+      )}
+      <p className="pt-1 text-micro text-fg-3">
+        {intel.named_samples} named sample{intel.named_samples === 1 ? "" : "s"} · {intel.observed_emails} observed address{intel.observed_emails === 1 ? "" : "es"}
+        {intel.updated_at ? ` · updated ${relTime(intel.updated_at)}` : ""}
+      </p>
+    </Section>
   );
 }
 

@@ -1,43 +1,49 @@
-/* Scout design tokens — semantic CSS variables (docs/DESIGN_SYSTEM.md).
+/* Research design tokens — semantic CSS variables (docs/DESIGN_SYSTEM.md).
+   Black & white base with one violet accent (primary actions, focus, selection, progress); other colour is
+   reserved for small status signals. Titles use a vertical gradient (--title-from → --title-to).
+   Text tokens keep ≥ 4.5:1 contrast on their canvas (WCAG AA), muted text included.
    Dark is the designed experience; light exists for accessibility. Components never hard-code values. */
 
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --background: #0c0d0f;
-  --surface-1: #111215;
-  --surface-2: #16171b;
-  --surface-3: #1c1d22;
-  --surface-overlay: rgba(8, 8, 10, 0.62);
+  --background: #000000;
+  --surface-1: #0a0a0a;
+  --surface-2: #111111;
+  --surface-3: #1a1a1a;
+  --surface-overlay: rgba(0, 0, 0, 0.7);
 
-  --border-subtle: rgba(255, 255, 255, 0.055);
-  --border-strong: rgba(255, 255, 255, 0.1);
-  --border-focus: rgba(139, 143, 247, 0.55);
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.13);
+  --border-focus: rgba(139, 143, 247, 0.6);
 
-  --text-primary: #e9e9ec;
-  --text-secondary: #a0a1aa;
-  --text-muted: #686a74;
-  --text-inverse: #0c0d0f;
+  --text-primary: #fafafa;
+  --text-secondary: #b3b3b3;
+  --text-muted: #8a8a8a;
+  --text-inverse: #000000;
 
   --accent: #8b8ff7;
-  --accent-strong: #a3a6fa;
-  --accent-soft: rgba(139, 143, 247, 0.14);
+  --accent-strong: #a9acfa;
+  --accent-soft: rgba(139, 143, 247, 0.15);
   --accent-softer: rgba(139, 143, 247, 0.07);
-  --accent-contrast: #0e0f1a;
+  --accent-contrast: #0b0b1a;
 
-  --success: #4fbf8b;
-  --success-soft: rgba(79, 191, 139, 0.12);
-  --warning: #d9a24a;
-  --warning-soft: rgba(217, 162, 74, 0.12);
-  --danger: #e2625f;
-  --danger-soft: rgba(226, 98, 95, 0.12);
+  --success: #5cc995;
+  --success-soft: rgba(92, 201, 149, 0.1);
+  --warning: #d8a656;
+  --warning-soft: rgba(216, 166, 86, 0.1);
+  --danger: #e5625f;
+  --danger-soft: rgba(229, 98, 95, 0.1);
   --info: #62a8de;
   --info-soft: rgba(98, 168, 222, 0.12);
 
-  --row-hover: rgba(255, 255, 255, 0.025);
-  --row-selected: rgba(139, 143, 247, 0.09);
-  --row-active-outline: rgba(139, 143, 247, 0.6);
+  --row-hover: rgba(255, 255, 255, 0.03);
+  --row-selected: rgba(139, 143, 247, 0.1);
+  --row-active-outline: rgba(139, 143, 247, 0.65);
+
+  --title-from: #ffffff;
+  --title-to: #8c8c8c;
 
   --elev-popover: 0 8px 24px -6px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--border-strong);
   --elev-dialog: 0 24px 64px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--border-strong);
@@ -63,34 +69,36 @@
 
 [data-theme="light"] {
   color-scheme: light;
-  --background: #f7f7f8;
+  --background: #ffffff;
   --surface-1: #ffffff;
-  --surface-2: #f3f3f5;
-  --surface-3: #ececef;
-  --surface-overlay: rgba(20, 20, 24, 0.32);
-  --border-subtle: rgba(15, 15, 25, 0.07);
-  --border-strong: rgba(15, 15, 25, 0.13);
-  --border-focus: rgba(92, 97, 230, 0.5);
-  --text-primary: #17181c;
-  --text-secondary: #55565f;
-  --text-muted: #8b8c95;
+  --surface-2: #f5f5f5;
+  --surface-3: #ececec;
+  --surface-overlay: rgba(0, 0, 0, 0.3);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --border-focus: rgba(92, 97, 230, 0.55);
+  --text-primary: #0a0a0a;
+  --text-secondary: #474747;
+  --text-muted: #6b6b6b;
   --text-inverse: #ffffff;
   --accent: #5c61e6;
   --accent-strong: #4a4fd4;
-  --accent-soft: rgba(92, 97, 230, 0.12);
-  --accent-softer: rgba(92, 97, 230, 0.06);
+  --accent-soft: rgba(92, 97, 230, 0.11);
+  --accent-softer: rgba(92, 97, 230, 0.05);
   --accent-contrast: #ffffff;
-  --success: #1f9a62;
-  --success-soft: rgba(31, 154, 98, 0.1);
-  --warning: #b97a12;
-  --warning-soft: rgba(185, 122, 18, 0.1);
-  --danger: #cc3b38;
-  --danger-soft: rgba(204, 59, 56, 0.1);
+  --success: #1d8f5a;
+  --success-soft: rgba(29, 143, 90, 0.09);
+  --warning: #a86f0f;
+  --warning-soft: rgba(168, 111, 15, 0.09);
+  --danger: #c63a37;
+  --danger-soft: rgba(198, 58, 55, 0.09);
   --info: #2e7fc0;
   --info-soft: rgba(46, 127, 192, 0.1);
-  --row-hover: rgba(15, 15, 25, 0.025);
+  --row-hover: rgba(0, 0, 0, 0.025);
   --row-selected: rgba(92, 97, 230, 0.08);
-  --row-active-outline: rgba(92, 97, 230, 0.55);
+  --row-active-outline: rgba(92, 97, 230, 0.6);
+  --title-from: #000000;
+  --title-to: #7a7a7a;
   --elev-popover: 0 8px 24px -8px rgba(20, 20, 30, 0.18), 0 0 0 1px var(--border-strong);
   --elev-dialog: 0 24px 64px -16px rgba(20, 20, 30, 0.25), 0 0 0 1px var(--border-strong);
 }

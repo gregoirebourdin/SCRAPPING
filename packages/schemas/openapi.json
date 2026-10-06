@@ -636,11 +636,14 @@
         "type": "object"
       },
       "EmailStatus": {
+        "description": "Final verdict on an address (EMAIL_ENGINE.md \u00a7Statuses).\n\nSAFE \u2014 confirmed: published for this person on the company's own domain, or accepted by a healthy\nSMTP probe on a domain proven not catch-all. LIKELY_SAFE \u2014 strong evidence without a mailbox-level\nconfirmation (dominant domain pattern confirmed by real samples, MX valid, high name affinity).\nTEMPORARY_UNKNOWN \u2014 the mail server answered \"try later\" (4xx, greylisting, timeout) or our SMTP\npath is unhealthy: a retry is scheduled; never treated as INVALID.",
         "enum": [
           "SAFE",
+          "LIKELY_SAFE",
           "RISKY",
           "CATCH_ALL",
           "UNKNOWN",
+          "TEMPORARY_UNKNOWN",
           "INVALID"
         ],
         "title": "EmailStatus",
@@ -5289,6 +5292,84 @@
           }
         },
         "summary": "Diagnostics",
+        "tags": [
+          "activity"
+        ]
+      }
+    },
+    "/v1/email/metrics": {
+      "get": {
+        "description": "Email Intelligence Engine throughput, latency (P50/P95), fast/deep mix, cache hits, SMTP health.",
+        "operationId": "email_engine_metrics_v1_email_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "title": "Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-workspace-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Workspace-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Email Engine Metrics V1 Email Metrics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Email Engine Metrics",
         "tags": [
           "activity"
         ]
