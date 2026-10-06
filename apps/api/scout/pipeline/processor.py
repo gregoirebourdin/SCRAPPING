@@ -489,11 +489,17 @@ async def _stage_company_fit(ctx: Ctx, conditions: list[ConditionOutcome]) -> Fi
         page_text=text,
     )
     sf = size_fit(ctx.defn, comp.employee_min, comp.employee_max)
-    if ctx.defn.company_filters.cities:
-        from scout.discovery import communes
+    cf_ = ctx.defn.company_filters
+    geo_match: bool | None = None
+    if cf_.cities:
+        from scout.discovery import communes, geocode
 
-        await communes.prefetch(ctx.defn.company_filters.cities)
-    lf = location_fit(ctx.defn, comp.country, comp.city, comp.region, comp.postal_code)
+        want_country = cf_.countries[0] if len(cf_.countries) == 1 else None
+        if (comp.country or want_country or "FR").upper() == "FR":
+            await communes.prefetch(cf_.cities)
+        else:  # outside France: geocode the requested city and the company's own city
+            geo_match = await geocode.in_requested_city(cf_.cities, want_country, comp.city, comp.country)
+    lf = location_fit(ctx.defn, comp.country, comp.city, comp.region, comp.postal_code, geo_match)
     from scout.pipeline.scoring import company_fit as _cf
 
     probe = ScoringInput(

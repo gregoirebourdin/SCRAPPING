@@ -325,6 +325,7 @@ def location_fit(
     city: str | None,
     region: str | None,
     postal_code: str | None = None,
+    geo_match: bool | None = None,
 ) -> float | None:
     """1.0 inside the requested area, 0.0 clearly outside it (→ rejected), None when unknown.
 
@@ -346,6 +347,8 @@ def location_fit(
         ):
             return 1.0
         fr = (country or "FR").upper() == "FR"
+        if geo_match is not None and cf.cities and not cf.regions:  # geocoded outside France
+            return 1.0 if geo_match else 0.0
         requested = communes.postal_codes_for(cf.cities) if (fr and cf.cities and not cf.regions) else None
         if requested is not None:
             pc = (postal_code or "").strip()
