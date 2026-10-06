@@ -65,6 +65,19 @@ class BusinessVerdict:
         return cls(str(d.get("verdict")), str(d.get("what") or ""), float(d.get("confidence") or 0.0))  # type: ignore[arg-type]
 
 
+def most_specific(types: list[str]) -> list[str]:
+    """Drop a business type that a more specific one requested alongside contains: "social media marketing
+    agency" + "marketing agency" asks for social media agencies — an SEO agency must not pass as the generic one."""
+    from scout.util.text import normalize_key
+
+    words = [set(normalize_key(t).split()) for t in types]
+    return [
+        t
+        for i, t in enumerate(types)
+        if not any(j != i and words[i] and words[i] < words[j] for j in range(len(types)))
+    ]
+
+
 async def check_business_type(
     requested: list[str],
     *,

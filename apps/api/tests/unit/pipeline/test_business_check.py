@@ -57,3 +57,16 @@ async def test_no_text_or_no_industry_means_no_verdict() -> None:
     set_ai(Says("match", "x"))  # type: ignore[arg-type]
     assert await check_business_type(["web agency"], name="X", registry_activity=None, pages_text="") is None
     assert await check_business_type([], name="X", registry_activity=None, pages_text="text") is None
+
+
+def test_the_most_specific_business_type_wins():
+    from scout.pipeline.business_check import most_specific
+
+    assert most_specific(["social media marketing agency", "marketing agency"]) == [
+        "social media marketing agency"
+    ]
+    assert most_specific(["web agency", "digital agency"]) == [
+        "web agency",
+        "digital agency",
+    ]  # siblings both stay
+    assert most_specific(["marketing agency"]) == ["marketing agency"]
