@@ -880,12 +880,33 @@ PROFILES: tuple[IndustryProfile, ...] = (
         local=True,
     ),
     _p(
+        "personal_trainer",
+        en=["personal trainer", "sports coach", "fitness coach", "strength and conditioning coach"],
+        fr=[
+            "coach sportif",
+            "coachs sportifs",
+            "coach sportive",
+            "coach fitness",
+            "coach a domicile",
+            "preparateur physique",
+            "educateur sportif",
+        ],
+        de=["Personal Trainer", "Fitnesstrainer", "Sporttrainer"],
+        es=["entrenador personal", "preparador fisico"],
+        it=["personal trainer", "preparatore atletico"],
+        # independent coaches register as sports teaching (85.51Z) or other sports activities (93.19Z)
+        naf=["85.51Z", "93.19Z"],
+        adj=["93.13Z"],
+        osm=[("leisure", "fitness_centre"), ("sport", "fitness")],
+        local=True,
+    ),
+    _p(
         "gym",
-        en=["gym", "fitness studio", "fitness center", "health club", "crossfit box", "personal trainer"],
-        fr=["salle de sport", "salle de fitness", "club de fitness", "coach sportif", "box de crossfit"],
-        de=["Fitnessstudio", "Fitnesscenter", "Personal Trainer"],
-        es=["gimnasio", "centro de fitness", "entrenador personal"],
-        it=["palestra", "centro fitness", "personal trainer"],
+        en=["gym", "fitness studio", "fitness center", "health club", "crossfit box"],
+        fr=["salle de sport", "salle de fitness", "club de fitness", "box de crossfit"],
+        de=["Fitnessstudio", "Fitnesscenter"],
+        es=["gimnasio", "centro de fitness"],
+        it=["palestra", "centro fitness"],
         naf=["93.13Z"],
         adj=["93.11Z", "93.12Z"],
         osm=[("leisure", "fitness_centre")],
@@ -1305,7 +1326,15 @@ def _match_cached(text: str, threshold: float, limit: int) -> tuple[IndustryMatc
             cur = best.get(prof.key)
             if cur is None or weighted > cur.score:
                 best[prof.key] = IndustryMatch(prof, weighted, lang, syn)
-    ranked = sorted(best.values(), key=lambda m: -m.score)
+
+    # A one-word match inside a longer match of another profile is a homonym, not a second industry: "coach"
+    # (business coaching) inside "coach sportif" (personal trainer). Multi-word ones are real parents and stay
+    # ("marketing agency" inside "social media marketing agency").
+    def _inside(short: str, long: str) -> bool:
+        return " " not in short and short != long and f" {short} " in f" {long} "
+
+    kept = [m for m in best.values() if not any(_inside(m.synonym, o.synonym) for o in best.values())]
+    ranked = sorted(kept, key=lambda m: -m.score)
     return tuple(ranked[:limit])
 
 

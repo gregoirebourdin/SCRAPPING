@@ -170,7 +170,9 @@ class CampaignDefinition(Strict):
     minimum_person_confidence: int = Field(default=80, ge=0, le=100)
     minimum_company_fit: int = Field(default=60, ge=0, le=100)
     minimum_icp_score: int = Field(default=75, ge=0, le=100)
-    accepted_email_statuses: list[EmailStatus] = Field(default_factory=lambda: [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE])
+    accepted_email_statuses: list[EmailStatus] = Field(
+        default_factory=lambda: [EmailStatus.SAFE, EmailStatus.LIKELY_SAFE]
+    )
     exclusion: ExclusionSpec = Field(default_factory=ExclusionSpec)
     enrichments: list[EnrichmentRequest] = Field(default_factory=list)
     signals: list[str] = Field(default_factory=list)
@@ -342,9 +344,13 @@ class CampaignAmendment(Strict):
         max_length=2000,
         description="The user's change in their own words, e.g. 'add Marseille too', 'founders only', '+200 leads'",
     )
-    target_qualified_count: int | None = Field(default=None, ge=1, le=100_000, description="New absolute target")
+    target_qualified_count: int | None = Field(
+        default=None, ge=1, le=100_000, description="New absolute target"
+    )
     add_target: int | None = Field(default=None, ge=1, le=100_000, description="Raise the target by N leads")
-    max_cost_usd: float | None = Field(default=None, ge=0, le=100_000, description="New campaign budget (USD)")
+    max_cost_usd: float | None = Field(
+        default=None, ge=0, le=100_000, description="New campaign budget (USD)"
+    )
     max_runtime_hours: int | None = Field(default=None, ge=1, le=24 * 30)
     add_cities: list[str] = Field(default_factory=list)
     remove_cities: list[str] = Field(default_factory=list)

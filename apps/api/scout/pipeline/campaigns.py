@@ -829,6 +829,10 @@ async def _extend_sources(s: AsyncSession, c: Campaign, defn: CampaignDefinition
     from scout.discovery.health import health_snapshot
     from scout.discovery.router import get_source, select_sources
 
+    if defn.company_filters.cities:
+        from scout.discovery import communes
+
+        await communes.prefetch(defn.company_filters.cities)
     added = 0
     existing = (await s.scalars(sa.select(CampaignSource).where(CampaignSource.campaign_id == c.id))).all()
     known_keys = {x.source_key for x in existing}

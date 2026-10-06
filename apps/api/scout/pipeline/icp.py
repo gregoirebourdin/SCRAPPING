@@ -122,6 +122,11 @@ intelligence app. Rules:
   already in my database" → allow_new_people_at_existing_companies=true. "a different person at my existing companies"
   → seed_from_current_list=true, EXCLUDE_PREVIOUS_PEOPLE.
 - Professional/verified email required → require_email=true, accepted_email_statuses=[SAFE, LIKELY_SAFE]; [SAFE] only when the user says strictly SAFE/SMTP-verified; add RISKY when the user accepts risky.
+- Location is mandatory whenever the user names one: cities with proper capitalization ("annecy" → "Annecy"),
+  regions, and countries as ISO alpha-2 (a French city → "FR").
+- Local professions and trades (coachs sportifs, kinés, ostéopathes, plombiers, avocats, photographes…) are the
+  businesses themselves: put the trade in industries (English, e.g. "personal trainer", "physiotherapist",
+  "plumber") and use owner titles (Owner, Founder, Manager) plus the trade title if the user named one.
 - Never invent constraints the user did not express.
 """
 
@@ -728,4 +733,14 @@ async def parse_prompt(prompt: str, ctx: ParseContext | None = None) -> tuple[Ca
             parsed.exclusion.exclude_list_names = h.exclusion.exclude_list_names
         if h.exclusion.exclude_latest_import:
             parsed.exclusion.exclude_latest_import = True
+        # A model that drops the location or the business type leaves discovery nowhere to search ("10 coachs
+        # sportifs a annecy" came back as titles only): the deterministic parser reads both reliably.
+        if not (parsed.cities or parsed.regions or parsed.countries) and (
+            h.cities or h.regions or h.countries
+        ):
+            parsed.cities, parsed.regions, parsed.countries = h.cities, h.regions, h.countries
+        elif (parsed.cities or parsed.regions) and not parsed.countries and h.countries:
+            parsed.countries = h.countries
+        if not (parsed.industries or parsed.keywords) and h.industries:
+            parsed.industries = h.industries
     return to_definition(parsed, prompt, ctx), parser

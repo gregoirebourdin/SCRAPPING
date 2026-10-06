@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     # --- discovery sources -----------------------------------------------------------------
     gmaps_scraper_url: str | None = None  # e.g. http://maps-scraper.railway.internal:8080
     fr_registry_url: str = "https://recherche-entreprises.api.gouv.fr"
+    business_type_check_enabled: bool = True  # AI check that a company really is the requested business type
+    geo_api_url: str = (
+        "https://geo.api.gouv.fr"  # French communes (INSEE code, postal codes) for city-precise search
+    )
     ddg_html_url: str = "https://html.duckduckgo.com/html/"
     overpass_url: str = "https://overpass-api.de/api/interpreter"
     # Tried in order when the main instance refuses (406 / 429 / 5xx / timeout) — public mirrors, same API.

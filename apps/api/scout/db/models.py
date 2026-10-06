@@ -855,7 +855,9 @@ class DomainProfile(Base):
 
     __tablename__ = "domain_profiles"
     domain: Mapped[str] = mapped_column(sa.Text, primary_key=True)
-    provider: Mapped[E.MailProvider] = mapped_column(enum_col(E.MailProvider), nullable=False, server_default="unknown")
+    provider: Mapped[E.MailProvider] = mapped_column(
+        enum_col(E.MailProvider), nullable=False, server_default="unknown"
+    )
     mx_hosts: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default="[]")
     has_mx: Mapped[bool | None] = mapped_column(sa.Boolean)
     accepts_mail: Mapped[bool | None] = mapped_column(sa.Boolean)  # False: null MX, or no MX and no A
@@ -947,7 +949,9 @@ class EmailVerificationRequest(Base):
     next_attempt_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
     )
-    provisional_status: Mapped[E.EmailStatus | None] = mapped_column(enum_col(E.EmailStatus, "evr_provisional_status"))
+    provisional_status: Mapped[E.EmailStatus | None] = mapped_column(
+        enum_col(E.EmailStatus, "evr_provisional_status")
+    )
     provisional_confidence: Mapped[float | None] = mapped_column(sa.Float)
     result: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default="{}")
     deliver_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # deferred campaign delivery
@@ -1001,7 +1005,9 @@ class EmailResolution(Base):
     campaign_id: Mapped[uuid.UUID | None] = fk_uuid("campaigns.id", ondelete="SET NULL")
     domain: Mapped[str | None] = mapped_column(sa.Text)
     path: Mapped[E.EmailResolutionPath] = mapped_column(enum_col(E.EmailResolutionPath), nullable=False)
-    status: Mapped[E.EmailStatus] = mapped_column(enum_col(E.EmailStatus, "email_resolution_status"), nullable=False)
+    status: Mapped[E.EmailStatus] = mapped_column(
+        enum_col(E.EmailStatus, "email_resolution_status"), nullable=False
+    )
     resolver: Mapped[str | None] = mapped_column(sa.Text)
     address: Mapped[str | None] = mapped_column(sa.Text)
     confidence: Mapped[float | None] = mapped_column(sa.Float)

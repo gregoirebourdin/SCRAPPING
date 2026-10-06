@@ -26,12 +26,12 @@ export const PAGE_SIZE = 400;
 
 export { completeFilters };
 
-/** Lists read like a sheet: oldest first, so leads delivered live are appended at the end and never push the
- * rows the user is looking at. An explicit sort always wins. */
-const LIST_ORDER: SortSpec[] = [{ field: "added_at", direction: "asc" }];
+/** Lists and live runs read like a sheet: oldest first, so leads delivered live are appended at the end and
+ * never push the rows the user is looking at (campaign scope: delivery time). An explicit sort always wins. */
+const ARRIVAL_ORDER: SortSpec[] = [{ field: "added_at", direction: "asc" }];
 
 export function effectiveSort(scope: TableScope, sort: SortSpec[]): SortSpec[] {
-  return sort.length ? sort : scope.kind === "list" ? LIST_ORDER : sort;
+  return sort.length ? sort : scope.kind === "list" || scope.kind === "campaign" ? ARRIVAL_ORDER : sort;
 }
 
 function fetchPage(scope: TableScope, filters: FilterGroup | null, sort: SortSpec[], search: string, cursor: string | null, signal?: AbortSignal) {

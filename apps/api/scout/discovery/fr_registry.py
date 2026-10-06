@@ -14,7 +14,7 @@ import structlog
 
 from scout.config import get_settings
 from scout.db.enums import UsageCategory
-from scout.discovery import geo
+from scout.discovery import communes, geo
 from scout.discovery.base import DiscoveryPage, DiscoveryQuery, RawCandidate
 from scout.discovery.common import (
     Throttle,
@@ -217,6 +217,27 @@ class FrRegistrySource:
         tranches = tranches_for_range(lo, hi)
         groups = [primary] + ([adjacent] if expansion >= 1 and adjacent else [])
         queries: list[DiscoveryQuery] = []
+        # A named French city is searched as its commune (INSEE code) when resolved — "Annecy" is not the
+        # whole of Haute-Savoie; unresolved names keep the department-level query.
+        towns = [c for city in cf.cities if not cf.regions and (c := communes.cached(city)) is not None]
+        if towns and len(towns) == len(cf.cities):
+            for gi, naf in enumerate(groups):
+                for rank, town in enumerate(towns):
+                    queries.append(
+                        DiscoveryQuery(
+                            key=f"naf:{','.join(naf)}|commune:{town.code}"
+                            + (f"|t:{','.join(tranches)}" if tranches else ""),
+                            params={
+                                "naf": naf,
+                                "code_commune": town.code,
+                                "departement": town.department,
+                                "tranches": tranches,
+                                "restricted": True,
+                            },
+                            weight=round((1.0 if gi == 0 else 0.6) / (1 + rank * 0.05), 4),
+                        )
+                    )
+            return queries
         for gi, naf in enumerate(groups):
             for rank, dep in enumerate(departments):
                 queries.append(
@@ -236,9 +257,14 @@ class FrRegistrySource:
 
     async def discover(self, query: DiscoveryQuery, cursor: dict[str, Any] | None) -> DiscoveryPage:
         page = int((cursor or {}).get("page", 1))
+        where = (
+            {"code_commune": query.params["code_commune"]}
+            if query.params.get("code_commune")
+            else {"departement": query.params["departement"]}
+        )
         params: dict[str, Any] = {
             "activite_principale": ",".join(query.params["naf"]),
-            "departement": query.params["departement"],
+            **where,
             "etat_administratif": "A",
             "per_page": PER_PAGE,
             "page": page,

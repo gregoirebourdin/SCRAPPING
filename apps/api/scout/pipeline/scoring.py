@@ -328,10 +328,11 @@ def location_fit(
 ) -> float | None:
     """1.0 inside the requested area, 0.0 clearly outside it (→ rejected), None when unknown.
 
-    French cities and regions are compared at department level, so suburbs count ("Lyon" accepts
-    Villeurbanne, 69) while another city of the same country does not ("Marseille" rejects Lyon).
+    A French city is the commune itself, with all its postal codes ("Annecy" accepts Seynod 74600, a merged
+    former commune, and rejects Thonon-les-Bains in the same department) once ``scout.discovery.communes``
+    has resolved it; until then, and for regions, the comparison is at department level.
     """
-    from scout.discovery import geo
+    from scout.discovery import communes, geo
 
     cf = defn.company_filters
     if not (cf.countries or cf.cities or cf.regions):
@@ -339,9 +340,19 @@ def location_fit(
     if country and cf.countries and country.upper() not in cf.countries:
         return 0.0
     if cf.cities or cf.regions:
-        if city and any(city.strip().lower() == c.strip().lower() for c in cf.cities):
+        if city and (
+            any(city.strip().lower() == c.strip().lower() for c in cf.cities)
+            or communes.same_place(city, cf.cities)
+        ):
             return 1.0
-        if (country or "FR").upper() == "FR":
+        fr = (country or "FR").upper() == "FR"
+        requested = communes.postal_codes_for(cf.cities) if (fr and cf.cities and not cf.regions) else None
+        if requested is not None:
+            pc = (postal_code or "").strip()
+            if pc:
+                return 1.0 if pc in requested else 0.0
+            return 0.0 if city else None
+        if fr:
             allowed = set(geo.departments_for(cf.regions, cf.cities))
             dept = _fr_department(postal_code, city)
             if allowed and dept:

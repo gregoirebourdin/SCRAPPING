@@ -112,6 +112,9 @@ def score_source(
     return suit * src.quality * _COST_FACTOR.get(src.cost_class, 1.0) * health_factor(health) * learned_factor
 
 
+_FALLBACK_SOURCES = ("fr_registry", "web_search", "osm")
+
+
 def select_sources(
     defn: CampaignDefinition,
     *,
@@ -146,6 +149,16 @@ def select_sources(
         if src.key in preferred:
             score += 10.0 - preferred.index(src.key) * 0.1
         scored.append((score, src))
+    if not scored:
+        # Nothing scored for this ICP (an unusual trade, a vague request): fall back to the generic sources
+        # that can still plan a query from it rather than failing the campaign.
+        for key in _FALLBACK_SOURCES:
+            fb = get_source(key)
+            if fb is None or key in excluded or not fb.is_configured():
+                continue
+            h = health.get(key)
+            if (h is None or h.healthy) and fb.plan(defn, expansion=0):
+                scored.append((0.1, fb))
     scored.sort(key=lambda x: -x[0])
     n_pref = sum(1 for _, s in scored if s.key in preferred)
     chosen = scored[: max(limit, n_pref)]

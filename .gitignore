@@ -30,3 +30,4 @@ test-results/
 *.log
 /tmp/
 *.tsbuildinfo
+.claude/worktrees/

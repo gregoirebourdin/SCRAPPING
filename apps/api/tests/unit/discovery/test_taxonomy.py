@@ -84,3 +84,9 @@ def test_naf_category_and_language_hint() -> None:
     assert naf_category("99.99Z") == "99.99Z"
     assert looks_french("agences marketing à Lyon")
     assert not looks_french("marketing agencies in Boston")
+
+
+def test_sports_coaches_are_personal_trainers_not_business_coaching() -> None:
+    assert keys("coachs sportifs a annecy")[0] == "personal_trainer"
+    assert "coaching" not in keys("coach sportif à domicile")
+    assert keys("coach professionnel")[0] == "coaching"

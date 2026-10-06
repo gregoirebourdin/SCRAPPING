@@ -370,13 +370,21 @@ async def query_rows(
         params["only_ids"] = ids
         where.append(f"{id_col} = ANY(:only_ids)")
     sort = sort or [SortSpec(field="added_at" if scope.kind == "list" else "updated_at", direction="desc")]
-    # added_at only exists in list scope
+    # added_at: list membership time in list scope, delivery time in campaign scope (live runs append, in order)
     sort_keys: list[tuple[FieldDef, str]] = []
     for sspec in sort[:3]:
         if sspec.field == "added_at":
-            if scope.kind != "list":
-                continue
-            sort_keys.append((FieldDef("added_at", "Added", "m.added_at", "date"), sspec.direction))
+            if scope.kind == "list":
+                sort_keys.append((FieldDef("added_at", "Added", "m.added_at", "date"), sspec.direction))
+            elif scope.kind == "campaign" and scope.campaign_id:
+                et, alias = ("person", "p") if scope.entity_type == EntityType.person else ("company", "c")
+                expr = (
+                    "(SELECT min(le2.occurred_at) FROM lead_exposures le2 WHERE le2.entity_type = "
+                    f"'{et}' AND le2.entity_id = {alias}.id AND le2.exposure_type = 'DISCOVERED' "
+                    "AND le2.campaign_id = :scope_campaign)"
+                )
+                sort_keys.append((FieldDef("added_at", "Delivered", expr, "date"), sspec.direction))
+            continue
         else:
             sort_keys.extend(comp.order_keys([sspec]))
     base_where = " AND ".join(where)

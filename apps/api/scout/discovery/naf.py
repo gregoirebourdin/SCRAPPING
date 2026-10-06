@@ -108,6 +108,7 @@ NAF_LABELS: dict[str, str] = {
     "93.11Z": "Gestion d'installations sportives",
     "93.12Z": "Activités de clubs de sports",
     "93.13Z": "Activités des centres de culture physique",
+    "93.19Z": "Autres activités liées au sport",
     "93.29Z": "Autres activités récréatives et de loisirs",
     "94.99Z": "Autres organisations fonctionnant par adhésion volontaire",
     "95.11Z": "Réparation d'ordinateurs et d'équipements périphériques",

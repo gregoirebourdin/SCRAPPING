@@ -50,7 +50,7 @@ from scout.jobs.events import emit, emit_candidate_done, emit_candidate_stage
 from scout.jobs.registry import JobContext, job_handler
 from scout.learning.people import PeopleLearning
 from scout.pipeline.exclusions import load_rules
-from scout.pipeline.fit import industry_fit
+from scout.pipeline.fit import IndustryMatch, industry_fit
 from scout.pipeline.jobs import bump_stats
 from scout.pipeline.scoring import ConditionOutcome, ScoringInput, location_fit, score, size_fit
 from scout.schemas.campaign import (
@@ -449,6 +449,24 @@ async def _stage_conditions(ctx: Ctx) -> list[ConditionOutcome]:
     return out
 
 
+async def _business_verdict(ctx: Ctx, comp: Company, text: str | None) -> Any:
+    """Cached business-type verdict for this candidate (``scout.pipeline.business_check``)."""
+    from scout.pipeline.business_check import BusinessVerdict, check_business_type
+
+    cached = ctx.stage_data.get("business_check")
+    if isinstance(cached, dict):
+        return BusinessVerdict.from_dict(cached)
+    verdict = await check_business_type(
+        ctx.defn.company_filters.industries,
+        name=comp.name,
+        registry_activity=comp.category_raw,
+        pages_text=text,
+    )
+    if verdict is not None:
+        ctx.stage_data["business_check"] = verdict.as_dict()
+    return verdict
+
+
 @dataclass
 class FitResult:
     industry: float | None
@@ -471,6 +489,10 @@ async def _stage_company_fit(ctx: Ctx, conditions: list[ConditionOutcome]) -> Fi
         page_text=text,
     )
     sf = size_fit(ctx.defn, comp.employee_min, comp.employee_max)
+    if ctx.defn.company_filters.cities:
+        from scout.discovery import communes
+
+        await communes.prefetch(ctx.defn.company_filters.cities)
     lf = location_fit(ctx.defn, comp.country, comp.city, comp.region, comp.postal_code)
     from scout.pipeline.scoring import company_fit as _cf
 
@@ -504,6 +526,29 @@ async def _stage_company_fit(ctx: Ctx, conditions: list[ConditionOutcome]) -> Fi
         raise Rejection("Company size outside requested range", "company_qualification")
     if lf is not None and lf == 0.0:
         raise Rejection("Location outside requested area", "company_qualification")
+    if lf is None and ctx.defn.company_filters.cities:
+        raise Rejection(
+            f"Location not confirmed in {', '.join(ctx.defn.company_filters.cities)}", "company_qualification"
+        )
+    verdict = await _business_verdict(ctx, comp, text)
+    if verdict is not None:
+        wanted = ctx.defn.company_filters.industries
+        if verdict.is_mismatch:
+            raise Rejection(
+                f"Not a {wanted[0]}: {verdict.what_it_does}"[:300] if wanted else verdict.what_it_does,
+                "company_qualification",
+            )
+        if verdict.is_match:
+            im = IndustryMatch(
+                max(im.score if im else 0.0, 0.95), wanted[0], f"Website: {verdict.what_it_does}"
+            )
+        else:  # unsure: an activity code or a keyword alone does not make the business type
+            im = IndustryMatch(
+                min(im.score if im else 0.4, 0.4), im.label if im else None, im.evidence if im else None
+            )
+        probe.industry_fit = im.score
+        cf = _cf(probe)
+        fit = FitResult(im.score, sf, lf, im.label, cf, company_conf)
     if cf is not None and cf * 100 < ctx.defn.minimum_company_fit:
         raise Rejection(f"Company fit too low ({round(cf * 100)})", "company_qualification")
     await _count_once(ctx, "matched_counted", companies_matched=1)

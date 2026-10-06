@@ -12,7 +12,16 @@ from typing import Literal
 from scout.config import get_settings
 
 PoolName = Literal[
-    "http", "browser", "maps", "gemini", "search", "smtp", "dns", "public_api", "scrapling", "scrapling_dynamic"
+    "http",
+    "browser",
+    "maps",
+    "gemini",
+    "search",
+    "smtp",
+    "dns",
+    "public_api",
+    "scrapling",
+    "scrapling_dynamic",
 ]
 
 _pools: dict[str, asyncio.Semaphore] = {}

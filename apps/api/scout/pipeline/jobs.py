@@ -117,6 +117,10 @@ async def plan_campaign(ctx: JobContext) -> dict[str, Any]:
                 session=s,
             )
             return {"seeded": n}
+    if defn.company_filters.cities:  # city-precise registry queries need the communes resolved up front
+        from scout.discovery import communes
+
+        await communes.prefetch(defn.company_filters.cities)
     health = await health_snapshot()
     chosen = select_sources(defn, health=health)
     async with session_scope() as s:
@@ -127,7 +131,8 @@ async def plan_campaign(ctx: JobContext) -> dict[str, Any]:
                 s,
                 c,
                 CampaignStatus.failed,
-                "No suitable discovery source is configured for this ICP (check source settings)",
+                "Couldn't tell where to search: name the business type and the place "
+                "(e.g. “personal trainers in Annecy”) and run it again",
             )
             return {"sources": 0}
         for source, priority in chosen:
