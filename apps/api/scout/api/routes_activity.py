@@ -211,6 +211,7 @@ async def stream(
                             "at": r.created_at,
                         },
                         option=orjson.OPT_SERIALIZE_UUID,
+                        default=str,  # asyncpg returns a uuid.UUID subclass that orjson ≥ 3.12 refuses
                     ).decode(),
                 }
             if rows:

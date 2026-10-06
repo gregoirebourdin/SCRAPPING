@@ -539,6 +539,7 @@ async def _emit_tool(
         yield "ui_effect", eff
         _apply_effect_to_context(ui, eff)
     if confirm:
+        confirm = {**confirm, "lang": turn.lang}
         turn.parts.append({"type": "confirm", **confirm})
         yield "confirm", confirm
     turn.last = (res, card, status, confirm)

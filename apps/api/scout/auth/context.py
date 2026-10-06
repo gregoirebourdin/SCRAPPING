@@ -94,6 +94,11 @@ def _slugify(s: str) -> str:
 async def ensure_user_and_workspace(principal: Principal) -> list[tuple[Workspace, MemberRole]]:
     """Bootstrap: make sure the user row exists (Better Auth creates it) and owns at least one workspace."""
     async with session_scope() as s:
+        # The first page load fires several requests at once: serialize the bootstrap per user so they all
+        # resolve to the same (single) workspace instead of each creating one.
+        await s.execute(
+            sa.text("SELECT pg_advisory_xact_lock(hashtext(:u))"), {"u": f"ws-bootstrap:{principal.user_id}"}
+        )
         user = await s.get(User, principal.user_id)
         if user is None:
             if not principal.email:

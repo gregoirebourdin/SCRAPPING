@@ -465,3 +465,25 @@ async def test_live_snapshot_kick_and_http_routes(env, workspace):
             .where(Job.campaign_id == cid, Job.run_after > sa.func.now())
         )
     assert delayed == 0, "Retry wakes every delayed job of the campaign"
+
+
+async def test_first_page_load_burst_resolves_to_a_single_workspace(db):
+    """Several requests fire at once on the first page load (rows, lists, the live event stream…). They must all
+    land in the same workspace — otherwise the live stream can bind to an empty one and never show progress."""
+    import asyncio
+
+    from scout.auth.context import Principal, ensure_user_and_workspace
+    from scout.db.models import User, WorkspaceMember
+
+    async with session_scope() as s:
+        s.add(User(id="user_burst", name="Burst", email="burst@example.com"))
+    p = Principal(user_id="user_burst", email="burst@example.com", name="Burst")
+    results = await asyncio.gather(*[ensure_user_and_workspace(p) for _ in range(6)])
+    assert len({r[0][0].id for r in results}) == 1
+    async with session_scope() as s:
+        n = await s.scalar(
+            sa.select(sa.func.count())
+            .select_from(WorkspaceMember)
+            .where(WorkspaceMember.user_id == "user_burst")
+        )
+    assert n == 1

@@ -34,6 +34,8 @@ export interface CampaignLive {
   /** client clock (ms) of the last event that moved a counter */
   lastProgressAt?: number;
   lastEventType?: string;
+  /** client clock (ms) when `status` was last set from a live event — fresher polled data wins over it */
+  statusAt?: number;
 }
 
 export interface LiveCandidate {
@@ -99,7 +101,12 @@ export const useLive = create<LiveState>()((set) => ({
       const prev = s.campaigns[id] ?? {};
       const now = Date.now();
       const moved = COUNTERS.some((k) => p[k] !== undefined && p[k] !== prev[k]);
-      return { campaigns: { ...s.campaigns, [id]: { ...prev, ...p, lastEventAt: now, lastProgressAt: moved ? now : (prev.lastProgressAt ?? now) } } };
+      return {
+        campaigns: {
+          ...s.campaigns,
+          [id]: { ...prev, ...p, lastEventAt: now, lastProgressAt: moved ? now : (prev.lastProgressAt ?? now), statusAt: p.status !== undefined ? now : prev.statusAt },
+        },
+      };
     }),
   upsertCandidate: (cid, c) =>
     set((s) => ({
@@ -120,10 +127,12 @@ export const useLive = create<LiveState>()((set) => ({
   clearCandidates: (cid) => set((s) => ({ candidates: { ...s.candidates, [cid]: {} } })),
   seedCandidates: (cid, list) =>
     set((s) => {
-      // server snapshot (after a refresh): keep live entries that are newer than the snapshot
+      // The server snapshot is the truth (it also drops finished candidates); only SSE updates fresher than
+      // the snapshot round-trip survive the merge.
+      const now = Date.now();
       const merged: Record<string, LiveCandidate> = {};
       for (const c of list) merged[c.event_id] = c;
-      for (const [k, v] of Object.entries(s.candidates[cid] ?? {})) merged[k] = v;
+      for (const [k, v] of Object.entries(s.candidates[cid] ?? {})) if (v.at > 0 && now - v.at < 8000) merged[k] = v;
       return { candidates: { ...s.candidates, [cid]: merged } };
     }),
   markFresh: (ids) =>

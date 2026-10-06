@@ -248,7 +248,7 @@ export function RunActions({ run, lang = "en", size = "xs", showOpen = false }: 
 
 /* ---- funnel ---------------------------------------------------------------------------------------- */
 
-export function Funnel({ run, lang = "en", className }: { run: RunView; lang?: Lang; className?: string }) {
+export function Funnel({ run, lang = "en", className, wrap }: { run: RunView; lang?: Lang; className?: string; wrap?: boolean }) {
   const fr = lang === "fr";
   const steps: [string, number][] = [
     [fr ? "Trouvées" : "Discovered", run.raw],
@@ -257,7 +257,7 @@ export function Funnel({ run, lang = "en", className }: { run: RunView; lang?: L
     [fr ? "Emails" : "Emails", run.emails],
   ];
   return (
-    <div className={cn("flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap text-meta scroll-quiet", className)}>
+    <div className={cn("flex min-w-0 items-center gap-1.5 text-meta", wrap ? "flex-wrap gap-y-0.5" : "overflow-x-auto whitespace-nowrap scroll-quiet", className)}>
       {steps.map(([label, v]) => (
         <span key={label} className="flex shrink-0 items-center gap-1.5">
           <span className="text-fg-3">{label}</span>

@@ -248,7 +248,7 @@ export function PlanCard({ card, onLaunch, onEdit }: { card: Card; onLaunch?: (c
           <Radar />
         </span>
         <div className="min-w-0">
-          <div className="text-micro font-medium uppercase tracking-wide text-fg-3">{String(card.title ?? "")}</div>
+          <div className="text-micro font-medium uppercase tracking-wide text-fg-3">{fr ? "Plan de recherche" : "Search plan"}</div>
           <div className="truncate text-body font-medium text-fg">{String(card.name ?? "")}</div>
         </div>
       </div>
@@ -333,7 +333,7 @@ function CampaignCard({ card }: { card: Card }) {
             </span>
           )}
         </p>
-        <Funnel run={run} lang={lang} />
+        <Funnel run={run} lang={lang} wrap />
         <ProgressBar value={run.qualified} max={Math.max(1, run.target)} tone={run.status === "completed" ? "success" : "accent"} />
         <StallNotice run={run} lang={lang} />
         {terminal && run.reason && run.status !== "completed" && <p className="text-meta text-fg-3">{run.reason}</p>}

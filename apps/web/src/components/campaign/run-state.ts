@@ -68,7 +68,10 @@ export function useRunView(id: string | null): RunView | null {
   const cands = useLive((s) => (id ? (s.candidates[id] ?? NO_CANDIDATES) : NO_CANDIDATES));
   const conn = useLive((s) => s.connState);
   const disconnectedAt = useLive((s) => s.disconnectedAt);
-  const status = live?.status ?? snap.data?.status ?? q.data?.status ?? "planning";
+  // Whichever is fresher wins: a live event, or a poll that happened after it (a missed event never sticks).
+  const polledAt = Math.max(q.dataUpdatedAt, snap.dataUpdatedAt);
+  const polled = q.dataUpdatedAt >= snap.dataUpdatedAt ? (q.data?.status ?? snap.data?.status) : (snap.data?.status ?? q.data?.status);
+  const status = (live?.status && (live.statusAt ?? 0) >= polledAt ? live.status : (polled ?? live?.status)) ?? "planning";
   const running = ACTIVE.includes(status);
   const now = useNow(5000, running);
 

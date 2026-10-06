@@ -132,7 +132,7 @@ export function TableView({
 
   /* ---- live run: searches feeding this list ------------------------------------------------------ */
   const runs = useListRuns(scope.listId);
-  const activeRuns = runs.filter((r) => r.active || r.status === "paused");
+  const activeRuns = useMemo(() => runs.filter((r) => r.active || r.status === "paused"), [runs]);
   // Unsorted, unfiltered view: new leads are appended at the end as they qualify (no reorder, no jump).
   // Sorted / filtered / searched: the "+N new" pill lets the user merge when ready.
   const liveAppend = scope.kind === "list" && layout.sort.length === 0 && activeFilterCount === 0 && !search;
@@ -152,6 +152,16 @@ export function TableView({
     },
     [],
   );
+  const runActive = activeRuns.some((r) => r.active);
+  useEffect(() => {
+    // Safety net: even without the live stream (proxy, network, sleeping laptop) new rows keep arriving.
+    if (!scope.listId || !liveAppend || !runActive) return;
+    const t = setInterval(() => {
+      void refetchTail(qc, scope, debouncedFilters, layout.sort, search, 0).then((ids) => ids.length && useLive.getState().markFresh(ids));
+      void qc.invalidateQueries({ queryKey: qk.campaigns });
+    }, 8000);
+    return () => clearInterval(t);
+  }, [scope, liveAppend, runActive, qc, debouncedFilters, layout.sort, search]);
   const candA = useLive((s) => (activeRuns[0] ? s.candidates[activeRuns[0].id] : undefined));
   const candB = useLive((s) => (activeRuns[1] ? s.candidates[activeRuns[1].id] : undefined));
   const flightA = useLive((s) => (activeRuns[0] ? s.campaigns[activeRuns[0].id]?.in_flight : undefined));
@@ -818,6 +828,7 @@ const RECENT_MS = 12 * 3600 * 1000;
 function useListRuns(listId: string | null) {
   const campaigns = useCampaigns();
   const liveStatus = useLive((s) => s.campaigns);
+  const polledAt = campaigns.dataUpdatedAt;
   const [dismissed, setDismissed] = useState<Record<string, true>>({});
   const now = useNow(60_000);
   return useMemo(() => {
@@ -825,11 +836,12 @@ function useListRuns(listId: string | null) {
     return (campaigns.data ?? [])
       .filter((c) => c.target_list_id === listId)
       .map((c) => {
-        const status = liveStatus[c.id]?.status ?? c.status;
+        const lv = liveStatus[c.id];
+        const status = lv?.status && (lv.statusAt ?? 0) >= polledAt ? lv.status : c.status;
         return { id: c.id, status, active: RUN_ACTIVE.includes(status), created: Date.parse(c.created_at), stopped: c.stopped_at ? Date.parse(c.stopped_at) : null };
       })
       .filter((r) => !dismissed[r.id] && (r.active || r.status === "paused" || (r.status !== "cancelled" && (r.stopped === null || now - r.stopped < RECENT_MS))))
       .sort((a, b) => Number(b.active) - Number(a.active) || Number(b.status === "paused") - Number(a.status === "paused") || b.created - a.created)
       .map((r) => ({ ...r, dismiss: () => setDismissed((d) => ({ ...d, [r.id]: true })) }));
-  }, [listId, campaigns.data, liveStatus, dismissed, now]);
+  }, [listId, campaigns.data, liveStatus, dismissed, now, polledAt]);
 }

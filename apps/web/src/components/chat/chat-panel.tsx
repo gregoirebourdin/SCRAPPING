@@ -37,6 +37,7 @@ export interface ChatPart {
   warnings?: string[];
   confirm_label?: string;
   kind?: string;
+  lang?: string;
 }
 
 interface Clarification {
@@ -615,7 +616,10 @@ function MessageView({
     );
   }
   const visible = m.parts.filter((p) => p.type !== "ui_effect");
-  const lang = (m.parts.find((p) => p.card?.lang)?.card?.lang as "fr" | "en" | undefined) ?? (/[éèàç]|\b(je|les|des)\b/i.test(m.content) ? "fr" : "en");
+  const lang =
+    (m.parts.find((p) => p.card?.lang)?.card?.lang as "fr" | "en" | undefined) ??
+    (m.parts.find((p) => p.lang)?.lang as "fr" | "en" | undefined) ??
+    (/[éèàç]|\b(je|les|des)\b/i.test(m.content) ? "fr" : "en");
   const hasSteps = visible.some((p) => p.type === "steps" && p.steps?.length);
   return (
     <div className="space-y-2 text-body text-fg-2">
