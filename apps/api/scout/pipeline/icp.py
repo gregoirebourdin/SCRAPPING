@@ -731,6 +731,8 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
     conds: list[Any] = []
     bonus_columns: list[EnrichmentRequest] = []
     for c in parsed.website_conditions:
+        if c.kind == "technology":  # official spelling for the column ("Manychat" → "ManyChat")
+            c.terms = [_TECH_DISPLAY.get(t.strip().lower(), t.strip()) for t in c.terms]
         must = c.required and not _hedged(prompt, [*c.terms, c.concept or ""])
         if not must and c.kind in ("technology", "keyword_any", "keyword_all") and c.terms:
             # a bonus, not a filter: a column on every lead (Yes / No + evidence), cheap and deterministic

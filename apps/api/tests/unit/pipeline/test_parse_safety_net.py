@@ -60,7 +60,7 @@ class ManyChatModel:
             industries=["social media marketing agency"],
             countries=["FR"],
             titles=["Founder"],
-            website_conditions=[AIWebsiteCondition(kind="technology", terms=["ManyChat"])],
+            website_conditions=[AIWebsiteCondition(kind="technology", terms=["Manychat"])],
         )
         return AIResult(value=value, usage=AIUsage(model="fake"))
 
