@@ -837,6 +837,10 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
     )
     if parsed.minimum_icp_score is not None:
         defn.minimum_icp_score = parsed.minimum_icp_score
+    # ~25 raw candidates per qualified lead: a 3000-lead search must not stop at the default 60k safety limit
+    defn.limits.max_raw_candidates = max(
+        defn.limits.max_raw_candidates, min(250_000, defn.target_qualified_count * 40)
+    )
     if ctx.like_profile:
         _apply_like_profile(defn, ctx.like_profile)
     return defn

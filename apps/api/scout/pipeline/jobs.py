@@ -86,6 +86,15 @@ async def bump_stats(s: Any, campaign_id: uuid.UUID, **deltas: int) -> None:
 # =============================================================================================
 
 
+def max_expansion(defn: CampaignDefinition) -> int:
+    """How far discovery widens once a plan is exhausted: 2 rounds (+30 cities) by default; a large country-wide
+    target ("3000 agences en France") keeps widening through every city of the table (a named city never widens
+    past its own area — the location gate would reject the rest anyway)."""
+    if defn.company_filters.cities:
+        return 2
+    return max(2, min(11, 2 + defn.target_qualified_count // 300))
+
+
 @job_handler("campaign.plan", timeout_s=180)
 async def plan_campaign(ctx: JobContext) -> dict[str, Any]:
     from scout.discovery.health import health_snapshot
@@ -373,7 +382,7 @@ async def discover(ctx: JobContext) -> dict[str, Any] | None:
         qi = int(cursor.get("q", 0))
         expansion = int(cursor.get("expansion", 0))
         if qi >= len(plan):
-            if expansion < 2:
+            if expansion < max_expansion(defn):
                 known = {q.get("key") for q in plan}
                 new = [asdict(q) for q in source.plan(defn, expansion=expansion + 1) if q.key not in known]
                 cursor["expansion"] = expansion + 1

@@ -114,3 +114,25 @@ async def test_a_named_tool_the_model_dropped_comes_back_as_a_bonus() -> None:
     (cond,) = defn.website_conditions
     assert cond.type == "technology" and cond.technologies == ["ManyChat"] and cond.required is False
     assert [e.name for e in defn.enrichments] == ["ManyChat"]
+
+
+def test_large_targets_widen_further_and_keep_enough_candidates() -> None:
+    from scout.pipeline.icp import AIParsedCampaign, ParseContext, to_definition
+    from scout.pipeline.jobs import max_expansion
+
+    big = to_definition(
+        AIParsedCampaign(
+            name="Insta", target_count=3000, industries=["social media marketing agency"], countries=["FR"]
+        ),
+        "3000 agences social media en France",
+        ParseContext(),
+    )
+    assert big.limits.max_raw_candidates == 120_000 and max_expansion(big) == 11
+    small = to_definition(
+        AIParsedCampaign(
+            name="Web", target_count=50, industries=["web agency"], cities=["Annecy"], countries=["FR"]
+        ),
+        "50 agences web à Annecy",
+        ParseContext(),
+    )
+    assert small.limits.max_raw_candidates == 60_000 and max_expansion(small) == 2
