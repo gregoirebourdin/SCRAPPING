@@ -191,6 +191,13 @@ def is_known_first_name(token: str) -> bool:
     return len(head) >= 2 and head in FIRST_NAMES
 
 
+def has_known_first_name(name: str) -> bool:
+    """A gazetteer first name among the first three name tokens ("Jean Dupont", "DUPONT Jean", "Marie-Claire
+    Roux"). Headings and product names that pass the structural checks ("Related Websites", "Prompts Gpt")
+    never do."""
+    return any(is_known_first_name(t) for t in name_tokens(name or "")[:3])
+
+
 def _token_ok(tok: str) -> bool:
     if not _NAME_TOKEN_RE.match(tok):
         return False

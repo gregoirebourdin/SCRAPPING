@@ -576,9 +576,13 @@ async def _stage_people(ctx: Ctx, hints: dict[str, Any]) -> list[PersonPick]:
 
 
 def _rank(candidates: list[Any], pf: Any, normalize_title: Any, title_match_score: Any) -> list[PersonPick]:
+    from scout.extract.names import has_known_first_name
+
     out: dict[str, PersonPick] = {}
     wants_roles = bool(pf.titles or pf.role_families or pf.seniorities)
     for cand in candidates:
+        if cand.source_type != "registry" and not has_known_first_name(cand.full_name):
+            continue  # only official registry names may lack a known first name: no headings / product names as leads
         info = normalize_title(cand.title) if cand.title else None
         if wants_roles:
             ts = (

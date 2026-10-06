@@ -243,6 +243,9 @@ def _verify(
             m = re.search(r"\s?".join(siren), text)
             ev = _snippet_around(text, m.start()) if m else f"SIREN {siren}"
             return 0.98, ev, "registry_id"
+        others = _other_sirens(text, siren)
+        if others:  # a namesake: the legal notice belongs to another company (Valneva SE vs a Lyon "VALNEVA")
+            return 0.0, f"legal notice of another company (SIREN {others[0]})", "registry_conflict"
     ph = _digits(phone or "")[-9:]
     if len(ph) == 9:
         for p in parsed.phones:
@@ -262,6 +265,25 @@ def _verify(
             return 0.82, f"name '{name}' and location '{loc_hit}' on page", "name_location"
         return 0.65, f"name '{name}' on page", "name_only"
     return 0.0, "", "none"
+
+
+_SIREN_NEAR = re.compile(r"(?:siren|siret|r\.?\s?c\.?\s?s\.?)\D{0,40}((?:\d[\s.\u00a0]?){9})", re.IGNORECASE)
+_HOST_CONTEXT = re.compile(r"h[ée]berg|hosting|\bhost(?:ed|er)?\b", re.IGNORECASE)
+
+
+def _other_sirens(text: str, own: str) -> list[str]:
+    """Valid SIRENs printed next to SIREN / SIRET / RCS that are not ``own`` — the legal notice of another
+    company. Those of the web host ("Hébergeur : OVH SAS, RCS Lille 424 761 419"), which legal notices
+    list too, are ignored."""
+    out: list[str] = []
+    for m in _SIREN_NEAR.finditer(text):
+        siren = _digits(m.group(1))[:9]
+        if len(siren) != 9 or siren == own or not valid_siren(siren) or siren in out:
+            continue
+        if _HOST_CONTEXT.search(text[max(0, m.start() - 160) : m.start()]):
+            continue
+        out.append(siren)
+    return out
 
 
 def _legal_link(parsed: ParsedPage) -> str | None:
@@ -321,7 +343,7 @@ async def resolve_website(
             parsed, name=name, city=city, postal_code=postal_code, registry_id=registry_id, phone=phone
         )
         source = resp.final_url
-        if conf < STOP_CONFIDENCE:
+        if conf < STOP_CONFIDENCE and method != "registry_conflict":
             legal = _legal_link(parsed)
             if legal and time.monotonic() < deadline:
                 try:
@@ -338,7 +360,7 @@ async def resolve_website(
                         registry_id=registry_id,
                         phone=phone,
                     )
-                    if lconf > conf:
+                    if lmethod == "registry_conflict" or lconf > conf:
                         conf, evidence, method, source = lconf, lev, lmethod, lresp.final_url
         log.info(
             "website_resolution_candidate", domain=final_domain, confidence=conf, method=method, origin=origin

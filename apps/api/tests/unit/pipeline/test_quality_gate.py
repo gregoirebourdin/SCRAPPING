@@ -215,3 +215,12 @@ def test_accepting_risky_lowers_the_email_confidence_floor_to_the_risky_band() -
     assert _gate(r, "email_confidence")["passed"] and _gate(r, "email_status")["passed"]
     low = score(_lead(risky_ok, **{**guess, "email_confidence": 0.41}))
     assert not _gate(low, "email_confidence")["passed"]
+
+
+def test_headings_and_product_names_never_become_leads() -> None:
+    from scout.extract.names import has_known_first_name
+
+    assert has_known_first_name("Jean Dupont") and has_known_first_name("DUPONT Jean")
+    assert has_known_first_name("Marie-Claire Roux") and has_known_first_name("Pierre-Eric Beaudraps")
+    assert not has_known_first_name("Related Websites")
+    assert not has_known_first_name("Prompts Gpt")

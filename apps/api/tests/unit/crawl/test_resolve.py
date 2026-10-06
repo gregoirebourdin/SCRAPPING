@@ -93,3 +93,39 @@ async def test_resolve_uses_free_search_candidates_and_still_proves_identity(fix
     assert found is not None and found.domain == "agence-lumiere.fr"
     assert found.method.startswith("web_search+")
     assert found.checked == ["annuaire-pro.example", "agence-lumiere.fr"]
+
+
+def _page(body: str):
+    from scout.crawl.parser import parse_html
+
+    return parse_html(
+        f"<html><head><title>Valneva</title></head><body>{body}</body></html>", "https://valneva.com/"
+    )
+
+
+def test_a_namesake_with_another_companys_legal_notice_is_rejected():
+    # A small Lyon advertising company registered as "VALNEVA" must not get the biotech's website.
+    home = _page("<h1>Valneva</h1><p>Our site in Lyon. Valneva SE, RCS Nantes 422 497 560.</p>")
+    conf, evidence, method = resolve._verify(
+        home, name="VALNEVA", city="Lyon", postal_code="69007", registry_id="732829320", phone=None
+    )
+    assert (conf, method) == (0.0, "registry_conflict") and "422497560" in evidence
+    # the company's own SIREN still proves identity
+    own = _page("<h1>Valneva</h1><p>Lyon. SIREN 732 829 320.</p>")
+    assert (
+        resolve._verify(
+            own, name="VALNEVA", city="Lyon", postal_code=None, registry_id="732829320", phone=None
+        )[2]
+        == "registry_id"
+    )
+
+
+def test_the_web_hosts_siren_in_a_legal_notice_is_not_a_conflict():
+    page = _page(
+        "<h1>Agence Lumière</h1><p>Agence Lumière, Lyon.</p>"
+        "<p>Hébergeur : OVH SAS, 2 rue Kellermann, 59100 Roubaix — RCS Lille Métropole 424 761 419.</p>"
+    )
+    conf, _, method = resolve._verify(
+        page, name="Agence Lumière", city="Lyon", postal_code=None, registry_id="732829320", phone=None
+    )
+    assert method == "name_location" and conf >= resolve.MIN_CONFIDENCE
