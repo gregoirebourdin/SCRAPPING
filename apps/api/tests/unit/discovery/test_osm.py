@@ -68,9 +68,13 @@ async def test_discover(src: OsmSource) -> None:
     assert '"name"="Lyon"' in body["data"][0]
 
 
+MIRRORS = ["https://overpass.kumi.systems/api/interpreter", "https://overpass.private.coffee/api/interpreter"]
+
+
 @respx.mock
 async def test_errors(src: OsmSource) -> None:
-    respx.post(OVERPASS).mock(return_value=httpx.Response(429, text="rate_limited"))
+    for url in (OVERPASS, *MIRRORS):
+        respx.post(url).mock(return_value=httpx.Response(429, text="rate_limited"))
     with pytest.raises(RateLimitedError):
         await src.discover(query(), None)
     respx.post(OVERPASS).mock(
@@ -89,3 +93,22 @@ def test_plan_and_suitability() -> None:
     assert ["amenity", "dentist"] in plan[0].params["tags"]
     assert src.suitability(defn(industries=["SaaS"], countries=["US"])) == 0.3
     assert src.suitability(defn(industries=["ecommerce brand"], countries=["US"])) == 0  # no OSM tags
+
+
+@respx.mock
+async def test_fails_over_to_a_mirror_when_the_main_instance_refuses(src: OsmSource) -> None:
+    main = respx.post(OVERPASS).mock(return_value=httpx.Response(406, text="<html>Not Acceptable</html>"))
+    mirror = respx.post(MIRRORS[0]).mock(
+        return_value=httpx.Response(200, json=fixture_json("overpass_dentists.json"))
+    )
+    page = await src.discover(query(), None)
+    assert main.called and mirror.called and len(page.candidates) == 2
+
+
+@respx.mock
+async def test_a_bad_query_is_not_retried_on_mirrors(src: OsmSource) -> None:
+    respx.post(OVERPASS).mock(return_value=httpx.Response(400, text="parse error"))
+    mirror = respx.post(MIRRORS[0]).mock(return_value=httpx.Response(200, json={"elements": []}))
+    with pytest.raises(Exception, match="400"):
+        await src.discover(query(), None)
+    assert not mirror.called

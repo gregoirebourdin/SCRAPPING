@@ -558,7 +558,9 @@ async def _stage_people(ctx: Ctx, hints: dict[str, Any]) -> list[PersonPick]:
     if not picks:  # free web search (SearXNG) before any Gemini grounding; no-op when not configured
         from scout.search.people import serp_people
 
-        found = await serp_people(comp.name, domain=comp.normalized_domain, country=comp.country, titles=pf.titles)
+        found = await serp_people(
+            comp.name, domain=comp.normalized_domain, country=comp.country, titles=pf.titles
+        )
         picks = _rank(learn.adjust(found), pf, normalize_title, title_match_score)
     if not picks and await allow_expensive():
         t0 = time.monotonic()

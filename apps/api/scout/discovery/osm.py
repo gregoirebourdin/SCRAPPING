@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 import structlog
 
 from scout.config import get_settings
@@ -20,7 +21,7 @@ from scout.discovery.common import (
     profiles_for,
     target_countries,
 )
-from scout.errors import FetchError
+from scout.errors import FetchError, JobError
 from scout.schemas.campaign import CampaignDefinition
 from scout.services.usage import record_usage
 from scout.util.pools import pool
@@ -154,14 +155,31 @@ class OsmSource:
                     )
         return queries
 
+    async def _post(self, ql: str) -> httpx.Response:
+        """Main instance first, then the public mirrors: an instance refusing us (406 from a datacenter IP,
+        429, 5xx, timeout) must not take the whole source down. A 400 is our query's fault — no fail-over."""
+        s = get_settings()
+        endpoints = list(dict.fromkeys(u for u in [s.overpass_url, *s.overpass_mirrors] if u))
+        last: JobError | None = None
+        for url in endpoints:
+            async with pool("public_api"):
+                await self.throttle.wait()
+                try:
+                    return await http_request(
+                        "POST", url, source=self.key, data={"data": ql}, timeout_s=120.0
+                    )
+                except JobError as exc:
+                    if "(400)" in str(exc):
+                        raise
+                    log.info("osm.endpoint_failed", endpoint=url, error=str(exc)[:200])
+                    last = exc
+        assert last is not None
+        raise last
+
     async def discover(self, query: DiscoveryQuery, cursor: dict[str, Any] | None) -> DiscoveryPage:
         p = query.params
         ql = build_query([tuple(t) for t in p["tags"]], p["city"], p.get("country"))
-        async with pool("public_api"):
-            await self.throttle.wait()
-            resp = await http_request(
-                "POST", get_settings().overpass_url, source=self.key, data={"data": ql}, timeout_s=120.0
-            )
+        resp = await self._post(ql)
         await record_usage(UsageCategory.registry_request, source_key=self.key, resolver="discovery")
         try:
             body = resp.json()

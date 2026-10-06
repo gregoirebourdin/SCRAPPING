@@ -41,6 +41,7 @@ from scout.db.models import (
 from scout.errors import Conflict, NotFound, ValidationFailed
 from scout.jobs import queue
 from scout.jobs.events import emit
+from scout.pipeline.scoring import email_confidence_floor
 from scout.schemas.campaign import (
     CampaignDefinition,
     KeywordCondition,
@@ -116,7 +117,7 @@ def _filters_rows(campaign_id: uuid.UUID, d: CampaignDefinition) -> list[Campaig
             add("person", "role_family", "in", [r.value for r in pf.role_families])
         if d.requires_email:
             add("email", "status", "in", [s.value for s in d.accepted_email_statuses])
-            add("email", "confidence", "gte", d.minimum_email_confidence, "numeric")
+            add("email", "confidence", "gte", email_confidence_floor(d), "numeric")
         add("person", "confidence", "gte", d.minimum_person_confidence, "numeric")
     add("score", "icp_score", "gte", d.minimum_icp_score, "numeric")
     return rows

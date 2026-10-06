@@ -196,3 +196,22 @@ def test_size_and_location_fit():
     region = _defn(company_filters={"countries": ["FR"], "regions": ["Bretagne"]})
     assert location_fit(region, "FR", "Rennes", None, "35000") == 0.9
     assert location_fit(region, "FR", "Lyon", None, "69002") == 0.0
+
+
+def test_accepting_risky_lowers_the_email_confidence_floor_to_the_risky_band() -> None:
+    from scout.pipeline.scoring import email_confidence_floor
+
+    strict = _defn()
+    assert email_confidence_floor(strict) == strict.minimum_email_confidence == 80
+    risky_ok = _defn(accepted_email_statuses=["SAFE", "LIKELY_SAFE", "RISKY"])
+    assert email_confidence_floor(risky_ok) == 50
+    assert email_confidence_floor(_defn(accepted_email_statuses=["SAFE", "UNKNOWN"])) == 0
+    # a stricter user floor still wins over the band
+    assert email_confidence_floor(_defn(accepted_email_statuses=["RISKY"], minimum_email_confidence=30)) == 30
+
+    guess = dict(email="claire.fontaine@agence.fr", email_status=EmailStatus.RISKY, email_confidence=0.62)
+    assert not score(_lead(strict, **guess)).qualified
+    r = score(_lead(risky_ok, **guess))
+    assert _gate(r, "email_confidence")["passed"] and _gate(r, "email_status")["passed"]
+    low = score(_lead(risky_ok, **{**guess, "email_confidence": 0.41}))
+    assert not _gate(low, "email_confidence")["passed"]

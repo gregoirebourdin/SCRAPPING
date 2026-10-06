@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     fr_registry_url: str = "https://recherche-entreprises.api.gouv.fr"
     ddg_html_url: str = "https://html.duckduckgo.com/html/"
     overpass_url: str = "https://overpass-api.de/api/interpreter"
+    # Tried in order when the main instance refuses (406 / 429 / 5xx / timeout) — public mirrors, same API.
+    overpass_mirrors: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "https://overpass.kumi.systems/api/interpreter",
+            "https://overpass.private.coffee/api/interpreter",
+        ]
+    )
     yc_companies_url: str = "https://yc-oss.github.io/api/companies/all.json"
     hn_algolia_url: str = "https://hn.algolia.com/api/v1"
     github_api_url: str = "https://api.github.com"
@@ -92,7 +99,9 @@ class Settings(BaseSettings):
     discovery_fixture_manifest: str | None = None  # path to fixture manifest (tests/E2E)
 
     # --- web search layer (scout.search): SearXNG → DuckDuckGo HTML → Gemini grounding only when unresolved ---
-    searxng_url: str | None = None  # e.g. http://searxng.railway.internal:8080 (private service, services/searxng)
+    searxng_url: str | None = (
+        None  # e.g. http://searxng.railway.internal:8080 (private service, services/searxng)
+    )
     searxng_timeout: float = 10.0
     searxng_max_concurrency: int = 4
     searxng_categories: str = "general"
@@ -148,7 +157,7 @@ class Settings(BaseSettings):
     web_app_url: str = "http://localhost:3000"
     export_max_rows: int = 100_000
 
-    @field_validator("cors_origins", "crawler_allow_private_hosts", mode="before")
+    @field_validator("cors_origins", "crawler_allow_private_hosts", "overpass_mirrors", mode="before")
     @classmethod
     def _split_csv(cls, v: object) -> object:
         if isinstance(v, str):

@@ -13,7 +13,7 @@ use_default_settings:
       - bing              # disabled upstream by default; strong for company sites and LinkedIn profiles
       # --- general web (loaded but disabled: opt in per request with engines=… or flip `disabled`) ---
       - google            # disabled upstream (JS / CAPTCHA from datacenter IPs); try it on your egress IP
-      - yahoo             # Bing-backed; useful as a spare
+      - yahoo             # Bing-backed spare, enabled below (Brave / DuckDuckGo throttle datacenter IPs fast)
       - qwant             # blocks datacenter IPs aggressively
       # --- reference (infoboxes, larger companies) ---
       - wikipedia
@@ -85,8 +85,9 @@ engines:
     disabled: false
   - name: google
     disabled: true
-  - name: yahoo
-    disabled: true
+  - name: yahoo             # enabled: a spare when Brave rate-limits / DuckDuckGo CAPTCHAs datacenter IPs
+    disabled: false
+    timeout: 4.0
   - name: qwant
     disabled: true
   - name: duckduckgo

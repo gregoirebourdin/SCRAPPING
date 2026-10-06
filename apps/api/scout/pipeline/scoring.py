@@ -13,6 +13,21 @@ from scout.db.enums import CampaignMode, EmailStatus
 from scout.schemas.campaign import CampaignDefinition
 
 
+def email_confidence_floor(d: CampaignDefinition) -> int:
+    """The email confidence floor never contradicts the accepted statuses: a RISKY or CATCH_ALL address is by
+    construction below the LIKELY_SAFE band, so accepting those statuses lowers the floor to the RISKY band's
+    own minimum (accepting UNKNOWN removes it). Otherwise "accept RISKY" would silently accept nothing."""
+    from scout.email.confidence import RISKY_MIN
+
+    floor = d.minimum_email_confidence
+    accepted = set(d.accepted_email_statuses)
+    if accepted & {EmailStatus.UNKNOWN, EmailStatus.TEMPORARY_UNKNOWN}:
+        return 0
+    if accepted & {EmailStatus.RISKY, EmailStatus.CATCH_ALL}:
+        return min(floor, round(RISKY_MIN * 100))
+    return floor
+
+
 @dataclass
 class ConditionOutcome:
     label: str
@@ -202,6 +217,7 @@ def score(inp: ScoringInput) -> ScoreResult:
             f"Person confidence {round((inp.person_confidence or 0) * 100)} < {d.minimum_person_confidence}",
         )
     if people_mode and d.requires_email:
+        email_floor = email_confidence_floor(d)
         gate("email_exists", bool(inp.email), "No professional email found")
         gate(
             "email_status",
@@ -210,8 +226,8 @@ def score(inp: ScoringInput) -> ScoreResult:
         )
         gate(
             "email_confidence",
-            (inp.email_confidence or 0) * 100 >= d.minimum_email_confidence,
-            f"Email confidence {round((inp.email_confidence or 0) * 100)} < {d.minimum_email_confidence}",
+            (inp.email_confidence or 0) * 100 >= email_floor,
+            f"Email confidence {round((inp.email_confidence or 0) * 100)} < {email_floor}",
         )
     gate("not_excluded", not inp.excluded, "Previously seen (exclusion active)")
     gate("not_suppressed", not inp.suppressed, "Suppressed")
