@@ -12,8 +12,12 @@ from typing import Any
 from scout.db.enums import CampaignMode, EmailStatus
 from scout.schemas.campaign import CampaignDefinition
 
+# A catch-all domain accepts every address, so a guess there never gets past ~35 %: when the user accepts catch-all
+# emails (marked as such in the table), the guess following the domain's most likely format qualifies.
+CATCH_ALL_MIN = 25
 
-def email_confidence_floor(d: CampaignDefinition) -> int:
+
+def email_confidence_floor(d: CampaignDefinition, status: EmailStatus | None = None) -> int:
     """The email confidence floor never contradicts the accepted statuses: a RISKY or CATCH_ALL address is by
     construction below the LIKELY_SAFE band, so accepting those statuses lowers the floor to the RISKY band's
     own minimum (accepting UNKNOWN removes it). Otherwise "accept RISKY" would silently accept nothing."""
@@ -23,6 +27,8 @@ def email_confidence_floor(d: CampaignDefinition) -> int:
     accepted = set(d.accepted_email_statuses)
     if accepted & {EmailStatus.UNKNOWN, EmailStatus.TEMPORARY_UNKNOWN}:
         return 0
+    if status == EmailStatus.CATCH_ALL and EmailStatus.CATCH_ALL in accepted:
+        return min(floor, CATCH_ALL_MIN)
     if accepted & {EmailStatus.RISKY, EmailStatus.CATCH_ALL}:
         return min(floor, round(RISKY_MIN * 100))
     return floor
@@ -217,7 +223,7 @@ def score(inp: ScoringInput) -> ScoreResult:
             f"Person confidence {round((inp.person_confidence or 0) * 100)} < {d.minimum_person_confidence}",
         )
     if people_mode and d.requires_email:
-        email_floor = email_confidence_floor(d)
+        email_floor = email_confidence_floor(d, inp.email_status)
         gate("email_exists", bool(inp.email), "No professional email found")
         gate(
             "email_status",

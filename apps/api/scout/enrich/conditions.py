@@ -95,6 +95,24 @@ def _plan(condition: SemanticCondition | TechnologyCondition, name: str) -> Enri
     )
 
 
+def _linked_term(pages: Sequence[Any], terms: Sequence[str]) -> tuple[str | None, str, str] | None:
+    """A term named only by a link — social icons (instagram.com/…, tiktok.com/@…) carry no text."""
+    from scout.enrich.matching import contains_any
+
+    for page in pages:
+        links = getattr(page, "links", None) or {}
+        social = links.get("social") if isinstance(links, dict) else None
+        urls = [str(u) for u in (social or {}).values()] if isinstance(social, dict) else []
+        if isinstance(links, dict):
+            urls += [str(x.get("url") if isinstance(x, dict) else x) for x in links.get("external") or []]
+        for term in terms:
+            for url in urls:
+                host = url.split("//", 1)[-1].split("/", 1)[0]
+                if contains_any(host.replace(".", " "), [term]):
+                    return getattr(page, "url", None), term, url[:200]
+    return None
+
+
 async def _compute(
     workspace_id: uuid.UUID, company: Company, condition: WebsiteCondition, pages: Sequence[Any]
 ) -> ConditionResult:
@@ -106,6 +124,10 @@ async def _compute(
         if out.passed:
             first = out.hits[0]
             return ConditionResult(True, 1.0, first.snippet, getattr(first.page, "url", None), "keyword")
+        if condition.type == "keyword_any" and (linked := _linked_term(pages, condition.terms)):
+            # "Instagram" as a footer icon: no text, but the site links to its Instagram account
+            page_url, term, link = linked
+            return ConditionResult(True, 0.85, f"Links to {term}: {link}", page_url, "keyword")
         missing = ", ".join(out.missing[:4])
         return ConditionResult(
             False, 0.9, f"No mention of {missing} across {len(pages)} crawled pages", None, "keyword"

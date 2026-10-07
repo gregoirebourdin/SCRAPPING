@@ -248,3 +248,26 @@ def test_ordinary_words_are_not_text_mentions():
         url="https://x.fr/", content_text="La notion de marque est au cœur", title=None
     )
     assert _text_mention([page], "Notion") is None
+
+
+async def test_keyword_condition_counts_a_social_icon_link():
+    from scout.enrich.conditions import _compute
+    from scout.schemas.campaign import KeywordCondition
+
+    data = load_fixture("agency_social_follow")
+    company = make_company(data)
+    pages = make_pages(data, company)
+    for p in pages:  # no written "Instagram" anywhere: only the footer icon link
+        p.content_text = (p.content_text or "").replace("Instagram", "").replace("instagram", "")
+        p.title = p.meta_description = None
+        p.links = {"social": {}, "internal": [], "external": []}
+    cond = KeywordCondition(terms=["Instagram"])
+    res = await _compute(company.workspace_id, company, cond, pages)
+    assert res.passed is False
+    pages[0].links = {"social": {"instagram": "https://www.instagram.com/studiolumiere/"}, "external": []}
+    res = await _compute(company.workspace_id, company, cond, pages)
+    assert (
+        res.passed is True
+        and res.confidence == 0.85
+        and "instagram.com/studiolumiere" in (res.evidence or "")
+    )

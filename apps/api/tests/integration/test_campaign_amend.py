@@ -43,7 +43,7 @@ from tests.unit.crawl.fixture_server import configure_overrides, reset_crawl_sta
 
 pytestmark = pytest.mark.integration
 
-PROMPT = "Find 100 French marketing agencies. Founder/CEO only. Do not include leads already seen."
+PROMPT = "Find 100 French marketing agencies. Founder/CEO only, verified emails only. Do not include leads already seen."
 
 
 @pytest.fixture

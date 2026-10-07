@@ -687,7 +687,7 @@ _FILLER = {
 
 _NO_CATCH_ALL = re.compile(
     r"\b(no catch[- ]?all|sans catch[- ]?all|pas de catch[- ]?all|only verified|uniquement v[ée]rifi[ée]s?"
-    r"|v[ée]rifi[ée]s? uniquement)\b",
+    r"|v[ée]rifi[ée]s? uniquement|verified (?:emails? )?only)\b",
     re.IGNORECASE,
 )
 _HEDGE = re.compile(

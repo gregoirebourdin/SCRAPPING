@@ -66,7 +66,7 @@ from tests.unit.crawl.fixture_server import configure_overrides, reset_crawl_sta
 
 pytestmark = pytest.mark.integration
 
-PROMPT = "Find 100 French marketing agencies. Founder/CEO only. Do not include leads already seen."
+PROMPT = "Find 100 French marketing agencies. Founder/CEO only, verified emails only. Do not include leads already seen."
 
 
 @pytest.fixture
@@ -234,8 +234,9 @@ async def test_campaign_end_to_end_and_identical_rerun(env, workspace):
     assert "Agence Lumière (bureau de Lyon)" not in events
     assert events["Spam Agency"].outcome == CandidateOutcome.suppressed
     assert events["Kréa Com"].outcome == CandidateOutcome.rejected
-    # catch-all addresses are accepted (and marked) by default, but a weak guess stays below the quality floor
-    assert "Email confidence 39 < 50" in (events["Kréa Com"].reason or "")
+    assert "Email status CATCH_ALL not accepted" in (
+        events["Kréa Com"].reason or ""
+    )  # "verified emails only"
     assert events["Pixel Factory"].outcome == CandidateOutcome.rejected
     assert events["Pixel Factory"].reason == "No decision maker found"
     assert events["Agence Optout"].outcome == CandidateOutcome.rejected
@@ -1094,3 +1095,20 @@ async def test_critical_scenario_200_through_the_chat_operator(env, workspace):
             .where(Person.full_name == "Claire Fontaine", LeadExposure.exposure_type == ExposureType.EXPORTED)
         )
     assert claire_exports == 1
+
+
+async def test_catch_all_emails_qualify_by_default_and_stay_marked(env, workspace):
+    """Default request (no "verified only"): the catch-all agency qualifies with its CATCH_ALL status."""
+    ws, user = workspace
+    await _suppress_spam_and_optout(ws, user)
+    cid = await _start(ws, user, "Find 100 French marketing agencies. Founder/CEO only.")
+    await drive([cid])
+    c, st = await _campaign(cid)
+    leads = await _delivered(cid)
+    assert st.qualified == 3 and {"Claire Fontaine", "Antoine Lefort"} < set(leads), (
+        c.stop_reason,
+        set(leads),
+    )
+    marked = [lead for name, lead in leads.items() if name not in {"Claire Fontaine", "Antoine Lefort"}]
+    assert len(marked) == 1 and marked[0]["status"] == EmailStatus.CATCH_ALL
+    assert marked[0]["email"].endswith("@kreacom.fr")
