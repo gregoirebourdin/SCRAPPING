@@ -49,8 +49,14 @@ class ConditionResult:
     cached: bool = False
 
 
+# Bumped when an evaluator changes meaning, so cached verdicts are recomputed (keyword v2: social icon links count).
+_EVALUATOR_VERSION = {"keyword_any": 2, "keyword_all": 2}
+
+
 def condition_hash(condition: WebsiteCondition) -> str:
     data = condition.model_dump(mode="json", exclude=_HASH_EXCLUDE)
+    if (v := _EVALUATOR_VERSION.get(condition.type)) is not None:
+        data["_v"] = v
     return sha256_hex(orjson.dumps(data, option=orjson.OPT_SORT_KEYS))
 
 
