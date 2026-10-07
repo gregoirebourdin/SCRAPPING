@@ -136,3 +136,31 @@ def test_large_targets_widen_further_and_keep_enough_candidates() -> None:
         ParseContext(),
     )
     assert small.limits.max_raw_candidates == 60_000 and max_expansion(small) == 2
+
+
+def test_instagram_agencies_are_checked_by_mention_not_by_an_ai_offer_hunt() -> None:
+    from scout.pipeline.icp import AIParsedCampaign, AIWebsiteCondition, ParseContext, to_definition
+
+    parsed = AIParsedCampaign(
+        name="Miami",
+        target_count=15,
+        industries=["social media marketing agency", "marketing agency"],
+        countries=["US"],
+        cities=["Miami"],
+        website_conditions=[
+            AIWebsiteCondition(kind="semantic", concept="offers Instagram marketing services")
+        ],
+    )
+    d = to_definition(parsed, "Find 15 Instagram marketing agencies in Miami", ParseContext())
+    (cond,) = d.website_conditions
+    assert cond.type == "keyword_any" and cond.terms == ["Instagram"] and cond.required is True
+    other = AIParsedCampaign(
+        name="Dentists",
+        target_count=5,
+        industries=["dentist"],
+        countries=["US"],
+        website_conditions=[AIWebsiteCondition(kind="semantic", concept="offers Invisalign treatment")],
+    )
+    assert to_definition(other, "dentists offering Invisalign", ParseContext()).website_conditions[
+        0
+    ].type == ("semantic_service")

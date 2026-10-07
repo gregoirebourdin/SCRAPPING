@@ -719,6 +719,30 @@ def _email_statuses(statuses: list[EmailStatus], prompt: str) -> list[EmailStatu
     return out
 
 
+_PLATFORMS = {
+    "instagram": "Instagram",
+    "insta": "Instagram",
+    "tiktok": "TikTok",
+    "facebook": "Facebook",
+    "linkedin": "LinkedIn",
+    "youtube": "YouTube",
+    "pinterest": "Pinterest",
+    "snapchat": "Snapchat",
+}
+_PLATFORM_RX = re.compile(r"\b(" + "|".join(_PLATFORMS) + r")\b", re.IGNORECASE)
+_MARKETING_TARGET = re.compile(
+    r"social|media|marketing|agenc|influenc|communication|advertis|digital", re.IGNORECASE
+)
+
+
+def _platform_specialty(concept: str, targets: list[str]) -> str | None:
+    """'offers Instagram marketing services' asked of a marketing / social media agency → "Instagram"."""
+    if not any(_MARKETING_TARGET.search(t) for t in targets):
+        return None
+    m = _PLATFORM_RX.search(concept)
+    return _PLATFORMS[m.group(1).lower()] if m else None
+
+
 def _restates_target(concept: str, targets: list[str]) -> bool:
     """True when a "semantic" website condition only repeats the requested business type / specialty."""
     words = {w for w in normalize_key(concept).split() if w not in _FILLER and len(w) > 2}
@@ -747,6 +771,13 @@ def to_definition(parsed: AIParsedCampaign, prompt: str, ctx: ParseContext) -> C
             )
         elif c.kind == "semantic" and (c.concept or c.terms):
             concept = c.concept or " ".join(c.terms)
+            platform = _platform_specialty(concept, [*parsed.industries, *parsed.keywords])
+            if platform:
+                # "Instagram marketing agencies": an AI hunting for an explicit "Instagram offer" rejected most real
+                # social media agencies (insufficient evidence); a site that names the platform (services, links) is
+                # the reliable, free signal — the business-type check already verifies it is an agency.
+                conds.append(KeywordCondition(type="keyword_any", terms=[platform], required=must))
+                continue
             if _restates_target(concept, [*parsed.industries, *parsed.keywords]):
                 # "agences de growth marketing" → the specialty is the business type itself: the business-type
                 # check verifies it on each site; a required website condition on top only loses real agencies.
