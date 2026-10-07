@@ -161,6 +161,10 @@ def select_sources(
             h = health.get(key)
             if (h is None or h.healthy) and fb.plan(defn, expansion=0):
                 scored.append((0.1, fb))
+    # Relays: the free Maps scraper runs first; the official Places API (free monthly quota) only replaces it while
+    # the scraper is unhealthy (then it is not scored above) or mid-campaign (``jobs._maybe_relay``).
+    if any(s.key == "google_maps" for _, s in scored) and "google_places" not in preferred:
+        scored = [(sc, s) for sc, s in scored if s.key != "google_places"]
     scored.sort(key=lambda x: -x[0])
     n_pref = sum(1 for _, s in scored if s.key in preferred)
     chosen = scored[: max(limit, n_pref)]

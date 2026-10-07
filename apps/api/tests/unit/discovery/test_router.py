@@ -176,3 +176,12 @@ def test_any_activity_with_naf_codes_reaches_the_registry() -> None:
     assert d.company_filters.naf_codes == ["71.12B", "26.12Z"]
     reg = next(s for s, _ in select_sources(d) if s.key == "fr_registry")
     assert reg.plan(d, expansion=0)[0].params["naf"] == ["71.12B", "26.12Z"]
+
+
+def test_free_maps_scraper_first_places_api_as_relay(settings_env, maps, ai) -> None:
+    settings_env(GOOGLE_PLACES_API_KEY="test-key")
+    d = defn(industries=["dentistes"], cities=["Lyon"], countries=["FR"])
+    sel = keys(select_sources(d, limit=9))
+    assert "google_maps" in sel and "google_places" not in sel  # the free scraper does the job
+    down = keys(select_sources(d, health={"google_maps": health("google_maps", healthy=False)}, limit=9))
+    assert "google_places" in down and "google_maps" not in down  # the official API takes over

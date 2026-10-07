@@ -344,6 +344,66 @@ async def _pipeline_need(s: Any, c: Campaign) -> tuple[int, int, float]:
     return int(in_flight), desired, yield_
 
 
+# A source that keeps failing mid-campaign hands over to its relay (same data, another channel).
+RELAYS = {"google_maps": "google_places"}
+RELAY_AFTER_ERRORS = 3
+
+
+async def _maybe_relay(
+    workspace_id: uuid.UUID, campaign_id: uuid.UUID, key: str, defn: CampaignDefinition
+) -> bool:
+    """The free Maps scraper blocked or broken (``RELAY_AFTER_ERRORS`` failures) → the official Places API joins the
+    campaign with its own plan. Idempotent; never when the user excluded the relay or it is not configured."""
+    from scout.discovery.router import canonical_source_key, get_source
+
+    relay_key = RELAYS.get(key)
+    relay = get_source(relay_key) if relay_key else None
+    if relay_key is None or relay is None or not relay.is_configured():
+        return False
+    if relay_key in {canonical_source_key(k) for k in defn.sources.excluded}:
+        return False
+    async with session_scope() as s:
+        cs = await s.scalar(
+            sa.select(CampaignSource).where(
+                CampaignSource.campaign_id == campaign_id, CampaignSource.source_key == key
+            )
+        )
+        if cs is None or cs.error_count < RELAY_AFTER_ERRORS:
+            return False
+        if await s.scalar(
+            sa.select(CampaignSource.id).where(
+                CampaignSource.campaign_id == campaign_id, CampaignSource.source_key == relay_key
+            )
+        ):
+            return False
+        plan = [asdict(q) for q in relay.plan(defn, expansion=0)]
+        if not plan:
+            return False
+        await s.execute(
+            pg_insert(CampaignSource)
+            .values(
+                campaign_id=campaign_id,
+                source_key=relay_key,
+                priority=cs.priority,
+                status=CampaignSourceStatus.active,
+                query_plan=plan,
+                cursor={"q": 0, "page": None, "expansion": 0},
+            )
+            .on_conflict_do_nothing(index_elements=["campaign_id", "source_key"])
+        )
+        await queue.enqueue(
+            s,
+            workspace_id=workspace_id,
+            campaign_id=campaign_id,
+            type="campaign.discover",
+            priority=10 + cs.priority,
+            payload={"source_key": relay_key},
+            dedupe_key=f"discover:{campaign_id}:{relay_key}",
+        )
+    log.warning("discover.relay", source=key, relay=relay_key, campaign_id=str(campaign_id))
+    return True
+
+
 @job_handler("campaign.discover", timeout_s=600)
 async def discover(ctx: JobContext) -> dict[str, Any] | None:
     from scout.discovery.base import DiscoveryQuery
@@ -424,6 +484,7 @@ async def discover(ctx: JobContext) -> dict[str, Any] | None:
                     last_error=f"Search source rate-limited: {exc}"[:500],
                 )
             )
+        await _maybe_relay(workspace_id, campaign_id, key, defn)
         ctx.later(90.0 if isinstance(exc, RateLimitedError) else 300.0)
         return None
     except RetryableError as exc:
@@ -436,6 +497,7 @@ async def discover(ctx: JobContext) -> dict[str, Any] | None:
                 .where(CampaignSource.campaign_id == campaign_id, CampaignSource.source_key == key)
                 .values(error_count=CampaignSource.error_count + 1, last_error=str(exc)[:500])
             )
+        await _maybe_relay(workspace_id, campaign_id, key, defn)
         raise
     except Exception as exc:  # adapter bug or bad query: skip this query, never loop forever
         await record_request(
@@ -455,6 +517,7 @@ async def discover(ctx: JobContext) -> dict[str, Any] | None:
                 cs.cursor = cur
                 cs.error_count += 1
                 cs.last_error = f"{type(exc).__name__}: {exc}"[:500]
+        await _maybe_relay(workspace_id, campaign_id, key, defn)
         ctx.later(1.0)
         return None
     await record_request(
