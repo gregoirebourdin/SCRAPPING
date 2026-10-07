@@ -73,7 +73,11 @@ def test_configuration_and_suitability(settings_env) -> None:
     assert not src.is_configured()
     settings_env(GMAPS_SCRAPER_URL=BASE)
     assert src.is_configured()
-    assert src.suitability(defn(industries=["dentistes"], cities=["Lyon"])) == 1.0
+    assert src.suitability(defn(industries=["dentistes"], cities=["Lyon"])) == 1.2
+    # agencies in a named city: Maps is the best source there too (website, phone, exact address)
+    assert (
+        src.suitability(defn(industries=["social media agency"], cities=["Miami"], countries=["US"])) == 1.2
+    )
     assert src.suitability(defn(industries=["SaaS"], countries=["US"])) < 0.5
     assert src.suitability(defn(industries=["dentist"])) == 0  # nowhere to search
 

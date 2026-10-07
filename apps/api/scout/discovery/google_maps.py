@@ -133,7 +133,7 @@ def parse_csv(text: str, *, query: DiscoveryQuery | None = None) -> list[RawCand
 class GoogleMapsSource:
     key = "google_maps"
     name = "Google Maps (gosom scraper service)"
-    quality = 0.75
+    quality = 0.9  # same Google Maps data as the Places API
     cost_class = "CHEAP"
 
     def __init__(self, *, poll_budget_s: float = 20.0, max_time_s: int = 240) -> None:
@@ -150,9 +150,9 @@ class GoogleMapsSource:
             return 0.0
         if not target_countries(defn):
             return 0.0  # queries are "<term> <city>": a country (given or inferred) is required
-        if profiles[0].local_business:
-            return 1.0
-        return 0.35 if not profiles[0].digital else 0.25
+        if profiles[0].local_business or defn.company_filters.cities:
+            return 1.2  # businesses with their website, phone and address: the best source for a named city
+        return 0.5 if not profiles[0].digital else 0.25
 
     def plan(self, defn: CampaignDefinition, *, expansion: int = 0) -> list[DiscoveryQuery]:
         cf = defn.company_filters
